@@ -28,17 +28,15 @@ jobs:
           # Accepts either the new publishable key (sb_publishable_...) or
           # a legacy anon JWT. Both authenticate browser clients the same way.
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
-          SUPABASE_OWNER: ${{ secrets.SUPABASE_OWNER }}
         run: |
           node -e '
             const cfg = {
               url: process.env.SUPABASE_URL || "",
-              key: process.env.SUPABASE_PUBLISHABLE_KEY || "",
-              owner: process.env.SUPABASE_OWNER || ""
+              key: process.env.SUPABASE_PUBLISHABLE_KEY || ""
             };
             const body = "window.ITM_CONFIG = " + JSON.stringify(cfg) + ";\n";
             require("fs").writeFileSync("config.js", body);
-            console.log("config.js written (url set:", !!cfg.url, "key set:", !!cfg.key, "owner set:", !!cfg.owner, ")");
+            console.log("config.js written (url set:", !!cfg.url, "key set:", !!cfg.key, ")");
           '
 
       - name: Configure Pages
