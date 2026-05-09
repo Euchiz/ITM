@@ -1,62 +1,201 @@
+// Itinerary Studio — orchestrator.
+//
+// Three views:
+//   auth     — magic-link sign-in (rendered by auth.js)
+//   trips    — all-trips list (rendered by trips.js)
+//   editor   — block editor + render mode (rendered here)
+//
+// When Supabase is not configured, we silently fall back to a single
+// browser-local document so the app is still usable for trying it out.
+
 import { parseMarkdown, serializeMarkdown, renderInline } from "./parser.js";
-import { initCloud, getCloud } from "./supabase.js";
+import {
+  initSupabase, isConfigured, configSource, auth, trips,
+} from "./supabase.js";
+import { renderAuthView } from "./auth.js";
+import { renderTripsView } from "./trips.js";
 
 // ===== State =====
 
 const state = {
+  view: "auth",                  // "auth" | "trips" | "editor"
+  user: null,                    // auth user object
+  itineraryId: null,             // uuid of currently-open trip (or null in guest mode)
+  role: "owner",                 // role on the current trip
   title: "",
   blocks: [],
-  mode: "edit",
+  mode: "edit",                  // "edit" | "render"
+  dirty: false,
+  saving: false,
 };
 
-const LS_KEY = "itinerary-studio:doc";
+const LOCAL_DOC_KEY = "itinerary-studio:guest-doc";
 
 // ===== Boot =====
 
 window.addEventListener("DOMContentLoaded", async () => {
-  bindToolbar();
+  bindAppHeader();
+  bindEditorToolbar();
   bindSettings();
-  await initCloud(onCloudReady);
-  restore();
-  renderEditor();
+
+  if (!isConfigured()) {
+    // Guest mode: no backend, just an editor with localStorage backup.
+    restoreGuestDoc();
+    setView("editor");
+    return;
+  }
+
+  await initSupabase();
+  await auth.onChange(handleAuthChange);
+
+  const session = await auth.getSession();
+  state.user = session?.user || null;
+  routeFromSession();
 });
 
-// ===== Persistence (browser-local autosave) =====
+function handleAuthChange(session) {
+  const wasUser = state.user;
+  state.user = session?.user || null;
+  // Re-render header for email + sign-out.
+  paintHeader();
+  // Only re-route on real transitions to avoid clobbering an open editor.
+  if (!!state.user !== !!wasUser) routeFromSession();
+}
 
-function persist() {
+function routeFromSession() {
+  paintHeader();
+  if (!state.user) {
+    setView("auth");
+    return;
+  }
+  const url = new URL(location.href);
+  const tripId = url.searchParams.get("trip");
+  if (tripId) {
+    openTrip(tripId);
+  } else {
+    setView("trips");
+  }
+}
+
+// ===== View switching =====
+
+function setView(view) {
+  state.view = view;
+  document.body.dataset.view = view;
+  const authEl = document.getElementById("view-auth");
+  const tripsEl = document.getElementById("view-trips");
+  const editor = document.getElementById("view-editor");
+
+  authEl.hidden = view !== "auth";
+  tripsEl.hidden = view !== "trips";
+  editor.hidden = view !== "editor";
+
+  if (view === "auth") {
+    renderAuthView(authEl);
+  } else if (view === "trips") {
+    renderTripsView(tripsEl, {
+      onOpen: openTrip,
+      onCreate: openTrip,
+    });
+  } else if (view === "editor") {
+    renderEditor();
+  }
+
+  paintHeader();
+}
+
+// ===== App header =====
+
+function bindAppHeader() {
+  document.getElementById("signOutBtn").addEventListener("click", async () => {
+    try { await auth.signOut(); }
+    catch (e) { toast(e.message, true); }
+  });
+
+  document.getElementById("backToTripsBtn").addEventListener("click", () => {
+    if (state.dirty && state.itineraryId) {
+      // Best-effort save before leaving.
+      saveNow().catch(() => {});
+    }
+    // Strip ?trip= from URL.
+    const url = new URL(location.href);
+    url.searchParams.delete("trip");
+    history.replaceState(null, "", url);
+    setView("trips");
+  });
+}
+
+function paintHeader() {
+  const userBadge = document.getElementById("userBadge");
+  const signOutBtn = document.getElementById("signOutBtn");
+  const backBtn = document.getElementById("backToTripsBtn");
+
+  if (state.user && state.user.email) {
+    userBadge.hidden = false;
+    userBadge.textContent = state.user.email;
+    signOutBtn.hidden = false;
+  } else {
+    userBadge.hidden = true;
+    signOutBtn.hidden = true;
+  }
+
+  // Back-to-trips only relevant when in editor and signed in.
+  backBtn.hidden = !(state.view === "editor" && state.user);
+}
+
+// ===== Trip loading =====
+
+async function openTrip(id) {
+  try {
+    const row = await trips.get(id);
+    state.itineraryId = row.id;
+    state.role = row.role;
+    state.title = row.title || "";
+    state.blocks = parseMarkdown(row.markdown || "");
+    state.dirty = false;
+    state.mode = "edit";
+
+    // Reflect in URL for refresh / share-as-link.
+    const url = new URL(location.href);
+    url.searchParams.set("trip", id);
+    history.replaceState(null, "", url);
+
+    setView("editor");
+    paintSaveStatus("clean");
+  } catch (e) {
+    toast("Could not open: " + e.message, true);
+    setView("trips");
+  }
+}
+
+// ===== Guest (no-Supabase) doc cache =====
+
+function restoreGuestDoc() {
+  try {
+    const raw = localStorage.getItem(LOCAL_DOC_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    state.title = data.title || "";
+    state.blocks = Array.isArray(data.blocks) ? data.blocks : [];
+  } catch {}
+}
+
+function persistGuestDoc() {
   try {
     localStorage.setItem(
-      LS_KEY,
+      LOCAL_DOC_KEY,
       JSON.stringify({ title: state.title, blocks: state.blocks })
     );
   } catch {}
 }
 
-function restore() {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) {
-      // Show empty state on first run.
-      state.blocks = [];
-      state.title = "";
-      return;
-    }
-    const data = JSON.parse(raw);
-    state.title = data.title || "";
-    state.blocks = Array.isArray(data.blocks) ? data.blocks : [];
-  } catch {
-    state.blocks = [];
-  }
-  document.getElementById("docTitle").value = state.title;
-}
+// ===== Editor toolbar =====
 
-// ===== Toolbar =====
-
-function bindToolbar() {
+function bindEditorToolbar() {
   const titleInput = document.getElementById("docTitle");
   titleInput.addEventListener("input", () => {
     state.title = titleInput.value;
-    persist();
+    onChange();
   });
 
   document.querySelectorAll(".mode-toggle button").forEach((btn) => {
@@ -97,8 +236,11 @@ function bindToolbar() {
 
   document.getElementById("printBtn").addEventListener("click", () => {
     setMode("render");
-    // Wait one frame so layout settles before invoking print.
     requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
+  });
+
+  document.getElementById("saveBtn").addEventListener("click", () => {
+    saveNow().catch((e) => toast(e.message, true));
   });
 }
 
@@ -113,16 +255,16 @@ function setMode(mode) {
 
 function loadMarkdown(text, fallbackTitle = "") {
   const blocks = parseMarkdown(text);
-  state.blocks = blocks;
-  // If first block is an H1, lift it as the title.
+  let title = fallbackTitle;
+  let body = blocks;
   if (blocks.length && blocks[0].type === "h1") {
-    state.title = blocks[0].text;
-    state.blocks = blocks.slice(1);
-  } else {
-    state.title = fallbackTitle;
+    title = blocks[0].text;
+    body = blocks.slice(1);
   }
+  state.blocks = body;
+  state.title = title;
   document.getElementById("docTitle").value = state.title;
-  persist();
+  onChange();
   renderEditor();
 }
 
@@ -131,11 +273,80 @@ function currentMarkdown() {
   return serializeMarkdown([...head, ...state.blocks]);
 }
 
+// ===== Save flow =====
+
+let saveTimer = null;
+
+function onChange() {
+  state.dirty = true;
+  paintSaveStatus("dirty");
+
+  if (state.itineraryId) {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => saveNow().catch((e) => toast(e.message, true)), 1500);
+  } else {
+    persistGuestDoc();
+  }
+}
+
+async function saveNow() {
+  if (!state.itineraryId) {
+    persistGuestDoc();
+    return;
+  }
+  if (state.role === "viewer") {
+    toast("View-only access — changes not saved.", true);
+    return;
+  }
+  if (state.saving) return;
+  state.saving = true;
+  paintSaveStatus("saving");
+  try {
+    await trips.update(state.itineraryId, {
+      title: state.title || "Untitled itinerary",
+      markdown: currentMarkdown(),
+    });
+    state.dirty = false;
+    paintSaveStatus("clean");
+  } catch (e) {
+    paintSaveStatus("error");
+    throw e;
+  } finally {
+    state.saving = false;
+  }
+}
+
+function paintSaveStatus(kind) {
+  const el = document.getElementById("saveStatus");
+  if (!el) return;
+  el.dataset.kind = kind;
+  el.textContent =
+    kind === "saving" ? "Saving…" :
+    kind === "dirty"  ? "Unsaved changes" :
+    kind === "error"  ? "Save failed" :
+                        "Saved";
+  // Hide entirely in guest mode (no itinerary to save against).
+  el.hidden = !state.itineraryId;
+}
+
+// Save before leaving / closing.
+window.addEventListener("beforeunload", (e) => {
+  if (state.dirty && state.itineraryId) {
+    saveNow().catch(() => {});
+    e.preventDefault();
+    e.returnValue = "";
+  }
+});
+
 // ===== Editor rendering =====
 
 const editorEl = () => document.getElementById("editor");
 
 function renderEditor() {
+  const titleInput = document.getElementById("docTitle");
+  titleInput.value = state.title || "";
+  titleInput.disabled = state.role === "viewer";
+
   const root = editorEl();
   root.innerHTML = "";
 
@@ -144,7 +355,6 @@ function renderEditor() {
     return;
   }
 
-  // Insert add-between slots before each block, plus one at the end.
   state.blocks.forEach((block, idx) => {
     root.appendChild(addBetween(idx));
     root.appendChild(blockEl(block, idx));
@@ -168,11 +378,9 @@ function emptyState() {
   );
   el.querySelector("#es-blank").addEventListener("click", () => {
     state.title = state.title || "Untitled itinerary";
-    state.blocks = [
-      { type: "paragraph", text: "Start typing — or use the + buttons to add tables and headings." },
-    ];
+    state.blocks = [{ type: "paragraph", text: "Start typing — or use the + buttons to add tables and headings." }];
     document.getElementById("docTitle").value = state.title;
-    persist();
+    onChange();
     renderEditor();
   });
   return el;
@@ -182,6 +390,10 @@ function addBetween(idx) {
   const el = document.createElement("div");
   el.className = "add-between";
   el.innerHTML = `<button title="Insert block here">+ heading · paragraph · table</button>`;
+  if (state.role === "viewer") {
+    el.style.display = "none";
+    return el;
+  }
   el.querySelector("button").addEventListener("click", (e) => {
     e.stopPropagation();
     showInsertMenu(el, idx);
@@ -190,7 +402,6 @@ function addBetween(idx) {
 }
 
 function showInsertMenu(anchor, idx) {
-  // Simple sequential menu: pick a type via prompt-less buttons.
   const menu = document.createElement("div");
   menu.style.cssText = `
     position:absolute; z-index:50; background:#fff; border:1px solid var(--border);
@@ -200,12 +411,7 @@ function showInsertMenu(anchor, idx) {
     ["H2", () => insertBlock(idx, { type: "h2", text: "New section" })],
     ["H3", () => insertBlock(idx, { type: "h3", text: "New subsection" })],
     ["¶", () => insertBlock(idx, { type: "paragraph", text: "" })],
-    ["⊞ Table", () =>
-      insertBlock(idx, {
-        type: "table",
-        headers: ["Column A", "Column B"],
-        rows: [["", ""], ["", ""]],
-      })],
+    ["⊞ Table", () => insertBlock(idx, { type: "table", headers: ["Column A", "Column B"], rows: [["", ""], ["", ""]] })],
     ["“ Quote", () => insertBlock(idx, { type: "blockquote", text: "" })],
   ];
   for (const [label, fn] of opts) {
@@ -213,18 +419,13 @@ function showInsertMenu(anchor, idx) {
     b.textContent = label;
     b.className = "btn ghost";
     b.style.padding = "4px 10px";
-    b.addEventListener("click", () => {
-      fn();
-      menu.remove();
-    });
+    b.addEventListener("click", () => { fn(); menu.remove(); });
     menu.appendChild(b);
   }
-
   const rect = anchor.getBoundingClientRect();
   menu.style.left = window.scrollX + rect.left + rect.width / 2 - 140 + "px";
   menu.style.top = window.scrollY + rect.bottom + 4 + "px";
   document.body.appendChild(menu);
-
   const close = (ev) => {
     if (!menu.contains(ev.target)) {
       menu.remove();
@@ -236,22 +437,20 @@ function showInsertMenu(anchor, idx) {
 
 function insertBlock(idx, block) {
   state.blocks.splice(idx, 0, block);
-  persist();
+  onChange();
   renderEditor();
 }
-
 function deleteBlock(idx) {
   state.blocks.splice(idx, 1);
-  persist();
+  onChange();
   renderEditor();
 }
-
 function moveBlock(idx, dir) {
   const j = idx + dir;
   if (j < 0 || j >= state.blocks.length) return;
   const [b] = state.blocks.splice(idx, 1);
   state.blocks.splice(j, 0, b);
-  persist();
+  onChange();
   renderEditor();
 }
 
@@ -259,17 +458,19 @@ function blockEl(block, idx) {
   const wrap = document.createElement("div");
   wrap.className = "block " + block.type;
 
-  const controls = document.createElement("div");
-  controls.className = "block-controls";
-  controls.innerHTML = `
-    <button title="Move up" data-act="up">↑</button>
-    <button title="Move down" data-act="down">↓</button>
-    <button title="Delete" data-act="del" class="del">✕</button>
-  `;
-  controls.querySelector('[data-act="up"]').addEventListener("click", () => moveBlock(idx, -1));
-  controls.querySelector('[data-act="down"]').addEventListener("click", () => moveBlock(idx, +1));
-  controls.querySelector('[data-act="del"]').addEventListener("click", () => deleteBlock(idx));
-  wrap.appendChild(controls);
+  if (state.role !== "viewer") {
+    const controls = document.createElement("div");
+    controls.className = "block-controls";
+    controls.innerHTML = `
+      <button title="Move up" data-act="up">↑</button>
+      <button title="Move down" data-act="down">↓</button>
+      <button title="Delete" data-act="del" class="del">✕</button>
+    `;
+    controls.querySelector('[data-act="up"]').addEventListener("click", () => moveBlock(idx, -1));
+    controls.querySelector('[data-act="down"]').addEventListener("click", () => moveBlock(idx, +1));
+    controls.querySelector('[data-act="del"]').addEventListener("click", () => deleteBlock(idx));
+    wrap.appendChild(controls);
+  }
 
   const tag = document.createElement("span");
   tag.className = "block-type-tag";
@@ -284,11 +485,12 @@ function blockEl(block, idx) {
     ta.value = block.text || "";
     ta.rows = 1;
     ta.spellcheck = false;
+    ta.disabled = state.role === "viewer";
     autosize(ta);
     ta.addEventListener("input", () => {
       block.text = ta.value;
       autosize(ta);
-      persist();
+      onChange();
     });
     if (block.type === "h1" || block.type === "h2" || block.type === "h3") {
       ta.placeholder = block.type.toUpperCase() + " heading";
@@ -307,7 +509,7 @@ function autosize(ta) {
   ta.style.height = ta.scrollHeight + "px";
 }
 
-// ===== Table editor =====
+// ===== Editable tables =====
 
 function tableEditor(block) {
   const wrap = document.createElement("div");
@@ -315,16 +517,15 @@ function tableEditor(block) {
 
   const table = document.createElement("table");
   table.className = "editor-table";
-
   const thead = document.createElement("thead");
   thead.appendChild(headerRow(block));
   table.appendChild(thead);
-
   const tbody = document.createElement("tbody");
-  block.rows.forEach((row, ri) => tbody.appendChild(bodyRow(block, ri)));
+  block.rows.forEach((_, ri) => tbody.appendChild(bodyRow(block, ri)));
   table.appendChild(tbody);
-
   wrap.appendChild(table);
+
+  if (state.role === "viewer") return wrap;
 
   const toolbar = document.createElement("div");
   toolbar.className = "table-toolbar";
@@ -336,30 +537,29 @@ function tableEditor(block) {
   `;
   toolbar.querySelector('[data-act="add-row"]').addEventListener("click", () => {
     block.rows.push(block.headers.map(() => ""));
-    persist();
+    onChange();
     refreshTable(wrap, block);
   });
   toolbar.querySelector('[data-act="add-col"]').addEventListener("click", () => {
     block.headers.push("New column");
     block.rows.forEach((r) => r.push(""));
-    persist();
+    onChange();
     refreshTable(wrap, block);
   });
   toolbar.querySelector('[data-act="del-row"]').addEventListener("click", () => {
     if (block.rows.length > 0) block.rows.pop();
-    persist();
+    onChange();
     refreshTable(wrap, block);
   });
   toolbar.querySelector('[data-act="del-col"]').addEventListener("click", () => {
     if (block.headers.length > 1) {
       block.headers.pop();
       block.rows.forEach((r) => r.pop());
-      persist();
+      onChange();
       refreshTable(wrap, block);
     }
   });
   wrap.appendChild(toolbar);
-
   return wrap;
 }
 
@@ -380,7 +580,7 @@ function headerRow(block) {
   const tr = document.createElement("tr");
   block.headers.forEach((h, ci) => {
     const th = document.createElement("th");
-    th.appendChild(makeCellEditor(h, (v) => { block.headers[ci] = v; persist(); }));
+    th.appendChild(makeCellEditor(h, (v) => { block.headers[ci] = v; onChange(); }));
     tr.appendChild(th);
   });
   return tr;
@@ -390,24 +590,24 @@ function bodyRow(block, ri) {
   const tr = document.createElement("tr");
   block.rows[ri].forEach((cell, ci) => {
     const td = document.createElement("td");
-    td.appendChild(makeCellEditor(cell, (v) => { block.rows[ri][ci] = v; persist(); }));
+    td.appendChild(makeCellEditor(cell, (v) => { block.rows[ri][ci] = v; onChange(); }));
     tr.appendChild(td);
   });
   return tr;
 }
 
-function makeCellEditor(initial, onChange) {
+function makeCellEditor(initial, onChangeCb) {
   const ta = document.createElement("textarea");
   ta.className = "cell-edit";
   ta.value = initial || "";
   ta.rows = 1;
   ta.spellcheck = false;
+  ta.disabled = state.role === "viewer";
   autosize(ta);
   ta.addEventListener("input", () => {
     autosize(ta);
-    onChange(ta.value);
+    onChangeCb(ta.value);
   });
-  // Resize when first inserted into the DOM.
   setTimeout(() => autosize(ta), 0);
   return ta;
 }
@@ -421,8 +621,6 @@ function renderPreview() {
 
 function renderHtmlBody(title, blocks) {
   const out = [];
-
-  // Cover: H1 + first run of paragraph blocks.
   if (title) {
     const coverParts = [`<h1>${escapeHtml(title)}</h1>`];
     let i = 0;
@@ -434,10 +632,7 @@ function renderHtmlBody(title, blocks) {
     out.push(`<section class="cover">${coverParts.join("")}</section>`);
     blocks = blocks.slice(i);
   }
-
-  for (const b of blocks) {
-    out.push(renderBlock(b));
-  }
+  for (const b of blocks) out.push(renderBlock(b));
   return out.join("\n");
 }
 
@@ -447,11 +642,11 @@ function renderBlock(b) {
     case "h2": return `<h2>${escapeHtml(b.text)}</h2>`;
     case "h3": return `<h3>${escapeHtml(b.text)}</h3>`;
     case "paragraph": return `<p>${renderInline(b.text)}</p>`;
-    case "blockquote":
-      // Lines starting with "!" become "warn" callouts.
+    case "blockquote": {
       const warn = /^\s*!/.test(b.text);
       const text = warn ? b.text.replace(/^\s*!\s*/, "") : b.text;
       return `<blockquote${warn ? ' class="warn"' : ""}>${renderInline(text)}</blockquote>`;
+    }
     case "table": return renderTable(b);
     default: return "";
   }
@@ -460,22 +655,17 @@ function renderBlock(b) {
 function renderTable(t) {
   const cls = tableClass(t);
   const head = `<tr>${t.headers.map((h) => `<th>${renderInline(h)}</th>`).join("")}</tr>`;
-  const body = t.rows
-    .map((r) => `<tr>${r.map((c) => `<td>${renderInline(c)}</td>`).join("")}</tr>`)
-    .join("");
+  const body = t.rows.map((r) => `<tr>${r.map((c) => `<td>${renderInline(c)}</td>`).join("")}</tr>`).join("");
   return `<table${cls ? ` class="${cls}"` : ""}><thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
 
-// Heuristic styling for known itinerary table shapes.
 function tableClass(t) {
   const w = t.headers.length;
   const cls = ["compact"];
-  // Bilingual: 2 columns whose headers contain "中文" or "English"
   if (w === 2) {
     const joined = t.headers.join(" ").toLowerCase();
     if (/中文|chinese|english/.test(joined)) cls.push("bilingual");
   }
-  // Dated 3-col: first header looks like "Date" / "日期" / "Night"
   if (w === 3) {
     const h0 = t.headers[0].toLowerCase();
     if (/date|日期|day|night|时间/.test(h0)) cls.push("dated");
@@ -492,23 +682,12 @@ function escapeHtml(s) {
 
 // ===== Standalone HTML export =====
 
-async function loadCss(href) {
-  try {
-    const r = await fetch(href);
-    return await r.text();
-  } catch {
-    return "";
-  }
-}
-
-async function readPrintCss() {
-  // Inline the print stylesheet so the exported HTML is fully self-contained.
-  return await loadCss("./print.css");
-}
-
 let cachedPrintCss = null;
 async function getPrintCss() {
-  if (cachedPrintCss == null) cachedPrintCss = await readPrintCss();
+  if (cachedPrintCss == null) {
+    try { cachedPrintCss = await (await fetch("./print.css")).text(); }
+    catch { cachedPrintCss = ""; }
+  }
   return cachedPrintCss;
 }
 
@@ -537,25 +716,21 @@ ${body}
 `;
 }
 
-// ===== Download helper =====
+// ===== Download / toast =====
 
 function download(name, content, mime) {
   const blob = new Blob([content], { type: mime + ";charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
+  a.href = url; a.download = name;
   document.body.appendChild(a);
-  a.click();
-  a.remove();
+  a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function safeFilename(s) {
   return String(s).trim().replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, "_") || "itinerary";
 }
-
-// ===== Toast =====
 
 let toastTimer = null;
 export function toast(msg, isError = false) {
@@ -564,7 +739,7 @@ export function toast(msg, isError = false) {
   el.classList.toggle("error", !!isError);
   el.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (el.hidden = true), 3000);
+  toastTimer = setTimeout(() => (el.hidden = true), 3500);
 }
 
 // ===== Settings dialog (Supabase config) =====
@@ -573,81 +748,27 @@ function bindSettings() {
   const dlg = document.getElementById("settingsDialog");
   const url = document.getElementById("sbUrl");
   const key = document.getElementById("sbKey");
-  const owner = document.getElementById("sbOwner");
 
   document.getElementById("settingsBtn").addEventListener("click", () => {
-    const cfg = readCloudConfig();
-    url.value = cfg.url || "";
-    key.value = cfg.key || "";
-    owner.value = cfg.owner || "";
+    let stored = {};
+    try { stored = JSON.parse(localStorage.getItem("itinerary-studio:cloud") || "{}"); } catch {}
+    url.value = stored.url || "";
+    key.value = stored.key || "";
+    document.getElementById("sbConfigSource").textContent =
+      "Currently using config from: " + configSource();
     dlg.showModal();
   });
 
   dlg.addEventListener("close", async () => {
     const action = dlg.returnValue;
     if (action === "connect") {
-      writeCloudConfig({ url: url.value.trim(), key: key.value.trim(), owner: owner.value.trim() });
-      await initCloud(onCloudReady);
+      localStorage.setItem("itinerary-studio:cloud", JSON.stringify({
+        url: url.value.trim(), key: key.value.trim(),
+      }));
+      location.reload();
     } else if (action === "disconnect") {
-      writeCloudConfig({ url: "", key: "", owner: "" });
-      await initCloud(onCloudReady);
+      localStorage.removeItem("itinerary-studio:cloud");
+      location.reload();
     }
   });
-}
-
-function readCloudConfig() {
-  try { return JSON.parse(localStorage.getItem("itinerary-studio:cloud") || "{}"); }
-  catch { return {}; }
-}
-function writeCloudConfig(cfg) {
-  localStorage.setItem("itinerary-studio:cloud", JSON.stringify(cfg));
-}
-
-async function onCloudReady(status) {
-  const bar = document.getElementById("cloudBar");
-  const statusEl = document.getElementById("cloudStatus");
-  if (!status.connected) {
-    bar.hidden = true;
-    return;
-  }
-  bar.hidden = false;
-  const srcLabel = status.source === "baked" ? " · from repo secrets"
-                 : status.source === "local" ? " · from this browser"
-                 : "";
-  statusEl.textContent = `Connected · ${status.docCount} docs${srcLabel}`;
-  statusEl.classList.add("connected");
-
-  const list = document.getElementById("cloudDocList");
-  list.innerHTML = `<option value="">— pick a saved doc —</option>` +
-    status.docs.map((d) =>
-      `<option value="${d.id}">${escapeHtml(d.title || "(untitled)")}</option>`
-    ).join("");
-
-  document.getElementById("cloudLoad").onclick = async () => {
-    const id = list.value;
-    if (!id) return toast("Pick a document to load.");
-    try {
-      const doc = await getCloud().load(id);
-      loadMarkdown(doc.markdown, doc.title);
-      toast(`Loaded "${doc.title}".`);
-    } catch (e) { toast(e.message, true); }
-  };
-  document.getElementById("cloudSave").onclick = async () => {
-    if (!state.title) return toast("Set a title first.", true);
-    try {
-      await getCloud().save({ title: state.title, markdown: currentMarkdown() });
-      toast(`Saved "${state.title}".`);
-      await initCloud(onCloudReady); // refresh dropdown
-    } catch (e) { toast(e.message, true); }
-  };
-  document.getElementById("cloudDelete").onclick = async () => {
-    const id = list.value;
-    if (!id) return toast("Pick a document first.");
-    if (!confirm("Delete this saved itinerary from Supabase?")) return;
-    try {
-      await getCloud().remove(id);
-      toast("Deleted.");
-      await initCloud(onCloudReady);
-    } catch (e) { toast(e.message, true); }
-  };
 }

@@ -1,8 +1,9 @@
-// Optional Supabase backend. Loaded only when the user has stored config.
-// We import supabase-js dynamically so the app works fully offline / unconfigured.
+// Supabase client + auth + trips API.
+// Loads the supabase-js client lazily on first use so the app boots
+// even when not configured.
 
 let client = null;
-let owner = "";
+let clientReady = null; // Promise that resolves to the client (or null)
 
 const CONFIG_KEY = "itinerary-studio:cloud";
 
@@ -10,73 +11,174 @@ function readConfig() {
   let stored = {};
   try { stored = JSON.parse(localStorage.getItem(CONFIG_KEY) || "{}"); }
   catch {}
-  // Baked-in config from GitHub Actions (repo Secrets) is used as a fallback
-  // so any browser opening the deployed page is auto-connected without
-  // having to paste credentials into the ⚙ dialog. localStorage still wins,
-  // which lets you override the baked config for local dev or testing.
   const baked = (typeof window !== "undefined" && window.ITM_CONFIG) || {};
   return {
-    url:   stored.url   || baked.url   || "",
-    key:   stored.key   || baked.key   || "",
-    owner: stored.owner || baked.owner || "",
+    url: stored.url || baked.url || "",
+    key: stored.key || baked.key || "",
     source: stored.url ? "local" : (baked.url ? "baked" : "none"),
   };
 }
 
-export function getCloud() {
-  if (!client) throw new Error("Cloud is not connected. Open settings (⚙) to configure Supabase.");
-  return {
-    async list() {
-      let q = client.from("itineraries").select("id, title, updated_at").order("updated_at", { ascending: false });
-      if (owner) q = q.eq("owner", owner);
-      const { data, error } = await q;
-      if (error) throw new Error(error.message);
-      return data || [];
-    },
-    async load(id) {
-      const { data, error } = await client.from("itineraries").select("*").eq("id", id).single();
-      if (error) throw new Error(error.message);
-      return data;
-    },
-    async save({ title, markdown }) {
-      // Upsert by (owner, title): if a doc with same title exists, update it.
-      const payload = { title, markdown, owner: owner || null, updated_at: new Date().toISOString() };
-      let q = client.from("itineraries").select("id").eq("title", title);
-      if (owner) q = q.eq("owner", owner);
-      const { data: existing } = await q.maybeSingle();
-      if (existing?.id) {
-        const { error } = await client.from("itineraries").update(payload).eq("id", existing.id);
-        if (error) throw new Error(error.message);
-      } else {
-        const { error } = await client.from("itineraries").insert(payload);
-        if (error) throw new Error(error.message);
-      }
-    },
-    async remove(id) {
-      const { error } = await client.from("itineraries").delete().eq("id", id);
-      if (error) throw new Error(error.message);
-    },
-  };
+export function isConfigured() {
+  const c = readConfig();
+  return !!(c.url && c.key);
 }
 
-export async function initCloud(onReady) {
-  const cfg = readConfig();
-  client = null;
-  owner = "";
-  if (!cfg.url || !cfg.key) {
-    onReady?.({ connected: false });
-    return;
-  }
-  try {
-    // Dynamic ESM import so we don't pay this cost when unconfigured.
-    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
-    client = createClient(cfg.url, cfg.key);
-    owner = cfg.owner || "";
-    const docs = await getCloud().list();
-    onReady?.({ connected: true, docs, docCount: docs.length, source: cfg.source });
-  } catch (e) {
-    console.warn("Supabase init failed:", e);
-    client = null;
-    onReady?.({ connected: false, error: e.message });
-  }
+export function configSource() {
+  return readConfig().source;
 }
+
+async function ensureClient() {
+  if (client) return client;
+  if (clientReady) return clientReady;
+  const cfg = readConfig();
+  if (!cfg.url || !cfg.key) return null;
+
+  clientReady = (async () => {
+    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+    client = createClient(cfg.url, cfg.key, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    });
+    return client;
+  })();
+  return clientReady;
+}
+
+// Public initializer; safe to call anytime, no-op when unconfigured.
+export async function initSupabase() {
+  return await ensureClient();
+}
+
+// =============== Auth ===============
+
+export const auth = {
+  /** Sends a magic link to the email; user clicks it to land back on the app. */
+  async signInWithMagicLink(email) {
+    const c = await ensureClient();
+    if (!c) throw new Error("Supabase is not configured.");
+    const { error } = await c.auth.signInWithOtp({
+      email,
+      options: {
+        // Send the user back to the page they signed in from.
+        emailRedirectTo: window.location.origin + window.location.pathname,
+      },
+    });
+    if (error) throw error;
+  },
+
+  async signOut() {
+    const c = await ensureClient();
+    if (!c) return;
+    await c.auth.signOut();
+  },
+
+  async getSession() {
+    const c = await ensureClient();
+    if (!c) return null;
+    const { data } = await c.auth.getSession();
+    return data?.session || null;
+  },
+
+  async getUser() {
+    const session = await this.getSession();
+    return session?.user || null;
+  },
+
+  /** Subscribe to sign-in / sign-out. Returns an unsubscribe function. */
+  async onChange(callback) {
+    const c = await ensureClient();
+    if (!c) return () => {};
+    const { data } = c.auth.onAuthStateChange((_event, session) => callback(session));
+    return () => data.subscription.unsubscribe();
+  },
+};
+
+// =============== Trips ===============
+
+export const trips = {
+  /** All itineraries the current user is a member of, newest first. */
+  async list() {
+    const c = await ensureClient();
+    if (!c) throw new Error("Supabase is not configured.");
+    const { data, error } = await c
+      .from("itineraries")
+      .select("id, title, created_by, created_at, updated_at, itinerary_members!inner(role, user_id)")
+      .order("updated_at", { ascending: false });
+    if (error) throw error;
+    // Flatten: pull the current user's role onto each row.
+    const user = await auth.getUser();
+    return (data || []).map((row) => {
+      const myMembership = row.itinerary_members.find((m) => m.user_id === user?.id);
+      return {
+        id: row.id,
+        title: row.title,
+        created_by: row.created_by,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        role: myMembership?.role || "viewer",
+        memberCount: row.itinerary_members.length,
+      };
+    });
+  },
+
+  /** Single itinerary by id. RLS enforces membership. */
+  async get(id) {
+    const c = await ensureClient();
+    if (!c) throw new Error("Supabase is not configured.");
+    const { data, error } = await c
+      .from("itineraries")
+      .select("id, title, markdown, created_by, created_at, updated_at")
+      .eq("id", id)
+      .single();
+    if (error) throw error;
+    // Read current user's role separately (cheap, accurate).
+    const user = await auth.getUser();
+    let role = "viewer";
+    if (user) {
+      const { data: m } = await c
+        .from("itinerary_members")
+        .select("role")
+        .eq("itinerary_id", id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (m?.role) role = m.role;
+    }
+    return { ...data, role };
+  },
+
+  /** Create a new itinerary; the trigger auto-adds the creator as owner. */
+  async create({ title, markdown }) {
+    const c = await ensureClient();
+    if (!c) throw new Error("Supabase is not configured.");
+    const user = await auth.getUser();
+    if (!user) throw new Error("Sign in first.");
+    const { data, error } = await c
+      .from("itineraries")
+      .insert({ title: title || "Untitled itinerary", markdown: markdown || "", created_by: user.id })
+      .select("id")
+      .single();
+    if (error) throw error;
+    return data.id;
+  },
+
+  async update(id, patch) {
+    const c = await ensureClient();
+    if (!c) throw new Error("Supabase is not configured.");
+    const { error } = await c
+      .from("itineraries")
+      .update(patch)
+      .eq("id", id);
+    if (error) throw error;
+  },
+
+  async remove(id) {
+    const c = await ensureClient();
+    if (!c) throw new Error("Supabase is not configured.");
+    const { error } = await c.from("itineraries").delete().eq("id", id);
+    if (error) throw error;
+  },
+};
