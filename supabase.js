@@ -7,8 +7,20 @@ let owner = "";
 const CONFIG_KEY = "itinerary-studio:cloud";
 
 function readConfig() {
-  try { return JSON.parse(localStorage.getItem(CONFIG_KEY) || "{}"); }
-  catch { return {}; }
+  let stored = {};
+  try { stored = JSON.parse(localStorage.getItem(CONFIG_KEY) || "{}"); }
+  catch {}
+  // Baked-in config from GitHub Actions (repo Secrets) is used as a fallback
+  // so any browser opening the deployed page is auto-connected without
+  // having to paste credentials into the ⚙ dialog. localStorage still wins,
+  // which lets you override the baked config for local dev or testing.
+  const baked = (typeof window !== "undefined" && window.ITM_CONFIG) || {};
+  return {
+    url:   stored.url   || baked.url   || "",
+    key:   stored.key   || baked.key   || "",
+    owner: stored.owner || baked.owner || "",
+    source: stored.url ? "local" : (baked.url ? "baked" : "none"),
+  };
 }
 
 export function getCloud() {
@@ -61,7 +73,7 @@ export async function initCloud(onReady) {
     client = createClient(cfg.url, cfg.key);
     owner = cfg.owner || "";
     const docs = await getCloud().list();
-    onReady?.({ connected: true, docs, docCount: docs.length });
+    onReady?.({ connected: true, docs, docCount: docs.length, source: cfg.source });
   } catch (e) {
     console.warn("Supabase init failed:", e);
     client = null;

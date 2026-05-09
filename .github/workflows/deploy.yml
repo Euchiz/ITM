@@ -1,0 +1,59 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Avoid concurrent deploys; cancel in-flight runs when a new commit lands.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate config.js from secrets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_OWNER: ${{ secrets.SUPABASE_OWNER }}
+        run: |
+          node -e '
+            const cfg = {
+              url: process.env.SUPABASE_URL || "",
+              key: process.env.SUPABASE_ANON_KEY || "",
+              owner: process.env.SUPABASE_OWNER || ""
+            };
+            const body = "window.ITM_CONFIG = " + JSON.stringify(cfg) + ";\n";
+            require("fs").writeFileSync("config.js", body);
+            console.log("config.js written (url set:", !!cfg.url, "key set:", !!cfg.key, "owner set:", !!cfg.owner, ")");
+          '
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4

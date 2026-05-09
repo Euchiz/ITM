@@ -37,15 +37,57 @@ Then open `http://localhost:5173`. Opening `index.html` directly via `file://`
 works for most things, but the **Sample** button uses `fetch` and needs a real
 server.
 
-## Deploy to GitHub Pages
+## Deploy to GitHub Pages (with auto-baked Supabase config)
 
-1. Create a new GitHub repo and copy the contents of this folder into it
-   (everything in `itinerary-app/`).
-2. Commit and push.
-3. In the repo's **Settings → Pages**, set the source to `main` branch, root.
-4. The site will publish at `https://<user>.github.io/<repo>/`.
+This repo ships with a GitHub Actions workflow
+(`.github/workflows/deploy.yml`) that:
 
-No build step. The Supabase client is loaded on demand from `esm.sh`.
+1. Reads three secrets from the repo:
+   - `SUPABASE_URL`         — Project URL
+   - `SUPABASE_ANON_KEY`    — anon (publishable) key
+   - `SUPABASE_OWNER`       — optional `owner` tag for filtering your docs
+2. Writes them into a `config.js` at build time as
+   `window.ITM_CONFIG = { url, key, owner }`.
+3. Uploads the directory and deploys to Pages.
+
+### One-time setup
+
+1. **Settings → Secrets and variables → Actions → New repository secret**
+   — add the three secrets above.
+2. **Settings → Pages → Source: GitHub Actions**.
+3. Push to `main` (or run the workflow manually from the **Actions** tab).
+4. Site publishes at `https://<user>.github.io/<repo>/`.
+
+### How the app picks credentials
+
+Order of precedence:
+
+1. Anything you've saved through the in-app **⚙** dialog (per-browser).
+2. The baked-in `window.ITM_CONFIG` from `config.js`.
+
+So the deployed page connects to Supabase automatically on any device,
+and you can still override locally for dev. The cloud bar shows the source
+(`from repo secrets` vs `from this browser`).
+
+### Security reality
+
+The Supabase **anon key** is shipped to every visitor's browser — that's
+how every public client-side Supabase app works. GitHub Secrets just keeps
+it out of git history (so you can rotate without rewriting commits) and
+out of pull-request diffs.
+
+Real access control comes from **RLS policies** on the table. If your Pages
+site is public, either:
+- Make the repo private and gate Pages behind GitHub auth (requires a
+  GitHub plan that supports private Pages), or
+- Use a hard-to-guess `SUPABASE_OWNER` value plus an RLS policy that only
+  allows reads/writes when `owner` matches that value.
+
+The README's example RLS policies are wide open and assume a single,
+trusted user. Tighten them if your deployment is public.
+
+No build step beyond the secret-injection. The Supabase client is loaded
+on demand from `esm.sh`.
 
 ## Supported markdown
 

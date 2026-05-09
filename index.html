@@ -72,6 +72,9 @@
 
   <div id="toast" class="toast no-print" hidden></div>
 
+  <!-- Optional baked config from GitHub Actions (Supabase URL/key/owner from repo Secrets).
+       404 in local dev is fine — the app falls back to the ⚙ settings dialog. -->
+  <script src="config.js" onerror="this.dataset.missing='1'"></script>
   <script type="module" src="app.js"></script>
 </body>
 </html>

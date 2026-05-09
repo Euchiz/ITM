@@ -611,7 +611,10 @@ async function onCloudReady(status) {
     return;
   }
   bar.hidden = false;
-  statusEl.textContent = `Connected · ${status.docCount} docs`;
+  const srcLabel = status.source === "baked" ? " · from repo secrets"
+                 : status.source === "local" ? " · from this browser"
+                 : "";
+  statusEl.textContent = `Connected · ${status.docCount} docs${srcLabel}`;
   statusEl.classList.add("connected");
 
   const list = document.getElementById("cloudDocList");
