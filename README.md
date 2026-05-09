@@ -119,36 +119,13 @@ The app works fully without Supabase — everything is stored in the browser.
 Connect Supabase if you want to save named itineraries you can pull up from
 another device.
 
-### 1. Create the table
+### 1. Apply migrations
 
-In the Supabase SQL editor:
-
-```sql
-create table public.itineraries (
-  id uuid primary key default gen_random_uuid(),
-  owner text,
-  title text not null,
-  markdown text not null,
-  updated_at timestamptz not null default now()
-);
-
--- For a personal-use deployment, the simplest setup is:
---   * Disable RLS, OR
---   * Enable RLS with a permissive policy gated on the anon key
--- Pick one. If you make the URL public, prefer the second option and
--- restrict by an `owner` value only your client knows.
-
-alter table public.itineraries enable row level security;
-create policy "anon read"  on public.itineraries for select using (true);
-create policy "anon write" on public.itineraries for insert with check (true);
-create policy "anon update" on public.itineraries for update using (true);
-create policy "anon delete" on public.itineraries for delete using (true);
-```
-
-> The above policies make the table fully open to anyone with the anon key. If
-> the deployed page is public, use a stricter policy — for example, require an
-> `owner` value that matches a client-side secret you supply via the settings
-> dialog.
+Schema and RLS live in [`supabase/migrations/`](supabase/migrations/) as
+versioned SQL files. Apply them either through the Supabase SQL editor
+(paste each file in filename order) or via the Supabase CLI
+(`supabase db push`). See [`supabase/README.md`](supabase/README.md) for
+the exact steps and a stricter, owner-scoped RLS template.
 
 ### 2. Connect from the app
 
@@ -161,11 +138,14 @@ Credentials are stored in `localStorage` only.
 ## File overview
 
 ```
-index.html      app shell + toolbar
-styles.css      edit-mode chrome
-print.css       render-mode + @page styling (cloned from graduation trip)
-parser.js       markdown <-> block-list parser/serializer + inline renderer
-app.js          editor, render, export, settings wiring
-supabase.js     optional cloud save/load (dynamic import)
-sample.md       graduation-trip itinerary as a working sample
+index.html               app shell + toolbar
+styles.css               edit-mode chrome
+print.css                render-mode + @page styling (cloned from graduation trip)
+parser.js                markdown <-> block-list parser/serializer + inline renderer
+app.js                   editor, render, export, settings wiring
+supabase.js              optional cloud save/load (dynamic import)
+sample.md                graduation-trip itinerary as a working sample
+.github/workflows/       deploy.yml — Pages deploy with secret-baked config
+supabase/migrations/     versioned SQL migrations (apply via dashboard or CLI)
+supabase/README.md       migration usage + owner-scoped RLS template
 ```
