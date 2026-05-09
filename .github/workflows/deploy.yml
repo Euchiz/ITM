@@ -25,13 +25,15 @@ jobs:
       - name: Generate config.js from secrets
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          # Accepts either the new publishable key (sb_publishable_...) or
+          # a legacy anon JWT. Both authenticate browser clients the same way.
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
           SUPABASE_OWNER: ${{ secrets.SUPABASE_OWNER }}
         run: |
           node -e '
             const cfg = {
               url: process.env.SUPABASE_URL || "",
-              key: process.env.SUPABASE_ANON_KEY || "",
+              key: process.env.SUPABASE_PUBLISHABLE_KEY || "",
               owner: process.env.SUPABASE_OWNER || ""
             };
             const body = "window.ITM_CONFIG = " + JSON.stringify(cfg) + ";\n";

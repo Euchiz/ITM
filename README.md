@@ -43,9 +43,9 @@ This repo ships with a GitHub Actions workflow
 (`.github/workflows/deploy.yml`) that:
 
 1. Reads three secrets from the repo:
-   - `SUPABASE_URL`         — Project URL
-   - `SUPABASE_ANON_KEY`    — anon (publishable) key
-   - `SUPABASE_OWNER`       — optional `owner` tag for filtering your docs
+   - `SUPABASE_URL`               — Project URL
+   - `SUPABASE_PUBLISHABLE_KEY`   — `sb_publishable_...` (new format) or legacy anon JWT
+   - `SUPABASE_OWNER`             — optional `owner` tag for filtering your docs
 2. Writes them into a `config.js` at build time as
    `window.ITM_CONFIG = { url, key, owner }`.
 3. Uploads the directory and deploys to Pages.
