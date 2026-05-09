@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Itinerary Studio</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="print.css">
+</head>
+<body data-mode="edit">
+  <header class="toolbar no-print">
+    <div class="toolbar-left">
+      <strong class="brand">Itinerary Studio</strong>
+      <span class="doc-title-wrap">
+        <input id="docTitle" type="text" placeholder="Untitled itinerary" />
+      </span>
+    </div>
+    <div class="toolbar-center">
+      <div class="mode-toggle" role="tablist">
+        <button data-mode="edit" class="active" role="tab">Edit</button>
+        <button data-mode="render" role="tab">Render</button>
+      </div>
+    </div>
+    <div class="toolbar-right">
+      <label class="btn ghost">
+        Import .md
+        <input id="importFile" type="file" accept=".md,text/markdown,text/plain" hidden>
+      </label>
+      <button id="loadSample" class="btn ghost">Sample</button>
+      <button id="exportMd" class="btn ghost">Export .md</button>
+      <button id="exportHtml" class="btn ghost">Export .html</button>
+      <button id="printBtn" class="btn primary">Print / PDF</button>
+      <button id="settingsBtn" class="btn icon" title="Supabase settings">⚙</button>
+    </div>
+  </header>
+
+  <section class="cloud-bar no-print" id="cloudBar" hidden>
+    <span class="cloud-status" id="cloudStatus">Not connected</span>
+    <select id="cloudDocList"><option value="">— pick a saved doc —</option></select>
+    <button id="cloudLoad" class="btn ghost">Load</button>
+    <button id="cloudSave" class="btn primary">Save</button>
+    <button id="cloudDelete" class="btn ghost danger">Delete</button>
+  </section>
+
+  <main id="app">
+    <div id="editor" class="editor"></div>
+    <div id="render" class="render printable" hidden></div>
+  </main>
+
+  <dialog id="settingsDialog" class="settings-dialog no-print">
+    <form method="dialog">
+      <h3>Supabase connection</h3>
+      <p class="muted">
+        Stored only in this browser's localStorage. See README for the table schema.
+      </p>
+      <label>Project URL
+        <input id="sbUrl" type="url" placeholder="https://xxxx.supabase.co">
+      </label>
+      <label>Anon (publishable) key
+        <input id="sbKey" type="text" placeholder="eyJhbGciOi...">
+      </label>
+      <label>Owner tag (optional, for filtering your docs)
+        <input id="sbOwner" type="text" placeholder="zac">
+      </label>
+      <menu>
+        <button value="cancel">Cancel</button>
+        <button id="sbDisconnect" value="disconnect" type="submit">Disconnect</button>
+        <button id="sbConnect" value="connect" type="submit" class="primary">Connect</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast no-print" hidden></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
