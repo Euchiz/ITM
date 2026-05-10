@@ -55,17 +55,59 @@ export async function initSupabase() {
 
 // =============== Auth ===============
 
+function appUrl() {
+  return window.location.origin + window.location.pathname;
+}
+
 export const auth = {
-  /** Sends a magic link to the email; user clicks it to land back on the app. */
-  async signInWithMagicLink(email) {
+  /** Create a new account. Supabase sends a confirmation email if that's enabled. */
+  async signUp(email, password) {
     const c = await ensureClient();
     if (!c) throw new Error("Supabase is not configured.");
-    const { error } = await c.auth.signInWithOtp({
+    const { data, error } = await c.auth.signUp({
       email,
-      options: {
-        // Send the user back to the page they signed in from.
-        emailRedirectTo: window.location.origin + window.location.pathname,
-      },
+      password,
+      options: { emailRedirectTo: appUrl() },
+    });
+    if (error) throw error;
+    // Returns whether a session was created (no email confirmation required)
+    // or whether the user must confirm by email first.
+    return { needsConfirmation: !data?.session, user: data?.user };
+  },
+
+  async signIn(email, password) {
+    const c = await ensureClient();
+    if (!c) throw new Error("Supabase is not configured.");
+    const { error } = await c.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+  },
+
+  /** Send a password-reset email; user clicks the link, lands back here in recovery mode. */
+  async sendPasswordReset(email) {
+    const c = await ensureClient();
+    if (!c) throw new Error("Supabase is not configured.");
+    const { error } = await c.auth.resetPasswordForEmail(email, {
+      redirectTo: appUrl(),
+    });
+    if (error) throw error;
+  },
+
+  /** Set a new password for the currently-signed-in (or recovery-session) user. */
+  async updatePassword(password) {
+    const c = await ensureClient();
+    if (!c) throw new Error("Supabase is not configured.");
+    const { error } = await c.auth.updateUser({ password });
+    if (error) throw error;
+  },
+
+  /** Resend the email-confirmation link if the user lost theirs. */
+  async resendConfirmation(email) {
+    const c = await ensureClient();
+    if (!c) throw new Error("Supabase is not configured.");
+    const { error } = await c.auth.resend({
+      type: "signup",
+      email,
+      options: { emailRedirectTo: appUrl() },
     });
     if (error) throw error;
   },
@@ -88,11 +130,11 @@ export const auth = {
     return session?.user || null;
   },
 
-  /** Subscribe to sign-in / sign-out. Returns an unsubscribe function. */
+  /** Subscribe to auth changes. Callback receives (event, session). */
   async onChange(callback) {
     const c = await ensureClient();
     if (!c) return () => {};
-    const { data } = c.auth.onAuthStateChange((_event, session) => callback(session));
+    const { data } = c.auth.onAuthStateChange((event, session) => callback(event, session));
     return () => data.subscription.unsubscribe();
   },
 };

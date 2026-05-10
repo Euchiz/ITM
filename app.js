@@ -27,6 +27,7 @@ const state = {
   mode: "edit",                  // "edit" | "render"
   dirty: false,
   saving: false,
+  recoveryMode: false,           // true when arrived via password-reset link
 };
 
 const LOCAL_DOC_KEY = "itinerary-studio:guest-doc";
@@ -53,10 +54,19 @@ window.addEventListener("DOMContentLoaded", async () => {
   routeFromSession();
 });
 
-function handleAuthChange(session) {
+function handleAuthChange(event, session) {
+  if (event === "PASSWORD_RECOVERY") {
+    // User clicked a reset link; force them to set a new password before
+    // doing anything else, even though Supabase has given them a session.
+    state.recoveryMode = true;
+    state.user = session?.user || null;
+    paintHeader();
+    setView("auth");
+    return;
+  }
+
   const wasUser = state.user;
   state.user = session?.user || null;
-  // Re-render header for email + sign-out.
   paintHeader();
   // Only re-route on real transitions to avoid clobbering an open editor.
   if (!!state.user !== !!wasUser) routeFromSession();
@@ -64,6 +74,10 @@ function handleAuthChange(session) {
 
 function routeFromSession() {
   paintHeader();
+  if (state.recoveryMode) {
+    setView("auth");
+    return;
+  }
   if (!state.user) {
     setView("auth");
     return;
@@ -91,7 +105,15 @@ function setView(view) {
   editor.hidden = view !== "editor";
 
   if (view === "auth") {
-    renderAuthView(authEl);
+    renderAuthView(authEl, {
+      initialMode: state.recoveryMode ? "reset" : "sign-in",
+      onPasswordReset: () => {
+        state.recoveryMode = false;
+        // Strip the recovery hash from the URL so a refresh doesn't replay it.
+        history.replaceState(null, "", window.location.pathname + window.location.search);
+        routeFromSession();
+      },
+    });
   } else if (view === "trips") {
     renderTripsView(tripsEl, {
       onOpen: openTrip,

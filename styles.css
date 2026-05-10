@@ -145,6 +145,73 @@ body[data-mode="render"][data-view="editor"] { background: #e9edf3; }
 
 .auth-help { font-size: 12px; line-height: 1.5; }
 
+.auth-tabs {
+  display: inline-flex;
+  background: #eef1f7;
+  border-radius: 8px;
+  padding: 3px;
+  margin: 6px 0 16px;
+}
+.auth-tabs button {
+  border: 0;
+  background: transparent;
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 6px;
+  font-family: inherit;
+}
+.auth-tabs button.active {
+  background: #fff;
+  color: var(--accent-strong);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+}
+
+.auth-link {
+  border: 0;
+  background: transparent;
+  padding: 4px 0;
+  margin: -4px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  align-self: flex-start;
+}
+.auth-link:hover { text-decoration: underline; }
+
+.auth-back {
+  border: 0;
+  background: transparent;
+  padding: 4px 0;
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+  align-self: flex-start;
+}
+.auth-back:hover { color: var(--accent-strong); }
+
+.auth-card input[type=password] {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text);
+}
+.auth-card input[type=password]:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(47, 111, 163, 0.15);
+}
+
 /* ===== Trips view ===== */
 
 .view-trips {

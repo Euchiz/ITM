@@ -7,7 +7,7 @@ with Supabase Auth + per-trip access control.
 
 ## Features
 
-- **Magic-link sign-in.** No password to remember; Supabase emails a one-time link.
+- **Email + password sign-in.** Sign up, sign in, and reset your password by email — all standard Supabase Auth flows.
 - **All Trips page.** Lists every itinerary you have access to, with role
   (owner / editor / viewer) and last-updated time. Create new trips and
   delete trips you own from one place.
@@ -44,11 +44,15 @@ The included workflow at `.github/workflows/deploy.yml`:
 
 1. **Create the Supabase project** and apply the migration from
    `supabase/migrations/` (see [`supabase/README.md`](supabase/README.md)).
-2. **Configure Auth → URL Configuration** in the Supabase Dashboard:
-   - **Site URL**: `https://<user>.github.io/<repo>/`
-   - **Redirect URLs**: same value (and `http://localhost:5173/` if you
-     plan to develop locally). Magic links won't redirect back unless
-     this matches.
+2. **Configure Auth** in the Supabase Dashboard:
+   - **Authentication → Providers → Email**: enable. Decide whether
+     "Confirm email" is on (default yes — recommended). With it on,
+     new sign-ups must click a link in an email before they can sign in.
+   - **Authentication → URL Configuration**:
+     - **Site URL**: `https://<user>.github.io/<repo>/`
+     - **Redirect URLs**: same value (and `http://localhost:5173/`
+       if you plan to develop locally). Confirmation and password-reset
+       links use these.
 3. **Add repo Secrets** at *Settings → Secrets and variables → Actions*:
    - `SUPABASE_URL`
    - `SUPABASE_PUBLISHABLE_KEY` — the `sb_publishable_...` key (or the

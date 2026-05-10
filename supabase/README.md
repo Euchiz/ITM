@@ -46,17 +46,18 @@ supabase db push
 
 After applying the schema, in the Supabase Dashboard:
 
-1. **Authentication → Providers → Email**: ensure "Enable Email
-   provider" is on. The default magic-link flow is what the app uses;
-   no password configuration needed.
+1. **Authentication → Providers → Email**: enable. The app uses
+   email + password sign-in plus password reset by email. Whether
+   "Confirm email" is required is up to you (default on; recommended).
 2. **Authentication → URL Configuration**:
    - **Site URL**: the deployed page, e.g.
      `https://<user>.github.io/<repo>/`.
    - **Redirect URLs**: the same value (add `http://localhost:5173/`
      too if you plan to develop locally).
 
-Magic links won't take users back to the app correctly unless these
-URLs match where the app is served.
+Confirmation links (after sign-up) and password-reset links won't
+take users back to the app correctly unless these URLs match where
+the app is served.
 
 ## Files
 
