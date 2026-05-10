@@ -15,6 +15,10 @@
 
 * { box-sizing: border-box; }
 
+/* Ensure the HTML hidden attribute always wins over any inner display rules
+   (e.g. the .render div's min-height inside an inactive editor view). */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   padding: 0;
