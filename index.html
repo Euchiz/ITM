@@ -27,24 +27,27 @@
     <section id="view-trips" class="view view-trips" hidden></section>
 
     <section id="view-trip" class="view view-trip" hidden>
-      <nav class="trip-tabs no-print" id="tripTabs" role="tablist">
-        <button data-page="overview"  role="tab">Overview</button>
-        <button data-page="itinerary" role="tab">Itinerary</button>
-        <button data-page="prepare"   role="tab">Prepare</button>
-        <button data-page="today"     role="tab">Today</button>
-        <button data-page="notes"     role="tab">Notes</button>
-        <button data-page="members"   role="tab">Members</button>
-        <button data-page="io"        role="tab">Import / Export</button>
-      </nav>
-      <div id="tripPage" class="trip-page"></div>
+      <aside class="vy-sidebar no-print" id="tripSidebar" role="navigation"></aside>
+      <div class="vy-main">
+        <div id="tripHero" class="vy-hero no-print" hidden></div>
+        <div id="tripDayStrip" class="vy-daystrip no-print" hidden></div>
+        <div class="vy-timeline-card vy-page-shell">
+          <div id="tripPage" class="trip-page"></div>
+        </div>
+        <div class="vy-foot no-print">
+          <span class="vy-powered"><span class="vy-powered-dot"></span> POWERED BY <b>VIRIDIAN BLUE</b></span>
+          <span id="tripFootMeta" class="vy-meta"></span>
+        </div>
+      </div>
     </section>
   </main>
 
   <nav class="mobile-nav no-print" id="mobileNav" hidden role="tablist">
     <button data-page="today"     role="tab">Today</button>
     <button data-page="itinerary" role="tab">Plan</button>
-    <button data-page="prepare"   role="tab">Checklist</button>
+    <button data-page="prepare"   role="tab">Prepare</button>
     <button data-page="notes"     role="tab">Notes</button>
+    <button data-page="overview"  role="tab">More</button>
   </nav>
 
   <dialog id="settingsDialog" class="settings-dialog no-print">

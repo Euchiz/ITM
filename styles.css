@@ -37,6 +37,23 @@
 }
 
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap");
+
+/* Material Symbols base — keep glyphs from breaking layout while the font loads */
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined", sans-serif;
+  font-weight: normal;
+  font-style: normal;
+  display: inline-block;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: "liga";
+  font-feature-settings: "liga";
+}
 
 /* ---- Tokens ---- */
 
@@ -489,46 +506,399 @@ html, body {
   background: rgba(255,255,255,0.2);
 }
 
-/* ===== Trip view ===== */
+/* ===== Trip view shell — sidebar + main, mirroring desktop.jsx ===== */
 
-.view-trip { max-width: 1180px; margin: 0 auto; padding: 0 24px 100px; }
+.view-trip {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  max-width: 1380px;
+  margin: 0 auto;
+  padding: 0 16px 24px;
+  gap: 0;
+  align-items: start;
+  min-height: calc(100vh - 60px);
+  position: relative;
+}
 
-.trip-tabs {
-  display: flex; gap: 2px;
-  margin-top: 14px;
-  overflow-x: auto;
-  scrollbar-width: thin;
-  position: sticky; top: 56px; z-index: 10;
-  padding: 6px;
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.20));
-  backdrop-filter: blur(18px) saturate(1.15);
-  -webkit-backdrop-filter: blur(18px) saturate(1.15);
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.6);
-}
-.trip-tabs::-webkit-scrollbar { display: none; }
-.trip-tabs button {
-  border: 0; background: transparent;
-  padding: 8px 14px;
-  font-family: var(--vbl-font-display);
-  font-size: 11px; font-weight: 700;
-  letter-spacing: 0.12em; text-transform: uppercase;
-  color: var(--vbl-fg-3);
-  cursor: pointer;
-  white-space: nowrap;
-  border-radius: 10px;
-  transition: background 140ms, color 140ms, box-shadow 140ms;
-}
-.trip-tabs button:hover { color: var(--vbl-ink); background: rgba(255,255,255,0.45); }
-.trip-tabs button.active {
-  color: var(--vbl-viridian-deep);
-  background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.6));
+/* ─ sidebar ─────────────────────────────────────────────────────── */
+
+.vy-sidebar {
+  position: sticky;
+  top: 64px;
+  align-self: start;
+  display: flex; flex-direction: column; gap: 16px;
+  padding: 18px 12px 18px;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  border-radius: 18px;
+  margin: 14px 0 0;
+  background: linear-gradient(180deg, rgba(249,250,248,0.72) 0%, rgba(249,250,248,0.35) 100%);
+  border: 0;
+  backdrop-filter: blur(22px) saturate(1.15);
+  -webkit-backdrop-filter: blur(22px) saturate(1.15);
   box-shadow:
-    inset 0 0 0 1px rgba(78,159,146,0.30),
+    inset 0 0 0 1px rgba(255,255,255,0.55),
+    inset 1px 1px 0 -0.5px rgba(40,103,95,0.14),
+    inset -1px -1px 0 -0.5px rgba(20,32,31,0.16),
+    0 12px 28px -16px rgba(40,103,95,0.18);
+  scrollbar-width: thin;
+}
+.vy-sidebar::-webkit-scrollbar { width: 6px; }
+.vy-sidebar::-webkit-scrollbar-thumb { background: var(--vbl-hairline); border-radius: 3px; }
+
+.vy-brand-side { display: grid; gap: 2px; padding: 0 8px; }
+.vy-brand-side strong {
+  font-family: var(--vbl-font-display);
+  font-size: 1.1rem; font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--vbl-ink);
+}
+.vy-brand-side span {
+  font-family: var(--vbl-font-display);
+  font-size: 0.6rem;
+  color: var(--vbl-fg-4);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.vy-trip-switcher {
+  appearance: none;
+  border: 0;
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 10px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.7), rgba(255,255,255,0.3));
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.7),
+    inset 1px 1px 0 -0.5px rgba(40,103,95,0.18),
+    inset -1px -1px 0 -0.5px rgba(20,32,31,0.16);
+  transition: transform 140ms, box-shadow 140ms;
+}
+.vy-trip-switcher:hover { transform: translateY(-1px); }
+.vy-trip-switcher-img {
+  width: 36px; height: 36px; border-radius: 8px;
+  background: linear-gradient(135deg, hsl(172 35% 35%), hsl(198 30% 50%));
+  display: grid; place-items: center;
+  color: rgba(255,255,255,0.92);
+  font-family: var(--vbl-font-display);
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.4),
+    inset 0 1px 0 rgba(255,255,255,0.4);
+}
+.vy-trip-switcher b {
+  font-family: var(--vbl-font-display);
+  font-size: 0.82rem;
+  font-weight: 600;
+  display: block;
+  color: var(--vbl-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vy-trip-switcher span:not(.material-symbols-outlined):not(.vy-trip-switcher-img) {
+  font-size: 0.66rem;
+  color: var(--vbl-fg-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vy-side-section {
+  font-family: var(--vbl-font-display);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--vbl-fg-4);
+  padding: 0 10px;
+  margin-top: 4px;
+}
+
+.vy-side-nav { display: flex; flex-direction: column; gap: 1px; }
+.vy-side-nav button {
+  appearance: none;
+  border: 0;
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  font-family: var(--vbl-font-display);
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--vbl-ink);
+  cursor: pointer;
+  transition: background 120ms;
+}
+.vy-side-nav button .material-symbols-outlined {
+  font-size: 18px;
+  line-height: 1;
+  color: var(--vbl-fg-3);
+}
+.vy-side-nav button:hover { background: rgba(255,255,255,0.55); }
+.vy-side-nav button.is-active {
+  color: var(--vbl-viridian);
+  background: linear-gradient(180deg, rgba(255,255,255,0.75), rgba(255,255,255,0.3));
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.7),
+    inset 1px 1px 0 -0.5px rgba(40,103,95,0.18),
+    inset -1px -1px 0 -0.5px rgba(20,32,31,0.16),
     0 4px 12px -6px rgba(40,103,95,0.16);
 }
+.vy-side-nav button.is-active .material-symbols-outlined { color: var(--vbl-viridian); }
+.vy-side-nav small {
+  font-family: var(--vbl-font-mono);
+  font-size: 0.62rem;
+  color: var(--vbl-fg-4);
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
 
-.trip-page { margin-top: 22px; }
+.vy-side-nav--stale button {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+.vy-side-nav--stale button:hover { background: transparent; }
+.vy-side-nav--stale small {
+  background: rgba(20,32,31,0.05);
+  color: var(--vbl-fg-3);
+  padding: 1px 6px;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+  letter-spacing: 0.12em;
+}
+
+.vy-side-budget {
+  margin-top: auto;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(223,241,236,0.6), rgba(223,241,236,0.25));
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.7),
+    inset 1px 1px 0 -0.5px rgba(40,103,95,0.18),
+    inset -1px -1px 0 -0.5px rgba(20,32,31,0.18);
+}
+.vy-side-budget-hd {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 6px;
+}
+.vy-side-budget-hd b {
+  font-family: var(--vbl-font-display);
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+  color: var(--vbl-fg-3);
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.vy-side-budget-hd span {
+  font-family: var(--vbl-font-mono);
+  font-size: 0.66rem;
+  color: var(--vbl-fg-3);
+}
+.vy-side-budget-fig {
+  font-family: var(--vbl-font-display);
+  font-size: 1.6rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: var(--vbl-ink);
+}
+.vy-side-budget-fig small {
+  font-size: 0.7rem;
+  color: var(--vbl-fg-3);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+/* ─ main column ─────────────────────────────────────────────────── */
+
+.vy-main {
+  min-width: 0;
+  padding: 14px 14px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* hero block */
+.vy-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 18px 22px;
+  border-radius: 18px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 16px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.25));
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.7),
+    inset 1px 1px 0 -0.5px rgba(40,103,95,0.18),
+    inset -1px -1px 0 -0.5px rgba(20,32,31,0.20),
+    0 8px 22px -10px rgba(40,103,95,0.20);
+}
+.vy-hero-art {
+  position: absolute; right: -40px; top: -40px; bottom: -40px; width: 320px;
+  pointer-events: none; opacity: 0.7;
+  background:
+    radial-gradient(circle at 30% 50%, hsl(172 40% 60% / 0.5), transparent 60%),
+    radial-gradient(circle at 70% 70%, hsl(198 40% 70% / 0.4), transparent 60%);
+}
+.vy-hero-left { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.vy-hero-tag {
+  display: inline-flex; gap: 8px; align-items: center;
+  font-family: var(--vbl-font-display);
+  font-size: 0.62rem; letter-spacing: 0.14em;
+  color: var(--vbl-fg-3); text-transform: uppercase;
+}
+.vy-hero-tag i {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--vbl-viridian);
+  box-shadow: 0 0 0 3px rgba(78,159,146,0.22), 0 0 8px rgba(78,159,146,0.6);
+}
+.vy-hero-title {
+  font-family: var(--vbl-font-display);
+  font-size: 1.6rem; font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--vbl-ink);
+  line-height: 1.1;
+  margin: 2px 0 0;
+}
+.vy-hero-cities {
+  display: flex; gap: 6px; align-items: center;
+  margin-top: 6px; flex-wrap: wrap;
+}
+.vy-citybadge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 7px 3px 4px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.7);
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+}
+.vy-citybadge b {
+  font-family: var(--vbl-font-display);
+  font-size: 0.6rem; font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 5px;
+  background: var(--vbl-ink);
+  color: #fff;
+  border-radius: 3px;
+}
+.vy-citybadge span {
+  font-family: var(--vbl-font-display);
+  font-size: 0.72rem;
+  color: var(--vbl-ink);
+}
+.vy-hero-sep { color: var(--vbl-fg-4); font-family: var(--vbl-font-mono); }
+.vy-hero-right { display: grid; gap: 6px; text-align: right; }
+.vy-hero-dates {
+  font-family: var(--vbl-font-display);
+  font-size: 0.85rem;
+  color: var(--vbl-ink);
+  font-weight: 600;
+}
+.vy-hero-meta {
+  font-family: var(--vbl-font-mono);
+  font-size: 0.7rem;
+  color: var(--vbl-fg-3);
+  letter-spacing: 0.06em;
+}
+
+/* day pill strip */
+.vy-daystrip {
+  padding: 8px 10px;
+  border-radius: 14px;
+  display: flex; gap: 6px; overflow-x: auto;
+  background: linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.2));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.6);
+}
+.vy-daystrip::-webkit-scrollbar { display: none; }
+.vy-daypill {
+  appearance: none; border: 0;
+  display: grid; gap: 2px;
+  padding: 8px 10px 9px;
+  min-width: 60px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.45);
+  font-family: var(--vbl-font-display);
+  cursor: pointer;
+  text-align: left;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.6),
+    inset 0 -1px 0 -0.5px rgba(20,32,31,0.12);
+  transition: background 140ms, transform 100ms, box-shadow 140ms;
+}
+.vy-daypill:hover {
+  background: rgba(255,255,255,0.7);
+  transform: translateY(-1px);
+}
+.vy-daypill-wd {
+  font-size: 0.56rem; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--vbl-fg-3);
+}
+.vy-daypill-num {
+  font-family: var(--vbl-font-display);
+  font-size: 1.1rem; font-weight: 600;
+  color: var(--vbl-ink);
+  line-height: 1;
+}
+.vy-daypill-city {
+  font-size: 0.58rem; font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--vbl-viridian);
+}
+.vy-daypill.is-selected {
+  background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.6));
+  box-shadow:
+    inset 0 0 0 1px rgba(78,159,146,0.45),
+    inset 0 -1px 0 -0.5px rgba(20,32,31,0.16),
+    0 6px 14px -6px rgba(40,103,95,0.3);
+}
+.vy-daypill.is-selected .vy-daypill-num { color: var(--vbl-viridian); }
+
+/* page shell (timeline-card frame around the existing page module) */
+.vy-page-shell {
+  position: relative;
+  padding: 18px 22px 16px;
+  margin-bottom: 0;
+}
+.vy-page-shell .trip-page { margin-top: 0; }
+
+/* foot strip */
+.vy-foot {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 4px 6px 0;
+}
+.vy-powered {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--vbl-font-display);
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  color: var(--vbl-fg-4);
+}
+.vy-powered b { color: var(--vbl-viridian); font-weight: 700; }
+.vy-powered-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--vbl-viridian);
+  box-shadow: 0 0 0 3px rgba(78,159,146,0.18);
+}
+
+.trip-page { margin-top: 0; }
 
 .page-head { margin-bottom: 18px; }
 .page-head h2 {
@@ -538,18 +908,12 @@ html, body {
   letter-spacing: -0.01em;
   color: var(--vbl-ink);
 }
-.page-head h2::before {
-  content: "·";
-  display: block;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  color: var(--vbl-viridian);
-  margin-bottom: 4px;
-}
 .page-head p { margin: 0 0 10px; color: var(--vbl-fg-3); font-size: 13px; }
 
-/* Glass card — the foundational surface */
+/* Glass card — the foundational surface. Inside .vy-page-shell the cards
+ * become flat panels (the shell itself is the glass), to avoid the nested
+ * "card-inside-a-card" effect when restyled pages sit inside the timeline
+ * frame. */
 .card {
   position: relative;
   border-radius: 16px;
@@ -563,6 +927,33 @@ html, body {
     inset 1px 1px 0 -0.5px rgba(40,103,95,0.14),
     inset -1px -1px 0 -0.5px rgba(20,32,31,0.16),
     0 8px 22px -10px rgba(40,103,95,0.18);
+}
+.vy-page-shell .card {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 14px 0;
+  margin-bottom: 0;
+  border-bottom: 1px dashed rgba(78,159,146,0.18);
+  box-shadow: none;
+  border-radius: 0;
+}
+.vy-page-shell .card:last-child { border-bottom: 0; }
+.vy-page-shell .day-card,
+.vy-page-shell .members-card,
+.vy-page-shell .members-invite-card,
+.vy-page-shell .note-card,
+.vy-page-shell .prep-cat {
+  border-radius: 12px;
+  border-bottom: 0;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  background: rgba(255,255,255,0.65);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.7),
+    inset 1px 1px 0 -0.5px rgba(40,103,95,0.14),
+    inset -1px -1px 0 -0.5px rgba(20,32,31,0.16),
+    0 4px 12px -8px rgba(40,103,95,0.16);
 }
 .card h3 {
   margin: 0 0 14px;
@@ -1299,11 +1690,23 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
 
 /* ===== Responsive ===== */
 
+@media (max-width: 900px) {
+  .view-trip {
+    grid-template-columns: 1fr;
+    padding: 0 12px 90px;
+    min-height: 0;
+  }
+  .vy-sidebar { display: none; }
+  .vy-main { padding: 8px 0; }
+  .vy-hero { padding: 14px 16px; grid-template-columns: 1fr; gap: 8px; }
+  .vy-hero-right { text-align: left; }
+  .vy-page-shell { padding: 14px 14px 12px; }
+  .mobile-nav { display: flex; }
+}
+
 @media (max-width: 720px) {
   .app-header { padding: 10px 14px; }
-  .view-trips, .view-trip { padding: 14px; padding-bottom: 90px; }
-  .trip-tabs { display: none; }
-  .mobile-nav { display: flex; }
+  .view-trips { padding: 14px; padding-bottom: 90px; }
 
   .brand::after { display: none; }
 
