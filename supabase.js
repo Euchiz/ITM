@@ -195,19 +195,18 @@ export const trips = {
     return { ...data, role };
   },
 
-  /** Create a new itinerary; the trigger auto-adds the creator as owner.
-   * Note: created_by is intentionally omitted — the column defaults to
-   * auth.uid() server-side, which avoids any client/server uid mismatch. */
+  /** Create a new itinerary via the create_itinerary RPC.
+   * Direct INSERT can't be used because Supabase's WITH CHECK expressions
+   * see auth.uid() as NULL on the same request — see migration
+   * 20260510030000_create_itinerary_rpc.sql. The RPC is SECURITY DEFINER
+   * and reads auth.uid() at function entry where it works. */
   async create({ title, markdown }) {
     const c = await ensureClient();
     if (!c) throw new Error("Supabase is not configured.");
-    const user = await auth.getUser();
-    if (!user) throw new Error("Sign in first.");
-    const { data, error } = await c
-      .from("itineraries")
-      .insert({ title: title || "Untitled itinerary", markdown: markdown || "" })
-      .select("id")
-      .single();
+    const { data, error } = await c.rpc("create_itinerary", {
+      p_title: title || "Untitled itinerary",
+      p_markdown: markdown || "",
+    });
     if (error) throw error;
     return data.id;
   },
