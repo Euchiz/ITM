@@ -43,6 +43,9 @@ async function ensureClient() {
         detectSessionInUrl: true,
       },
     });
+    // Expose for console diagnostics — safe because the publishable key is
+    // already public on the deployed page; this only adds convenience.
+    if (typeof window !== "undefined") window.__sb = client;
     return client;
   })();
   return clientReady;
