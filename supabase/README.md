@@ -64,6 +64,7 @@ the app is served.
 | Order | File | What it does |
 |---|---|---|
 | 1 | `20260509000000_init_schema.sql` | Profiles + itineraries + members tables, triggers, helper functions, and RLS. |
+| 2 | `20260510000000_default_created_by.sql` | Default `itineraries.created_by` to `auth.uid()` and loosen the insert policy so the client can omit it. |
 
 ## Adding a new migration
 

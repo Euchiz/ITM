@@ -192,7 +192,9 @@ export const trips = {
     return { ...data, role };
   },
 
-  /** Create a new itinerary; the trigger auto-adds the creator as owner. */
+  /** Create a new itinerary; the trigger auto-adds the creator as owner.
+   * Note: created_by is intentionally omitted — the column defaults to
+   * auth.uid() server-side, which avoids any client/server uid mismatch. */
   async create({ title, markdown }) {
     const c = await ensureClient();
     if (!c) throw new Error("Supabase is not configured.");
@@ -200,7 +202,7 @@ export const trips = {
     if (!user) throw new Error("Sign in first.");
     const { data, error } = await c
       .from("itineraries")
-      .insert({ title: title || "Untitled itinerary", markdown: markdown || "", created_by: user.id })
+      .insert({ title: title || "Untitled itinerary", markdown: markdown || "" })
       .select("id")
       .single();
     if (error) throw error;
