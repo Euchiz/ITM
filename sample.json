@@ -1,0 +1,201 @@
+{
+  "schema_version": "trip_v1",
+  "trip": {
+    "title": "Japan Family Trip",
+    "destination": "Tokyo → Kyoto → Osaka",
+    "start_date": "2026-05-12",
+    "end_date": "2026-05-21",
+    "summary": "A family trip focused on food, temples, city walks, and relaxed exploration.",
+    "travelers": ["Zac", "Eva", "Eva's parents"],
+    "general_notes": "Keep the pace relaxed. Avoid too many early mornings."
+  },
+  "days": [
+    {
+      "date": "2026-05-12",
+      "title": "Arrival in Tokyo",
+      "city": "Tokyo",
+      "notes": "First day should be light because of jet lag.",
+      "items": [
+        {
+          "title": "Arrive at Haneda Airport",
+          "type": "transport",
+          "start_time": "15:30",
+          "end_time": "16:30",
+          "location_name": "Haneda Airport",
+          "map_url": "",
+          "notes": "Pick up luggage and exchange some cash.",
+          "is_fixed": true,
+          "is_highlight": false,
+          "status": "booked"
+        },
+        {
+          "title": "Hotel check-in",
+          "type": "lodging",
+          "start_time": "18:00",
+          "end_time": "",
+          "location_name": "Hotel in Shinjuku",
+          "map_url": "",
+          "notes": "Confirmation is in Gmail. Booking under Zac.",
+          "is_fixed": true,
+          "is_highlight": false,
+          "status": "booked"
+        },
+        {
+          "title": "Light dinner near hotel",
+          "type": "food",
+          "start_time": "19:30",
+          "end_time": "21:00",
+          "location_name": "Shinjuku",
+          "map_url": "",
+          "notes": "Try ramen if everyone has energy. Otherwise convenience store.",
+          "is_fixed": false,
+          "is_highlight": false,
+          "status": "planned"
+        }
+      ],
+      "todos": [
+        { "text": "Buy Suica/PASMO card", "category": "transportation", "is_done": false, "notes": "" },
+        { "text": "Save hotel address offline", "category": "document", "is_done": false, "notes": "" }
+      ]
+    },
+    {
+      "date": "2026-05-13",
+      "title": "Tokyo city walk",
+      "city": "Tokyo",
+      "notes": "Late start. Lots of walking.",
+      "items": [
+        {
+          "title": "Breakfast at hotel",
+          "type": "food",
+          "start_time": "09:00",
+          "end_time": "10:00",
+          "location_name": "Hotel",
+          "map_url": "",
+          "notes": "",
+          "is_fixed": false,
+          "is_highlight": false,
+          "status": "planned"
+        },
+        {
+          "title": "Meiji Shrine",
+          "type": "activity",
+          "start_time": "10:30",
+          "end_time": "12:00",
+          "location_name": "Shibuya",
+          "map_url": "https://maps.app.goo.gl/sample",
+          "notes": "Quiet morning before the area gets busy.",
+          "is_fixed": false,
+          "is_highlight": true,
+          "status": "planned"
+        },
+        {
+          "title": "Lunch in Harajuku",
+          "type": "food",
+          "start_time": "12:30",
+          "end_time": "14:00",
+          "location_name": "Harajuku",
+          "map_url": "",
+          "notes": "Tonkatsu or sushi.",
+          "is_fixed": false,
+          "is_highlight": false,
+          "status": "planned"
+        },
+        {
+          "title": "Shibuya Crossing + shopping",
+          "type": "shopping",
+          "start_time": "14:30",
+          "end_time": "17:00",
+          "location_name": "Shibuya",
+          "map_url": "",
+          "notes": "",
+          "is_fixed": false,
+          "is_highlight": false,
+          "status": "idea"
+        }
+      ],
+      "todos": [
+        { "text": "Bring umbrella", "category": "packing", "is_done": false, "notes": "Forecast says light rain." },
+        { "text": "Confirm dinner reservation", "category": "booking", "is_done": false, "notes": "" }
+      ]
+    },
+    {
+      "date": "2026-05-14",
+      "title": "Train to Kyoto",
+      "city": "Kyoto",
+      "notes": "",
+      "items": [
+        {
+          "title": "Check out of Tokyo hotel",
+          "type": "lodging",
+          "start_time": "10:00",
+          "end_time": "10:30",
+          "location_name": "Shinjuku",
+          "map_url": "",
+          "notes": "Late check-out confirmed.",
+          "is_fixed": true,
+          "is_highlight": false,
+          "status": "booked"
+        },
+        {
+          "title": "Shinkansen to Kyoto",
+          "type": "transport",
+          "start_time": "11:30",
+          "end_time": "14:00",
+          "location_name": "Tokyo Station",
+          "map_url": "",
+          "notes": "Train QR code is in Photos.",
+          "is_fixed": true,
+          "is_highlight": false,
+          "status": "needs_booking"
+        },
+        {
+          "title": "Kyoto hotel check-in",
+          "type": "lodging",
+          "start_time": "15:00",
+          "end_time": "",
+          "location_name": "Kyoto",
+          "map_url": "",
+          "notes": "",
+          "is_fixed": true,
+          "is_highlight": false,
+          "status": "booked"
+        },
+        {
+          "title": "Evening walk along Kamogawa",
+          "type": "activity",
+          "start_time": "18:00",
+          "end_time": "19:30",
+          "location_name": "Kamogawa River",
+          "map_url": "",
+          "notes": "",
+          "is_fixed": false,
+          "is_highlight": false,
+          "status": "idea"
+        }
+      ],
+      "todos": [
+        { "text": "Pick up shinkansen ticket", "category": "transportation", "is_done": false, "notes": "" },
+        { "text": "Check out before 11:00", "category": "other", "is_done": false, "notes": "" }
+      ]
+    }
+  ],
+  "preparation_checklist": [
+    { "text": "Check passport validity", "category": "document", "due_date": "2026-05-01", "is_done": false, "notes": "Passport photo should also be saved on phone." },
+    { "text": "Book airport transfer", "category": "transportation", "due_date": "", "is_done": false, "notes": "" },
+    { "text": "Buy travel insurance", "category": "document", "due_date": "2026-05-05", "is_done": false, "notes": "" },
+    { "text": "Exchange ¥30,000 cash", "category": "payment", "due_date": "", "is_done": false, "notes": "Most places take cards but small shops and shrines are cash-only." },
+    { "text": "Download offline Tokyo + Kyoto maps", "category": "transportation", "due_date": "", "is_done": false, "notes": "" },
+    { "text": "Pack power adapter", "category": "packing", "due_date": "", "is_done": false, "notes": "Type A plugs in Japan." },
+    { "text": "Pack medicine kit", "category": "health", "due_date": "", "is_done": false, "notes": "Include motion-sickness for shinkansen." }
+  ],
+  "notes": [
+    {
+      "title": "Food preferences",
+      "body": "Eva's parents prefer not too spicy food. Add rest breaks after lunch."
+    },
+    {
+      "title": "File / document locations",
+      "body": "Hotel confirmation is in Gmail. Train QR code is in Photos. Passport copy is on iCloud."
+    }
+  ]
+}

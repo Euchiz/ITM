@@ -3,17 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Itinerary Studio</title>
+  <title>Trip Studio</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="print.css">
 </head>
-<body data-view="auth" data-mode="edit">
+<body data-view="auth">
   <header class="app-header no-print">
     <div class="app-header-left">
-      <strong class="brand">Itinerary Studio</strong>
+      <strong class="brand">Trip Studio</strong>
       <button id="backToTripsBtn" class="btn ghost" hidden>← All trips</button>
     </div>
     <div class="app-header-right">
+      <span id="saveStatus" class="save-status" hidden>Saved</span>
+      <button id="printTripBtn" class="btn ghost" hidden title="Open print preview">🖨 Print PDF</button>
       <span id="userBadge" class="user-badge" hidden></span>
       <button id="signOutBtn" class="btn ghost" hidden>Sign out</button>
       <button id="settingsBtn" class="btn icon" title="Connection settings">⚙</button>
@@ -21,35 +23,28 @@
   </header>
 
   <main id="app">
-    <section id="view-auth" class="view view-auth no-print" hidden></section>
-    <section id="view-trips" class="view view-trips no-print" hidden></section>
+    <section id="view-auth" class="view view-auth" hidden></section>
+    <section id="view-trips" class="view view-trips" hidden></section>
 
-    <section id="view-editor" class="view view-editor" hidden>
-      <div class="editor-toolbar no-print">
-        <span class="doc-title-wrap">
-          <input id="docTitle" type="text" placeholder="Untitled itinerary" />
-        </span>
-        <span id="saveStatus" class="save-status" hidden></span>
-        <span class="editor-toolbar-spacer"></span>
-        <div class="mode-toggle" role="tablist">
-          <button data-mode="edit" class="active" role="tab">Edit</button>
-          <button data-mode="render" role="tab">Render</button>
-        </div>
-        <span class="editor-toolbar-spacer"></span>
-        <label class="btn ghost">
-          Import .md
-          <input id="importFile" type="file" accept=".md,text/markdown,text/plain" hidden>
-        </label>
-        <button id="loadSample" class="btn ghost">Sample</button>
-        <button id="exportMd" class="btn ghost">Export .md</button>
-        <button id="exportHtml" class="btn ghost">Export .html</button>
-        <button id="saveBtn" class="btn ghost">Save</button>
-        <button id="printBtn" class="btn primary">Print / PDF</button>
-      </div>
-      <div id="editor" class="editor"></div>
-      <div id="render" class="render printable"></div>
+    <section id="view-trip" class="view view-trip" hidden>
+      <nav class="trip-tabs no-print" id="tripTabs" role="tablist">
+        <button data-page="overview"  role="tab">Overview</button>
+        <button data-page="itinerary" role="tab">Itinerary</button>
+        <button data-page="prepare"   role="tab">Prepare</button>
+        <button data-page="today"     role="tab">Today</button>
+        <button data-page="notes"     role="tab">Notes</button>
+        <button data-page="io"        role="tab">Import / Export</button>
+      </nav>
+      <div id="tripPage" class="trip-page"></div>
     </section>
   </main>
+
+  <nav class="mobile-nav no-print" id="mobileNav" hidden role="tablist">
+    <button data-page="today"     role="tab">Today</button>
+    <button data-page="itinerary" role="tab">Plan</button>
+    <button data-page="prepare"   role="tab">Checklist</button>
+    <button data-page="notes"     role="tab">Notes</button>
+  </nav>
 
   <dialog id="settingsDialog" class="settings-dialog no-print">
     <form method="dialog">
@@ -75,8 +70,6 @@
 
   <div id="toast" class="toast no-print" hidden></div>
 
-  <!-- Optional baked config from GitHub Actions (Supabase URL/key from repo Secrets).
-       404 in local dev is fine — the app falls back to the ⚙ settings dialog. -->
   <script src="config.js" onerror="this.dataset.missing='1'"></script>
   <script type="module" src="app.js"></script>
 </body>

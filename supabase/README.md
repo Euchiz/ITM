@@ -1,6 +1,6 @@
 # Supabase migrations
 
-SQL migrations for the Itinerary Studio backend. Files follow the
+SQL migrations for the Trip Studio backend. Files follow the
 Supabase CLI naming convention `<14-digit-timestamp>_<name>.sql` and
 are applied in lexicographic order.
 
@@ -9,8 +9,12 @@ are applied in lexicographic order.
 | Table | Purpose |
 |---|---|
 | `profiles` | One row per signed-in user, mirrored from `auth.users`. Public-readable for member-list display; users update only their own row. |
-| `itineraries` | One row per trip. `created_by` records the author but does not by itself grant access. |
+| `itineraries` | One row per trip (carries title + destination + dates + summary + general_notes + travelers[]). `created_by` records the author but does not by itself grant access. |
 | `itinerary_members` | Many-to-many join table. Determines who can see/edit a trip and at what role (`owner` / `editor` / `viewer`). |
+| `days` | Days of a trip. Owns its `itinerary_items`. |
+| `itinerary_items` | A scheduled item on a day (activity, food, transport, lodging, ...) with type, status, time range, location, fixed/highlight flags. |
+| `checklist_items` | Trip-level prep checklist when `day_id` is NULL; daily todos when `day_id` is set. |
+| `notes` | Free-form trip-level notes (file locations, food preferences, emergency info, ...). |
 
 Triggers do the bookkeeping:
 - A new `auth.users` row → auto-inserts the corresponding `profiles` row.
@@ -65,6 +69,11 @@ the app is served.
 |---|---|---|
 | 1 | `20260509000000_init_schema.sql` | Profiles + itineraries + members tables, triggers, helper functions, and RLS. |
 | 2 | `20260510000000_default_created_by.sql` | Default `itineraries.created_by` to `auth.uid()` and loosen the insert policy so the client can omit it. |
+| 3 | `20260510010000_whoami_debug.sql` | Diagnostic helpers for the auth.uid()-in-WITH-CHECK quirk. |
+| 4 | `20260510020000_fix_insert_path.sql` | Intermediate fix attempt for the same quirk. |
+| 5 | `20260510030000_create_itinerary_rpc.sql` | `create_itinerary` RPC (legacy, dropped in #7). |
+| 6 | `20260510040000_trip_schema.sql` | **Trip-shaped schema**: drops `markdown`, adds trip metadata + `days` + `itinerary_items` + `checklist_items` + `notes`, with RLS on all child tables. |
+| 7 | `20260510050000_create_trip_rpc.sql` | RPCs `create_trip`, `create_trip_full(jsonb)` (atomic import), `replace_trip_full(uuid, jsonb)` (owner-only). Drops the legacy `create_itinerary`. |
 
 ## Adding a new migration
 

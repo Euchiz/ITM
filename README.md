@@ -1,35 +1,73 @@
-# Itinerary Studio
+# Trip Studio
 
-A small, dependency-light web app for collaboratively editing travel
-itineraries written in markdown and rendering them as printable HTML / PDF.
-Designed to drop straight onto GitHub Pages with no build step. Multi-user
-with Supabase Auth + per-trip access control.
+A lightweight trip-planning companion. Build a day-by-day itinerary,
+prepare a before-trip checklist, and follow today's schedule + todos
+during travel. Multi-user with Supabase Auth + per-trip access control.
 
-## Features
+> Plan the days. Prepare the details. Follow today's checklist.
 
-- **Email + password sign-in.** Sign up, sign in, and reset your password by email — all standard Supabase Auth flows.
-- **All Trips page.** Lists every itinerary you have access to, with role
-  (owner / editor / viewer) and last-updated time. Create new trips and
-  delete trips you own from one place.
-- **Per-trip access.** Each itinerary lives in its own row; access is
-  governed by an `itinerary_members` table. Default new trip is
-  single-member (you, role=owner). Schema supports adding co-editors;
-  invite UI ships in a follow-up.
-- **Block editor.** Headings, paragraphs, blockquotes, and tables with
-  add/remove row/column. Auto-saves to Supabase 1.5s after the last edit.
-- **Render mode.** Letter-page styling matching the graduation-trip PDF.
-  One-click print → PDF via the browser.
-- **Import / export.** Bring in any markdown file using the supported
-  subset; export back to `.md` or a self-contained `.html`.
-- **Guest fallback.** When Supabase is not configured, the app runs as
-  a single-doc local editor — useful for trying it out.
+## Concepts
+
+Everything is organized around a **Trip**:
+
+```
+Trip
+├── Metadata (title, destination, dates, travelers, summary, notes)
+├── Members (owner / editor / viewer)
+├── Days
+│   ├── Itinerary items (activity, food, transport, lodging, ...)
+│   └── Daily todos
+├── Preparation checklist (before-trip)
+└── Notes (free-form)
+```
+
+Three modes match how you use the app:
+
+| Mode    | Page             | When               |
+| ------- | ---------------- | ------------------ |
+| Plan    | Itinerary        | Building the trip  |
+| Prepare | Prepare          | Before departure   |
+| Travel  | Today            | While traveling    |
 
 ## Stack
 
-- Vanilla ES modules from `index.html` — no build step.
+- Static HTML + ES modules from `index.html`. No build step.
 - Supabase JS v2 (loaded on demand from `esm.sh`).
-- GitHub Actions deploys to GitHub Pages and bakes Supabase config from
-  repo Secrets.
+- Six page modules under `pages/` rendered into a single trip view.
+- GitHub Actions deploys to GitHub Pages and bakes Supabase config
+  from repo Secrets.
+
+## File overview
+
+```
+index.html               app shell + view containers
+styles.css               all styling
+app.js                   orchestrator: auth, view + page routing
+supabase.js              Supabase client + auth + trip data API
+auth.js                  email/password sign-in / sign-up / reset views
+templates.js             checklist templates (basic, international, ...)
+
+io/
+  schema.js              Trip JSON validator (matches guideline §11+§15)
+  parser.js              extract JSON from pasted text or trip-json block
+  export.js              build trip JSON, AI prompt, Markdown export
+
+pages/
+  _utils.js              shared rendering helpers
+  dashboard.js           "All trips" list + create + delete
+  overview.js            trip metadata + stats + next-up + needs-attention
+  itinerary.js           Plan mode — days + items + reorder + flags
+  prepare.js             before-trip checklist by category + templates
+  today.js               Travel mode — next item, schedule, todos
+  notes.js               free-form trip notes
+  io.js                  Import/Export (JSON + AI prompt + Markdown)
+
+sample.json              "Japan Family Trip" sample, importable as a new trip
+docs/                    project guideline (lightweight_trip_tool_*.md)
+
+supabase/migrations/     versioned SQL migrations
+supabase/README.md       migration usage
+```
 
 ## Deploy to GitHub Pages
 
@@ -42,27 +80,19 @@ The included workflow at `.github/workflows/deploy.yml`:
 
 ### One-time setup
 
-1. **Create the Supabase project** and apply the migration from
+1. **Create the Supabase project** and apply the migrations from
    `supabase/migrations/` (see [`supabase/README.md`](supabase/README.md)).
 2. **Configure Auth** in the Supabase Dashboard:
-   - **Authentication → Providers → Email**: enable. Decide whether
-     "Confirm email" is on (default yes — recommended). With it on,
-     new sign-ups must click a link in an email before they can sign in.
+   - **Authentication → Providers → Email**: enable.
    - **Authentication → URL Configuration**:
      - **Site URL**: `https://<user>.github.io/<repo>/`
-     - **Redirect URLs**: same value (and `http://localhost:5173/`
-       if you plan to develop locally). Confirmation and password-reset
-       links use these.
+     - **Redirect URLs**: same value (and `http://localhost:5173/` for
+       local dev). Confirmation and password-reset links use these.
 3. **Add repo Secrets** at *Settings → Secrets and variables → Actions*:
    - `SUPABASE_URL`
-   - `SUPABASE_PUBLISHABLE_KEY` — the `sb_publishable_...` key (or the
-     legacy anon JWT; both work).
+   - `SUPABASE_PUBLISHABLE_KEY` — the `sb_publishable_...` key.
 4. **Settings → Pages → Source: GitHub Actions**.
 5. Push to `main` (or run the workflow from the **Actions** tab).
-
-The site publishes at `https://<user>.github.io/<repo>/` and is fully
-functional from there — visitors sign in with their email, manage their
-own trips, and never need to paste credentials.
 
 ## Run locally
 
@@ -73,63 +103,64 @@ npx serve .
 python -m http.server 5173
 ```
 
-Open `http://localhost:5173`. To connect to Supabase locally, click
-**⚙** and enter your URL + publishable key — they're stored only in
-this browser. (Or copy `config.js` from a successful deploy.) Without
-those, the app runs in single-doc guest mode.
+Open `http://localhost:5173`. Click **⚙** to enter your Supabase URL +
+publishable key — they're stored only in this browser. The app needs a
+backend; there is no local-only mode.
 
-## Supported markdown
+To try without filling in any data, sign in, click **+ New trip**, then
+go to **Import / Export**, paste the contents of `sample.json` into the
+import box, click **Validate**, then **Replace current trip** (since
+this is your fresh empty trip).
 
-The parser is intentionally conservative so import / export round-trips
-losslessly:
+## Import / Export format
 
-| Block            | Markdown                                  |
-| ---------------- | ----------------------------------------- |
-| Heading levels   | `# H1`, `## H2`, `### H3`                 |
-| Paragraph        | One or more lines                         |
-| Pipe table       | `\| col \| col \|` + separator `\|---\|---\|` |
-| Blockquote       | Lines starting with `> `                  |
+The canonical exchange format is a JSON object with `schema_version:
+"trip_v1"` — see [`docs/lightweight_trip_tool_project_guideline.md`](docs/lightweight_trip_tool_project_guideline.md)
+sections 11 and 15 for the complete spec.
 
-Inline subset for paragraphs and table cells: `**bold**`, `*italic*`,
-`` `code` ``, `[link](url)`, and literal `<br>` for line breaks inside
-cells. A blockquote line that begins with `!` renders as a "warning"
-callout in print mode.
+The Import/Export page on every trip exposes:
 
-Table styling auto-applies based on headers:
-
-- Two columns whose headers contain "English" / "中文" → bilingual
-  layout (50/50).
-- Three columns where the first header is "Date" / "日期" / "Day" /
-  "Night" → narrow date column + two wide content columns.
+- **Copy JSON** / **Download .trip.json** — round-trippable export.
+- **Copy AI prompt + JSON** — pre-built prompt template you can paste
+  into any AI assistant to ask for edits while preserving the schema.
+- **Download Markdown** — readable Markdown with the trip JSON embedded
+  as a fenced ` ```trip-json ` block.
+- **Import** — paste raw JSON, a Markdown export, or any text containing
+  a trip-json block. The validator runs first; you preview before
+  saving, then choose **Create as new trip** or **Replace current trip**
+  (owner-only).
 
 ## Security notes
 
-- The Supabase **publishable / anon key is shipped to every browser**.
+- The Supabase **publishable / anon key** is shipped to every browser.
   That's by design for client-side Supabase apps. Real access control
-  comes from the **RLS policies** in the migration, which gate every
+  comes from the **RLS policies** in the migrations, which gate every
   table on membership in `itinerary_members`.
 - Never put the Supabase **service-role** key in a repo Secret used by
   Pages. It bypasses RLS.
-- An itinerary's data is only readable to its members. Even with the
+- Each trip's data is only readable to its members. Even with the
   publishable key, a random visitor cannot list or read trips that
   aren't theirs.
-- Profiles (email, display name) are world-readable so member lists
-  can show who's on a trip. If that's a concern, harden the
-  `profiles read` policy.
+- Profiles (email, display name) are world-readable so member lists can
+  show who's on a trip. Tighten the `profiles read` policy if that's
+  a concern.
 
-## File overview
+## Roles
 
-```
-index.html               app shell + auth/trips/editor view containers
-styles.css               edit-mode chrome
-print.css                render-mode + @page styling (cloned from graduation trip)
-parser.js                markdown <-> block-list parser/serializer + inline renderer
-supabase.js              Supabase client + auth + trips API
-auth.js                  magic-link sign-in view
-trips.js                 all-trips list view
-app.js                   orchestrator: view switching, editor, save flow
-sample.md                graduation-trip itinerary as a working sample
-.github/workflows/       deploy.yml — Pages deploy with secret-baked config
-supabase/migrations/     versioned SQL migrations
-supabase/README.md       migration usage + how to add new ones
-```
+| Role   | Read | Edit items | Edit metadata | Delete trip | Replace trip |
+| ------ | :--: | :--------: | :-----------: | :---------: | :----------: |
+| owner  | ✓    | ✓          | ✓             | ✓           | ✓            |
+| editor | ✓    | ✓          | ✓             |             |              |
+| viewer | ✓    |            |               |             |              |
+
+Sharing UI ships in a follow-up; the schema and RLS are ready.
+
+## Out of scope (V1)
+
+Per the project guideline §7.4 / §18:
+
+- AI itinerary generation (use Import/Export to round-trip through any
+  external AI assistant)
+- File uploads (text-based file-location notes only)
+- Booking integrations, payment tracking, weather, calendar sync
+- Real-time multiplayer editing, PDF export, route maps
