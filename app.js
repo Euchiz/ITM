@@ -129,6 +129,15 @@ function setView(view) {
 // ===== App header =====
 
 function bindAppHeader() {
+  // Hide the ⚙ button on deployments where Supabase config comes from
+  // repo Secrets — end users shouldn't see dev-time connection settings.
+  // Local override still works (configSource() === "local"), and an
+  // ?settings=1 escape hatch reveals it for debugging against a deployed page.
+  const url = new URL(location.href);
+  const escapeHatch = url.searchParams.get("settings") === "1";
+  const settingsBtn = document.getElementById("settingsBtn");
+  if (configSource() === "baked" && !escapeHatch) settingsBtn.hidden = true;
+
   document.getElementById("signOutBtn").addEventListener("click", async () => {
     try { await auth.signOut(); }
     catch (e) { toast(e.message, true); }
