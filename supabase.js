@@ -336,6 +336,47 @@ export const checklist = {
   },
 };
 
+// =============== Members ===============
+//
+// All member mutations go through SECURITY DEFINER RPCs (see
+// 20260510060000_member_rpcs.sql) so the RLS context quirk that bites
+// direct INSERTs on itinerary_members can't bite us, and so the
+// "can't drop the last owner" rule lives server-side where it belongs.
+
+export const members = {
+  async list(trip_id) {
+    const c = await sb();
+    const { data, error } = await c.rpc("list_trip_members", { p_trip_id: trip_id });
+    if (error) throw error;
+    return data || [];
+  },
+
+  async addByEmail(trip_id, email, role = "editor") {
+    const c = await sb();
+    const { data, error } = await c.rpc("add_trip_member_by_email", {
+      p_trip_id: trip_id, p_email: email, p_role: role,
+    });
+    if (error) throw error;
+    return data; // user_id of the added member
+  },
+
+  async updateRole(trip_id, user_id, role) {
+    const c = await sb();
+    const { error } = await c.rpc("update_trip_member_role", {
+      p_trip_id: trip_id, p_user_id: user_id, p_role: role,
+    });
+    if (error) throw error;
+  },
+
+  async remove(trip_id, user_id) {
+    const c = await sb();
+    const { error } = await c.rpc("remove_trip_member", {
+      p_trip_id: trip_id, p_user_id: user_id,
+    });
+    if (error) throw error;
+  },
+};
+
 // =============== Notes ===============
 
 export const notes = {

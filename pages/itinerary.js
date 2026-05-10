@@ -72,19 +72,39 @@ export function renderItinerary(host, ctx) {
     }
     card.appendChild(header);
 
-    // Day notes
-    const notesTa = el("textarea", {
-      class: "block-edit-input day-notes",
-      placeholder: "Notes for this day (jet lag, weather, plans for parents…)",
-      disabled: readOnly, rows: 1,
-    });
-    notesTa.value = day.notes || "";
-    setTimeout(() => autosize(notesTa), 0);
-    notesTa.addEventListener("input", () => {
-      autosize(notesTa);
-      saveDay({ notes: notesTa.value });
-    });
-    card.appendChild(notesTa);
+    // Day notes — collapsed by default. Show when there's content
+    // already, or when the user expands it. Avoids a forest of empty
+    // textareas across many-day trips (issue #2).
+    const notesSlot = el("div", { class: "day-notes-slot" });
+    let notesTa = null;
+    function ensureDayNotes(focus) {
+      if (notesTa) return notesTa;
+      notesTa = el("textarea", {
+        class: "block-edit-input day-notes",
+        placeholder: "Notes for this day (jet lag, weather, plans for parents…)",
+        disabled: readOnly, rows: 1,
+      });
+      notesTa.value = day.notes || "";
+      setTimeout(() => autosize(notesTa), 0);
+      notesTa.addEventListener("input", () => {
+        autosize(notesTa);
+        saveDay({ notes: notesTa.value });
+      });
+      notesSlot.innerHTML = "";
+      notesSlot.appendChild(notesTa);
+      if (focus) notesTa.focus();
+      return notesTa;
+    }
+    if (day.notes) {
+      ensureDayNotes(false);
+    } else if (!readOnly) {
+      const addNotesBtn = el("button", {
+        class: "btn ghost inline-add",
+        onClick: () => ensureDayNotes(true),
+      }, "+ Day notes");
+      notesSlot.appendChild(addNotesBtn);
+    }
+    card.appendChild(notesSlot);
 
     // Items
     const itemList = el("div", { class: "item-list" });
@@ -185,28 +205,53 @@ export function renderItinerary(host, ctx) {
     );
     row.appendChild(meta);
 
-    const locInput = el("input", {
-      type: "text", value: it.location_name || "",
-      placeholder: "📍 Location", disabled: readOnly,
-    });
-    locInput.addEventListener("input", () => saveItem({ location_name: locInput.value }));
+    // Per-item details (location, map, notes) start collapsed unless the
+    // item already has content. Cuts down on a wall of blank inputs when
+    // a day has many items (issue #2).
+    const detailsSlot = el("div", { class: "item-details-slot" });
+    const hasDetails = !!(it.location_name || it.map_url || it.notes);
+    let detailsBuilt = false;
+    function buildDetails(focusField) {
+      if (detailsBuilt) return;
+      detailsBuilt = true;
+      detailsSlot.innerHTML = "";
 
-    const mapInput = el("input", {
-      type: "url", value: it.map_url || "",
-      placeholder: "Map URL (optional)", disabled: readOnly,
-    });
-    mapInput.addEventListener("input", () => saveItem({ map_url: mapInput.value }));
+      const locInput = el("input", {
+        type: "text", value: it.location_name || "",
+        placeholder: "📍 Location", disabled: readOnly,
+      });
+      locInput.addEventListener("input", () => saveItem({ location_name: locInput.value }));
 
-    row.append(locInput, mapInput);
+      const mapInput = el("input", {
+        type: "url", value: it.map_url || "",
+        placeholder: "Map URL (optional)", disabled: readOnly,
+      });
+      mapInput.addEventListener("input", () => saveItem({ map_url: mapInput.value }));
 
-    const notesTa = el("textarea", {
-      class: "block-edit-input", placeholder: "Notes…",
-      disabled: readOnly, rows: 1,
-    });
-    notesTa.value = it.notes || "";
-    setTimeout(() => autosize(notesTa), 0);
-    notesTa.addEventListener("input", () => { autosize(notesTa); saveItem({ notes: notesTa.value }); });
-    row.appendChild(notesTa);
+      const notesTa = el("textarea", {
+        class: "block-edit-input", placeholder: "Notes…",
+        disabled: readOnly, rows: 1,
+      });
+      notesTa.value = it.notes || "";
+      setTimeout(() => autosize(notesTa), 0);
+      notesTa.addEventListener("input", () => { autosize(notesTa); saveItem({ notes: notesTa.value }); });
+
+      detailsSlot.append(locInput, mapInput, notesTa);
+      const focusEl = focusField === "notes" ? notesTa
+                    : focusField === "map"   ? mapInput
+                    : focusField === "loc"   ? locInput
+                    : null;
+      if (focusEl) focusEl.focus();
+    }
+    if (hasDetails) {
+      buildDetails(null);
+    } else if (!readOnly) {
+      detailsSlot.appendChild(el("button", {
+        class: "btn ghost inline-add",
+        onClick: () => buildDetails("loc"),
+      }, "+ Location · map · notes"));
+    }
+    row.appendChild(detailsSlot);
 
     return row;
   }

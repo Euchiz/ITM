@@ -18,8 +18,11 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
   background: #525663;
   z-index: 200;
   overflow: auto;
-  display: flex;
-  flex-direction: column;
+  /* Plain block layout. A previous flex-column setup caused the doc's
+   * white background to stop painting past the first viewport-worth of
+   * content in some browsers — reported as "only the first page has a
+   * background" (issue #1). Block flow paints the doc cleanly across
+   * its full computed height. */
 }
 
 .print-toolbar {
@@ -51,6 +54,7 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
   min-height: 11in;
   margin: 24px auto;
   background: #fff;
+  background-attachment: local; /* paint with content even past viewport */
   color: #1a2335;
   font-family: "Aptos", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   font-size: 10.5pt;
@@ -85,9 +89,11 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
   min-height: 9in;
   display: flex;
   flex-direction: column;
-  page-break-after: always;
   border-top: 4px solid #2f6fa3;
   padding-top: 0.4in;
+  /* page-break-after lives in @media print only — applying it on screen
+   * was creating fragment breaks in some browsers and contributed to
+   * the "only the first page has a background" bug. */
 }
 
 .cover-eyebrow {

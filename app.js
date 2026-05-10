@@ -25,6 +25,7 @@ import { renderItinerary } from "./pages/itinerary.js";
 import { renderPrepare } from "./pages/prepare.js";
 import { renderToday } from "./pages/today.js";
 import { renderNotes } from "./pages/notes.js";
+import { renderMembers } from "./pages/members.js";
 import { renderIO } from "./pages/io.js";
 import { openPrintView } from "./pages/print-view.js";
 
@@ -34,6 +35,7 @@ const PAGES = {
   prepare: renderPrepare,
   today: renderToday,
   notes: renderNotes,
+  members: renderMembers,
   io: renderIO,
 };
 
