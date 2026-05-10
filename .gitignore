@@ -15,3 +15,6 @@ config.js
 supabase/.branches/
 supabase/.temp/
 supabase/seed.sql
+
+# Claude Design handoff bundle (raw mockups — only used to derive styles.css)
+.claude-design/
