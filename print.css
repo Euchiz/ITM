@@ -28,7 +28,7 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
 .print-toolbar {
   position: sticky;
   top: 0;
-  background: #1a2335;
+  background: linear-gradient(180deg, #1d2c2a, #14201f);
   color: #fff;
   display: flex;
   align-items: center;
@@ -36,14 +36,15 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
   padding: 10px 18px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.25);
   z-index: 1;
+  font-family: "Space Grotesk", "Inter", "Segoe UI", Arial, sans-serif;
 }
-.print-toolbar strong { font-size: 14px; }
-.print-toolbar .muted { color: #b8c0d0; }
+.print-toolbar strong { font-size: 14px; letter-spacing: 0.04em; }
+.print-toolbar .muted { color: #9aa7a3; }
 .print-toolbar .spacer { flex: 1; }
-.print-toolbar .btn { background: #2a3548; color: #fff; border-color: #3b4a64; }
-.print-toolbar .btn:hover { background: #3b4a64; }
-.print-toolbar .btn.primary { background: #2f6fa3; border-color: #2f6fa3; }
-.print-toolbar .btn.primary:hover { background: #1f4d7a; border-color: #1f4d7a; }
+.print-toolbar .btn { background: #2d3b39; color: #fff; border-color: #3b4a48; }
+.print-toolbar .btn:hover { background: #3b4a48; }
+.print-toolbar .btn.primary { background: #2f7d72; border-color: #2f7d72; }
+.print-toolbar .btn.primary:hover { background: #28675f; border-color: #28675f; }
 
 /* ===== The print document itself ===== */
 
@@ -55,8 +56,8 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
   margin: 24px auto;
   background: #fff;
   background-attachment: local; /* paint with content even past viewport */
-  color: #1a2335;
-  font-family: "Aptos", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  color: #14201f;
+  font-family: "Inter", "Helvetica Neue", "Segoe UI", Arial, sans-serif;
   font-size: 10.5pt;
   line-height: 1.45;
   padding: 0.6in 0.7in;
@@ -65,14 +66,14 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
 }
 
 .print-doc h1, .print-doc h2, .print-doc h3, .print-doc h4 {
-  color: #10233f;
+  color: #14201f;
   font-weight: 700;
   margin: 0 0 8px;
   page-break-after: avoid;
 }
 .print-doc h2 {
   font-size: 14pt;
-  border-bottom: 2px solid #2f6fa3;
+  border-bottom: 2px solid #2f7d72;
   padding-bottom: 4px;
   margin: 22px 0 14px;
   letter-spacing: 0.02em;
@@ -80,7 +81,7 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
 .print-doc h3 { font-size: 11.5pt; }
 .print-doc h4 { font-size: 10.5pt; margin-top: 10px; }
 .print-doc p  { margin: 4px 0 8px; }
-.print-doc .muted { color: #5b6b7e; }
+.print-doc .muted { color: #60716e; }
 .print-doc .small { font-size: 9pt; }
 
 /* ----- Cover page ----- */
@@ -89,7 +90,7 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
   min-height: 9in;
   display: flex;
   flex-direction: column;
-  border-top: 4px solid #2f6fa3;
+  border-top: 4px solid #2f7d72;
   padding-top: 0.4in;
   /* page-break-after lives in @media print only — applying it on screen
    * was creating fragment breaks in some browsers and contributed to
@@ -100,7 +101,7 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
   font-size: 10pt;
   font-weight: 700;
   letter-spacing: 0.16em;
-  color: #2f6fa3;
+  color: #2f7d72;
   text-transform: uppercase;
   margin-bottom: 24pt;
 }
@@ -108,7 +109,7 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
 .cover-title {
   font-size: 32pt;
   line-height: 1.1;
-  color: #10233f;
+  color: #14201f;
   font-weight: 800;
   margin: 0 0 12px;
   border: 0;
@@ -117,7 +118,7 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
 
 .cover-destination {
   font-size: 15pt;
-  color: #1f4d7a;
+  color: #28675f;
   margin-bottom: 28pt;
   letter-spacing: 0.01em;
 }
@@ -126,12 +127,12 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
 .cover-date-range {
   font-size: 14pt;
   font-weight: 700;
-  color: #1a2335;
+  color: #14201f;
   margin-bottom: 4px;
 }
 .cover-duration {
   font-size: 11pt;
-  color: #5b6b7e;
+  color: #60716e;
 }
 
 .cover-block { margin-bottom: 22pt; }
@@ -139,11 +140,11 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
   font-size: 9pt;
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: #2f6fa3;
+  color: #2f7d72;
   text-transform: uppercase;
   margin-bottom: 6px;
   padding-bottom: 4px;
-  border-bottom: 1px solid #d8dde7;
+  border-bottom: 1px solid #d9e3df;
 }
 .traveler-list {
   list-style: none;
@@ -156,13 +157,13 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
 }
 .traveler-list li::before {
   content: "—";
-  color: #2f6fa3;
+  color: #2f7d72;
   margin-right: 8px;
 }
 .cover-summary {
   font-size: 11pt;
   line-height: 1.55;
-  color: #1a2335;
+  color: #14201f;
   max-width: 520pt;
 }
 
@@ -178,7 +179,7 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #5b6b7e;
+  color: #60716e;
   margin-bottom: 6px;
 }
 
@@ -192,22 +193,22 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
 .facts-table th, .facts-table td {
   text-align: left;
   padding: 6pt 10pt;
-  border-bottom: 1px solid #e5e9f0;
+  border-bottom: 1px solid #d9e3df;
   vertical-align: top;
 }
 .facts-table th {
   width: 30%;
   font-weight: 700;
-  color: #5b6b7e;
-  background: #fafbfd;
+  color: #60716e;
+  background: #f7f9f7;
   letter-spacing: 0.02em;
 }
 
 .general-notes {
   margin-top: 14pt;
   padding: 10pt 14pt;
-  background: #f6f9fc;
-  border-left: 3px solid #2f6fa3;
+  background: #edf4f1;
+  border-left: 3px solid #2f7d72;
 }
 .general-notes p { margin: 0; line-height: 1.55; }
 
@@ -216,7 +217,7 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
 .day-block {
   page-break-inside: avoid;
   margin-bottom: 18pt;
-  border: 1px solid #d8dde7;
+  border: 1px solid #d9e3df;
   border-radius: 4pt;
   overflow: hidden;
 }
@@ -226,14 +227,14 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
   align-items: center;
   gap: 12pt;
   padding: 10pt 14pt;
-  background: #f0f4f9;
-  border-bottom: 1px solid #d8dde7;
+  background: #edf4f1;
+  border-bottom: 1px solid #d9e3df;
 }
 .day-num-pill {
   font-size: 9pt;
   font-weight: 700;
   letter-spacing: 0.06em;
-  background: #2f6fa3;
+  background: #2f7d72;
   color: #fff;
   padding: 4pt 10pt;
   border-radius: 999pt;
@@ -243,7 +244,7 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
 .day-block-title { margin: 0; font-size: 12pt; }
 .day-block-date {
   font-size: 9pt;
-  color: #5b6b7e;
+  color: #60716e;
   margin-top: 2pt;
 }
 
@@ -265,29 +266,29 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
   padding: 6pt 10pt;
   text-align: left;
   vertical-align: top;
-  border-bottom: 1px solid #e5e9f0;
+  border-bottom: 1px solid #d9e3df;
 }
 .items-table thead th {
   font-size: 8.5pt;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #5b6b7e;
-  background: #fafbfd;
-  border-bottom: 1px solid #d8dde7;
+  color: #60716e;
+  background: #f7f9f7;
+  border-bottom: 1px solid #d9e3df;
 }
 .items-table tbody tr:last-child td { border-bottom: 0; }
 
 .col-time     { width: 80pt; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .col-type     { width: 70pt; }
 .col-location { width: 130pt; }
-.col-status   { width: 80pt; font-size: 9pt; color: #5b6b7e; }
+.col-status   { width: 80pt; font-size: 9pt; color: #60716e; }
 .col-date     { width: 75pt; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .col-activity strong { display: block; margin-bottom: 2pt; }
 
 .item-row-notes {
   font-size: 9pt;
-  color: #5b6b7e;
+  color: #60716e;
   line-height: 1.4;
   margin-top: 2pt;
 }
@@ -295,13 +296,13 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
   font-size: 8.5pt;
   font-weight: 700;
   letter-spacing: 0.04em;
-  color: #1f4d7a;
+  color: #28675f;
   text-transform: uppercase;
   margin-top: 3pt;
 }
 
-.items-table tr.is-fixed td { background: #f8fbff; }
-.items-table tr.is-fixed .col-time { color: #1f4d7a; font-weight: 700; }
+.items-table tr.is-fixed td { background: #dff1ec; }
+.items-table tr.is-fixed .col-time { color: #28675f; font-weight: 700; }
 .items-table tr.status-cancelled { color: #97a0ad; text-decoration: line-through; }
 .items-table tr.status-done       { color: #97a0ad; }
 
@@ -317,16 +318,16 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
   padding: 7pt 10pt;
   text-align: left;
   vertical-align: top;
-  border-bottom: 1px solid #e5e9f0;
+  border-bottom: 1px solid #d9e3df;
 }
 .list-table thead th {
   font-size: 8.5pt;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #5b6b7e;
-  background: #fafbfd;
-  border-bottom: 1px solid #d8dde7;
+  color: #60716e;
+  background: #f7f9f7;
+  border-bottom: 1px solid #d9e3df;
 }
 .list-table tbody tr:last-child td { border-bottom: 0; }
 
@@ -351,10 +352,10 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
 .check-mark {
   font-size: 12pt;
   line-height: 1;
-  color: #2f6fa3;
+  color: #2f7d72;
 }
 .check-body { flex: 1; line-height: 1.45; }
-.check-body .due { color: #5b6b7e; font-style: italic; }
+.check-body .due { color: #60716e; font-style: italic; }
 
 /* ----- Notes ----- */
 
@@ -362,8 +363,8 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
   page-break-inside: avoid;
   margin-bottom: 12pt;
   padding: 10pt 14pt;
-  background: #f6f9fc;
-  border-left: 3px solid #2f6fa3;
+  background: #edf4f1;
+  border-left: 3px solid #2f7d72;
 }
 .note-block h4 { margin: 0 0 4pt; }
 .note-block p { margin: 0; line-height: 1.55; }
@@ -375,9 +376,9 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
   align-items: center;
   margin-top: 24pt;
   padding-top: 10pt;
-  border-top: 1px solid #d8dde7;
+  border-top: 1px solid #d9e3df;
   font-size: 9pt;
-  color: #5b6b7e;
+  color: #60716e;
   letter-spacing: 0.02em;
 }
 .print-footer .spacer { flex: 1; }
@@ -394,7 +395,7 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
 @media print {
   body, html {
     background: #fff !important;
-    color: #1a2335 !important;
+    color: #14201f !important;
   }
   body.print-mode > *:not(.print-overlay) { display: none !important; }
   .print-overlay {
