@@ -322,6 +322,7 @@ function paintTabs() {
     btn.classList.toggle("active", btn.dataset.page === state.page);
   });
   paintSidebar();
+  paintTopbar();
   paintHero();
   paintDayStrip();
 }
@@ -440,6 +441,20 @@ function paintSidebar() {
           <small>In trip</small>
         </button>
       </div>
+
+      <div class="vy-side-user">
+        <span class="vy-avatar vy-avatar--sm" title="${escapeText(state.user?.email || "")}"
+              style="background:radial-gradient(120% 100% at 50% 0%, hsl(172 35% 92% / 0.9), hsl(172 25% 78% / 0.4))">
+          <span>${escapeText(computeInitials(state.user?.email || "?"))}</span>
+        </span>
+        <div class="vy-side-user-text">
+          <b>${escapeText(state.user?.email || "Signed in")}</b>
+          <span>${escapeText((state.trip?.role || "viewer").toUpperCase())} ROLE</span>
+        </div>
+        <button id="sideSignOutBtn" class="vy-side-signout" title="Sign out">
+          <span class="material-symbols-outlined" aria-hidden>logout</span>
+        </button>
+      </div>
     </div>
   `;
 
@@ -467,6 +482,91 @@ function paintSidebar() {
   if (printBtn) printBtn.addEventListener("click", () => {
     if (state.trip) openPrintView(state.trip);
   });
+  const signOutBtn = aside.querySelector("#sideSignOutBtn");
+  if (signOutBtn) signOutBtn.addEventListener("click", async () => {
+    try { await auth.signOut(); } catch (e) { toast(e.message, true); }
+  });
+}
+
+// Voyage topbar — sits at the top of the main column on the trip view.
+// Mirrors desktop.jsx: live-collab telemetry · search · notifications ·
+// member avatars · Share trip. Search + notifications are stale this
+// version; the member stack navigates to the Members page; Share trip
+// copies the current URL to the clipboard.
+function paintTopbar() {
+  const bar = document.getElementById("tripTopbar");
+  if (!bar) return;
+  if (state.view !== "trip" || !state.trip) {
+    bar.hidden = true; bar.innerHTML = "";
+    return;
+  }
+  bar.hidden = false;
+
+  const members = state.trip.members || [];
+  const visibleMembers = members.slice(0, 4);
+  const overflowCount = Math.max(0, members.length - visibleMembers.length);
+
+  bar.innerHTML = `
+    <div class="vy-topbar-live">
+      <span class="vy-meta">
+        <i class="vy-livedot" aria-hidden></i>
+        <span id="topbarSaveLabel">SYNCED · DRAFT v∞</span>
+      </span>
+    </div>
+    <div class="vy-search" title="Search — coming soon" aria-disabled="true">
+      <span class="material-symbols-outlined" aria-hidden>search</span>
+      <span class="vy-search-placeholder">Search places, reservations, notes…</span>
+      <span class="vy-search-spacer"></span>
+      <kbd>⌘K</kbd>
+    </div>
+    <button class="vy-icon-btn" id="topbarNotifBtn" title="Notifications — coming soon" aria-disabled="true">
+      <span class="material-symbols-outlined" aria-hidden>notifications</span>
+    </button>
+    <button class="vy-share-stack" id="topbarMembersBtn" title="Members &amp; roles">
+      ${visibleMembers.map((m, i) => avatarHtml(m, i)).join("")}
+      ${overflowCount ? `<span class="vy-avatar vy-avatar--more" title="${overflowCount} more"><span>+${overflowCount}</span></span>` : ""}
+      ${!members.length ? `<span class="vy-avatar" style="background:linear-gradient(135deg,#dff1ec,#a8d6ca)"><span>···</span></span>` : ""}
+    </button>
+    <button class="vy-btn-primary" id="topbarShareBtn" title="Copy trip link">
+      <span class="material-symbols-outlined" aria-hidden>ios_share</span>
+      Share trip
+    </button>
+  `;
+
+  bar.querySelector("#topbarMembersBtn").addEventListener("click", () => navigate({ page: "members" }));
+  bar.querySelector("#topbarShareBtn").addEventListener("click", () => {
+    const url = location.href;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(url)
+        .then(() => toast("Trip link copied"))
+        .catch(() => toast("Copy failed — try selecting the URL", true));
+    } else {
+      toast("Trip link: " + url);
+    }
+  });
+  // Notification button is intentionally inert until the feature lands.
+}
+
+function avatarHtml(member, idx) {
+  // Hue rotates by index so each member's avatar gets a distinct pastel.
+  // 172 (viridian) and 42 (amber) match the design's MB/JW pair on first
+  // two slots, then we walk the color wheel for further members.
+  const hues = [172, 42, 198, 312, 102];
+  const hue = hues[idx % hues.length];
+  const name = member?.profile?.full_name || member?.email || "?";
+  const initials = computeInitials(name);
+  return `<span class="vy-avatar" style="background:radial-gradient(120% 100% at 50% 0%, hsl(${hue} 35% 92% / 0.9), hsl(${hue} 25% 78% / 0.4))" title="${escapeText(name)}"><span>${escapeText(initials)}</span></span>`;
+}
+
+function computeInitials(s) {
+  const trimmed = String(s || "").trim();
+  if (!trimmed) return "?";
+  // Email — take the local-part's first 2 alphanums.
+  if (trimmed.includes("@")) return trimmed.split("@")[0].replace(/[^a-z0-9]/gi, "").slice(0, 2).toUpperCase() || "?";
+  // Name — first letter of first two words, fallback to first 2 chars.
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return trimmed.slice(0, 2).toUpperCase();
 }
 
 function paintHero() {
@@ -616,6 +716,15 @@ function paintHeader() {
     foot.textContent = state.view === "trip"
       ? (state.saving > 0 ? "· SYNCING NOW…" : "· SYNCED · DRAFT v∞")
       : "";
+  }
+
+  // Topbar save indicator — update without redoing paintTopbar, so the
+  // pulsing dot doesn't restart on every keystroke.
+  const topbarLabel = document.getElementById("topbarSaveLabel");
+  if (topbarLabel) {
+    topbarLabel.textContent = state.saving > 0
+      ? "SYNCING NOW…"
+      : "SYNCED · DRAFT v∞";
   }
 }
 
