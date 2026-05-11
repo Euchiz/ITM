@@ -37,12 +37,44 @@ const VIEW_STORAGE_KEY = "voyage:itinerary-view";
 // identical to "timeline" and added no real affordance.
 const VIEW_OPTIONS = ["timeline", "cards"];
 
+// Module-scope reference to the current click-outside listener used by
+// the inline editor. Lives outside renderItinerary so a stale listener
+// from a prior render call can be detached when the page re-renders
+// (day switch, refresh, navigation between trips).
+let activeOutsideListener = null;
+function detachActiveOutsideListener() {
+  if (!activeOutsideListener) return;
+  document.removeEventListener("pointerdown", activeOutsideListener, true);
+  activeOutsideListener = null;
+}
+
 export function renderItinerary(host, ctx) {
   const t = ctx.trip;
   const readOnly = ctx.role === "viewer";
 
   const view = readView();
   let expandedItemId = null;
+  // Close handler for whichever item is currently expanded — set by
+  // renderEditorView, called by the click-outside listener (and by
+  // another card's onClick) so opening a new editor first collapses
+  // any prior one.
+  let expandedCloseFn = null;
+  function attachOutsideClose() {
+    detachActiveOutsideListener();
+    activeOutsideListener = (e) => {
+      if (!expandedCloseFn) return;
+      const t = e.target;
+      if (!t || !t.closest) return;
+      if (t.closest(".vy-tl-card.is-editing")) return;
+      if (t.closest(".vy-ctxmenu")) return;
+      expandedCloseFn();
+    };
+    document.addEventListener("pointerdown", activeOutsideListener, true);
+  }
+  // Clear any stale listener from a previous renderItinerary call.
+  // Renders happen on day-switch, refresh, etc. — without this the
+  // listener (and its closure over the old expandedCloseFn) would leak.
+  detachActiveOutsideListener();
   let dayList = null;
 
   // Which day is currently shown — driven by app.js state, surfaced
@@ -426,6 +458,17 @@ export function renderItinerary(host, ctx) {
       wrap.appendChild(pipCell(it));
       wrap.appendChild(editorCell(day, it, idx));
       attachContextMenu();
+      // Register a close handler so the click-outside listener (and
+      // other-card clicks) can collapse this editor back to a card
+      // without a full re-render.
+      expandedCloseFn = () => {
+        if (expandedItemId !== it.id) return;
+        expandedItemId = null;
+        expandedCloseFn = null;
+        detachActiveOutsideListener();
+        renderCardView();
+      };
+      attachOutsideClose();
     }
 
     function attachContextMenu() {
@@ -439,9 +482,13 @@ export function renderItinerary(host, ctx) {
           { label: expandedItemId === it.id ? "Close editor" : "Edit event",
             glyph: expandedItemId === it.id ? "close" : "edit",
             onClick: () => {
-              expandedItemId = (expandedItemId === it.id) ? null : it.id;
-              if (expandedItemId === it.id) renderEditorView();
-              else renderCardView();
+              if (expandedItemId === it.id) {
+                if (expandedCloseFn) expandedCloseFn();
+              } else {
+                if (expandedCloseFn) expandedCloseFn();
+                expandedItemId = it.id;
+                renderEditorView();
+              }
             } },
           { type: "sep" },
           { label: "Add event before", glyph: "arrow_upward",
@@ -492,10 +539,12 @@ export function renderItinerary(host, ctx) {
           // Quick toggles & inner controls swallow their own clicks. Any
           // other click on the card body opens the inline editor.
           if (e.target.closest("button, input, select, textarea, a")) return;
-          if (!readOnly) {
-            expandedItemId = it.id;
-            renderEditorView();
-          }
+          if (readOnly) return;
+          // Close any other open editor first — at most one card is
+          // expanded at a time, matching the hint shown in the editor head.
+          if (expandedCloseFn && expandedItemId !== it.id) expandedCloseFn();
+          expandedItemId = it.id;
+          renderEditorView();
         },
       });
       const lhs = el("div", { class: "vy-tl-card-l" });
@@ -574,24 +623,24 @@ export function renderItinerary(host, ctx) {
 
     function editorCell(day, it, idx) {
       const cell = el("div", { class: "vy-tl-card is-editing" });
+      const v = TYPE_VISUALS[it.type] || TYPE_VISUALS.activity;
 
       const saveItem = debouncedSave(withSaveIndicator(ctx, async (patch) => {
         await items.update(it.id, patch);
         Object.assign(it, patch);
       }), 600);
-      // `saveItemNow` is the closure-scope function lifted to the parent
-      // timelineItem — re-renders the card on completion so toggled
-      // type/status/flags refresh both the chip and the wrap classes.
 
+      // ── Time inputs + overlap guard ────────────────────────────────
       const startInput = el("input", { type: "time", class: "time-input",
         value: (it.start_time || "").slice(0, 5), disabled: readOnly, title: "Start time" });
       const endInput   = el("input", { type: "time", class: "time-input",
         value: (it.end_time   || "").slice(0, 5), disabled: readOnly, title: "End time" });
 
-      // Time-overlap guard. The committed start/end are tracked locally
-      // so a rejected entry can snap the input back without re-rendering.
       let lastGoodStart = (it.start_time || "").slice(0, 5);
       let lastGoodEnd   = (it.end_time   || "").slice(0, 5);
+
+      const durChip = el("span", { class: "vy-edit-dur",
+        text: computeDuration(it.start_time, it.end_time) || "—" });
 
       function tryCommitTime(field, raw) {
         const value = raw || "";
@@ -611,69 +660,101 @@ export function renderItinerary(host, ctx) {
         }
         if (field === "start") lastGoodStart = value;
         else                   lastGoodEnd   = value;
+        durChip.textContent = computeDuration(newStart, newEnd) || "—";
         saveItem({ [field === "start" ? "start_time" : "end_time"]: value || null });
       }
-
       startInput.addEventListener("change", () => tryCommitTime("start", startInput.value));
       endInput.addEventListener("change",   () => tryCommitTime("end",   endInput.value));
 
-      const titleInput = el("input", { type: "text", class: "item-title-input",
-        value: it.title || "", placeholder: "Item title", disabled: readOnly });
+      // ── Title ──────────────────────────────────────────────────────
+      const titleInput = el("input", { type: "text", class: "vy-edit-title-input",
+        value: it.title || "", placeholder: "Untitled event", disabled: readOnly });
       titleInput.addEventListener("input", () => saveItem({ title: titleInput.value }));
 
+      // ── Classify ───────────────────────────────────────────────────
       const typeSelect = select(it.type, ITEM_TYPES, readOnly, (v) => saveItemNow({ type: v }));
       const statSelect = select(it.status, ITEM_STATUSES, readOnly, (v) => saveItem({ status: v }));
 
+      // ── Where ──────────────────────────────────────────────────────
       const locInput = el("input", { type: "text", value: it.location_name || "",
-        placeholder: "📍 Location", disabled: readOnly });
+        placeholder: "Place name", disabled: readOnly });
       locInput.addEventListener("input", () => saveItem({ location_name: locInput.value }));
 
       const mapInput = el("input", { type: "url", value: it.map_url || "",
         placeholder: "Map URL (optional)", disabled: readOnly });
       mapInput.addEventListener("input", () => saveItem({ map_url: mapInput.value }));
 
+      // ── Notes ──────────────────────────────────────────────────────
       const notesTa = el("textarea", { class: "block-edit-input",
-        placeholder: "Notes…", disabled: readOnly, rows: 1 });
+        placeholder: "Notes — context, reservations, reminders…",
+        disabled: readOnly, rows: 2 });
       notesTa.value = it.notes || "";
       setTimeout(() => autosize(notesTa), 0);
       notesTa.addEventListener("input", () => { autosize(notesTa); saveItem({ notes: notesTa.value }); });
 
-      const row1 = el("div", { class: "vy-edit-row" },
+      // ── Header bar ─────────────────────────────────────────────────
+      const header = el("div", { class: "vy-edit-head" },
+        el("span", { class: `vy-chip vy-chip--${v.chipClass}` },
+          el("span", { class: "material-symbols-outlined", text: v.glyph }),
+          el("span", { text: v.label }),
+        ),
+        el("span", { class: "vy-edit-state", text: "EDITING" }),
+        el("span", { class: "vy-edit-hint", text: "Click outside or press ✕ to close" }),
+        !readOnly
+          ? el("button", { class: "vy-edit-close", title: "Close editor",
+              onClick: () => { if (expandedCloseFn) expandedCloseFn(); } },
+              el("span", { class: "material-symbols-outlined", text: "close" }),
+            )
+          : null,
+      );
+
+      // ── Sections ───────────────────────────────────────────────────
+      const scheduleSection = section("schedule", "Schedule",
         labeledInline("Start", startInput),
         labeledInline("End",   endInput),
-        titleInput,
+        durChip,
+        !readOnly ? toggleChip({
+          on: !!it.is_fixed,
+          glyph: it.is_fixed ? "lock" : "lock_open",
+          label: it.is_fixed ? "Fixed" : "Flexible",
+          tone: "viridian",
+          onClick: () => saveItemNow({ is_fixed: !it.is_fixed }),
+        }) : null,
       );
 
-      const row2 = el("div", { class: "vy-edit-row" },
+      const classifySection = section("sell", "Classify",
         labeledInline("Type",   typeSelect),
         labeledInline("Status", statSelect),
-        !readOnly && el("button", {
-          class: "icon-btn", title: it.is_fixed ? "Locked schedule" : "Mark as fixed",
-          onClick: () => saveItemNow({ is_fixed: !it.is_fixed }),
-        }, it.is_fixed ? "🔒" : "🔓"),
-        !readOnly && el("button", {
-          class: "icon-btn", title: it.is_highlight ? "Unhighlight" : "Mark highlight",
+        !readOnly ? toggleChip({
+          on: !!it.is_highlight,
+          glyph: "star",
+          label: it.is_highlight ? "Highlighted" : "Highlight",
+          tone: "amber",
           onClick: () => saveItemNow({ is_highlight: !it.is_highlight }),
-        }, it.is_highlight ? "⭐" : "☆"),
-        // Reorder is via the card grip / right-click menu — no ↑/↓
-        // buttons in the editor row.
-        !readOnly && el("button", { class: "icon-btn danger", title: "Delete",
-          onClick: () => deleteItem(it) }, "✕"),
+        }) : null,
       );
 
-      const row3 = el("div", { class: "vy-edit-row" }, locInput, mapInput);
-      const row4 = el("div", { class: "vy-edit-row" }, notesTa);
+      const whereSection = section("place", "Where", locInput, mapInput);
+      const notesSection = section("edit_note", "Notes", notesTa);
+
+      const foot = !readOnly
+        ? el("div", { class: "vy-edit-foot" },
+            el("button", { class: "vy-edit-delete", title: "Delete this event",
+              onClick: () => deleteItem(it) },
+              el("span", { class: "material-symbols-outlined", text: "delete" }),
+              el("span", { text: "Delete event" }),
+            ),
+          )
+        : null;
 
       cell.append(
-        el("div", { class: "vy-edit-head" },
-          el("span", { class: "vy-meta", text: "EDITING · CLICK ✕ OR ANY OTHER CARD TO CLOSE" }),
-          el("button", { class: "icon-btn", title: "Close editor",
-            onClick: () => {
-              expandedItemId = null;
-              renderCardView();
-            } }, "✕"),
-        ),
-        row1, row2, row3, row4,
+        header,
+        el("div", { class: "vy-edit-title-wrap" }, titleInput),
+        scheduleSection,
+        classifySection,
+        whereSection,
+        notesSection,
+        foot,
       );
       return cell;
     }
@@ -869,6 +950,32 @@ function labeledInline(label, child) {
   return el("label", { class: "field-inline" },
     el("span", { class: "field-label-inline", text: label }),
     child,
+  );
+}
+
+// Render an editor section: a small icon-glyph + label header on the
+// left, with the section's controls flowing on the right. Section
+// flattens to a single column on narrow screens via CSS.
+function section(glyph, label, ...children) {
+  return el("section", { class: "vy-edit-section" },
+    el("div", { class: "vy-edit-section-head" },
+      el("span", { class: "material-symbols-outlined", text: glyph }),
+      el("span", { text: label.toUpperCase() }),
+    ),
+    el("div", { class: "vy-edit-fields" }, ...children.filter(Boolean)),
+  );
+}
+
+// Pill-shaped toggle used inside the editor (fixed / highlight).
+// Reads as a label not just an icon so the editor surface is
+// self-explanatory.
+function toggleChip({ on, glyph, label, tone, onClick }) {
+  return el("button", {
+    class: `vy-edit-toggle ${on ? "is-on" : ""} vy-edit-toggle--${tone || "viridian"}`,
+    onClick: (e) => { e.stopPropagation(); onClick(); },
+  },
+    el("span", { class: "material-symbols-outlined", text: glyph }),
+    el("span", { text: label }),
   );
 }
 
