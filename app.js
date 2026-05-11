@@ -67,6 +67,7 @@ const state = {
   recoveryMode: false,
   trip: null,           // full trip object from trips.getFull
   page: "overview",
+  selectedDayIdx: 0,    // which day the itinerary + day-strip are focused on
   saving: 0,            // active save count for the global indicator
 };
 
@@ -76,6 +77,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   bindAppHeader();
   bindTabs();
   bindSettings();
+  trackFontLoading();
 
   if (!isConfigured()) {
     showUnconfigured();
@@ -89,6 +91,19 @@ window.addEventListener("DOMContentLoaded", async () => {
   state.user = session?.user || null;
   routeFromUrl();
 });
+
+// Flip a class on <html> once the Material Symbols Outlined font is
+// available, so we can hide the literal ligature text (e.g. the word
+// "calendar_month") that otherwise overlays nav labels while the icon
+// font is still downloading.
+function trackFontLoading() {
+  const mark = () => document.documentElement.classList.add("fonts-loaded");
+  if (!document.fonts || !document.fonts.ready) { mark(); return; }
+  document.fonts.ready.then(mark).catch(mark);
+  // Safety net: don't leave glyph slots invisible forever if `fonts.ready`
+  // never resolves on some browsers.
+  setTimeout(mark, 4000);
+}
 
 function handleAuthChange(event, session) {
   if (event === "PASSWORD_RECOVERY") {
@@ -154,6 +169,7 @@ export async function openTrip(id, page = "overview") {
     const trip = await trips.getFull(id);
     state.trip = trip;
     state.page = PAGES[page] ? page : "overview";
+    state.selectedDayIdx = pickDefaultDayIdx(trip);
     syncUrl({ trip: id, page: state.page });
     setView("trip");
     renderTripPage();
@@ -162,6 +178,22 @@ export async function openTrip(id, page = "overview") {
     syncUrl({});
     setView("trips");
   }
+}
+
+// Pick the day the user most likely wants to see first:
+//   - today's day if it falls within the trip,
+//   - else the next upcoming day,
+//   - else the first day.
+// Used when openTrip first lands; user clicks on the day-strip override it.
+function pickDefaultDayIdx(trip) {
+  const days = trip?.days || [];
+  if (!days.length) return 0;
+  const today = new Date().toISOString().slice(0, 10);
+  const idxToday = days.findIndex((d) => d.date === today);
+  if (idxToday >= 0) return idxToday;
+  const idxNext = days.findIndex((d) => d.date && d.date > today);
+  if (idxNext >= 0) return idxNext;
+  return 0;
 }
 
 /** Re-fetch the current trip and re-render the page (for after structural edits). */
@@ -176,12 +208,23 @@ export async function refreshTrip() {
 }
 
 function renderTripPage() {
+  // Clamp selectedDayIdx in case the trip lost days since it was set.
+  const dayCount = (state.trip?.days || []).length;
+  if (state.selectedDayIdx >= dayCount) state.selectedDayIdx = Math.max(0, dayCount - 1);
+  if (state.selectedDayIdx < 0) state.selectedDayIdx = 0;
+
   const host = document.getElementById("tripPage");
   host.innerHTML = "";
   const fn = PAGES[state.page] || PAGES.overview;
   fn(host, {
     trip: state.trip,
     role: state.trip?.role || "viewer",
+    selectedDayIdx: state.selectedDayIdx,
+    setSelectedDayIdx: (idx) => {
+      const max = Math.max(0, (state.trip?.days || []).length - 1);
+      state.selectedDayIdx = Math.min(Math.max(0, idx), max);
+      renderTripPage();
+    },
     refresh: refreshTrip,
     navigate,
     onSaveStart: noteSaveStart,
@@ -473,12 +516,13 @@ function paintDayStrip() {
     return;
   }
   const days = state.trip.days;
+  const selectedIdx = state.selectedDayIdx;
   host.hidden = false;
   host.innerHTML = days.map((d, i) => {
     const wd = d.date ? new Date(d.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short" }).toUpperCase() : "DAY";
     const num = (i + 1).toString().padStart(2, "0");
     const city = (d.city || "").slice(0, 3).toUpperCase();
-    const sel = i === 0 ? "is-selected" : "";
+    const sel = i === selectedIdx ? "is-selected" : "";
     return `
       <button class="vy-daypill ${sel}" data-day-idx="${i}" title="${escapeText(d.title || "Day " + (i + 1))}">
         <span class="vy-daypill-wd">${wd}</span>
@@ -487,16 +531,18 @@ function paintDayStrip() {
       </button>
     `;
   }).join("");
-  // Day pill click: jump to itinerary and scroll to that day card.
+  // Clicking a pill selects that day. On itinerary, that swaps the rendered
+  // day; on today, it doesn't change today's auto-pick but lands on the
+  // itinerary view for that day so users have one expected affordance.
   host.querySelectorAll("button[data-day-idx]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const idx = Number(btn.dataset.dayIdx);
-      host.querySelectorAll("button").forEach((b) => b.classList.remove("is-selected"));
-      btn.classList.add("is-selected");
-      if (state.page !== "itinerary") { navigate({ page: "itinerary" }); return; }
-      const dayId = state.trip.days[idx]?.id;
-      const card = dayId && document.querySelector(`.day-card[data-id="${CSS.escape(String(dayId))}"]`);
-      if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+      state.selectedDayIdx = idx;
+      if (state.page !== "itinerary") {
+        navigate({ page: "itinerary" });
+      } else {
+        renderTripPage();
+      }
     });
   });
 }

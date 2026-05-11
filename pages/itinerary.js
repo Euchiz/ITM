@@ -43,14 +43,23 @@ export function renderItinerary(host, ctx) {
   let expandedItemId = null;
   let dayList = null;
 
+  // Which day is currently shown — driven by app.js state, surfaced
+  // via the day-strip in the trip-view shell. Itinerary now renders
+  // exactly one day at a time; users switch via the day-pill strip.
+  const dayCount = (t.days || []).length;
+  const idx = Math.min(Math.max(0, ctx.selectedDayIdx || 0), Math.max(0, dayCount - 1));
+  const day = (t.days || [])[idx];
+
   // ── Page head — title, summary, tool buttons ───────────────────────
   host.appendChild(
     el("section", { class: "page-head vy-itin-head" },
       el("div", { class: "vy-itin-head-l" },
         el("h2", { text: "Itinerary" }),
         el("p", { class: "muted",
-          text: "Plan day by day. Click a card to edit. Mark items as fixed (locked) or flexible, " +
-                "star highlights. Use the view toggle to switch between Timeline, List and Cards." }),
+          text: dayCount
+            ? `Editing day ${idx + 1} of ${dayCount}. Switch days with the strip above. ` +
+              "Click any event card to edit. Use the view toggle to switch between Timeline, List and Cards."
+            : "Add your first day to start planning." }),
       ),
       el("div", { class: "vy-itin-head-r" },
         viewToggle(),
@@ -60,7 +69,7 @@ export function renderItinerary(host, ctx) {
     )
   );
 
-  if (!t.days || t.days.length === 0) {
+  if (!day) {
     host.appendChild(el("div", { class: "empty-state" },
       el("h3", { text: "No days yet" }),
       el("p", { text: "Add your first day to start planning." }),
@@ -70,7 +79,7 @@ export function renderItinerary(host, ctx) {
   }
 
   dayList = el("div", { class: "day-list", "data-view": view });
-  t.days.forEach((day, idx) => dayList.appendChild(dayCard(day, idx)));
+  dayList.appendChild(dayCard(day, idx));
   host.appendChild(dayList);
 
   appendRouteStale();
