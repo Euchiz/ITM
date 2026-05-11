@@ -2113,29 +2113,92 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
    * header (so signout / settings stay reachable); the mobile-nav at
    * the bottom takes over primary navigation. */
   body[data-view="trip"] .app-header { display: flex; }
-  .view-trip { padding: 0 12px 90px; }
+  /* Pad the bottom of the trip view above the fixed mobile nav (and
+   * the iOS home-indicator safe area on devices that report one). */
+  .view-trip { padding: 0 12px calc(96px + env(safe-area-inset-bottom, 0px)); }
   .vy-sidebar { display: none; }
   .vy-main { margin-left: 0; min-height: 0; }
-  .vy-main-scroll { padding: 14px 12px 32px; }
+  .vy-main-scroll { padding: 12px 10px 24px; gap: 10px; }
+
+  /* Two sticky-top:0 bars (app-header + topbar) would stack and overlap
+   * on mobile. Drop the topbar's stickiness, hide its desktop-only
+   * widgets (search, live-collab telemetry, share-trip button), and
+   * keep just the members avatar stack so collaborators stay reachable. */
   .vy-topbar {
-    grid-template-columns: auto 1fr auto auto;
-    padding: 10px 14px;
+    position: static;
+    grid-template-columns: 1fr auto;
+    padding: 8px 12px;
     gap: 8px;
+    box-shadow: none;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
-  .vy-topbar .vy-btn-primary { display: none; }   /* share trip → moved into hero / actions */
-  .vy-search { min-width: 0; }
-  .vy-search-placeholder { display: none; }
-  .vy-hero { padding: 14px 16px; grid-template-columns: 1fr; gap: 8px; }
+  .vy-topbar-live,
+  .vy-search,
+  .vy-topbar .vy-btn-primary,
+  #topbarNotifBtn { display: none; }
+  .vy-share-stack { grid-column: 2; }
+
+  /* Hero collapses to a single column so the date/meta stack under the
+   * title instead of fighting for horizontal room. */
+  .vy-hero { padding: 12px 14px; grid-template-columns: 1fr; gap: 8px; }
+  .vy-hero-art { display: none; }
   .vy-hero-right { text-align: left; }
-  .vy-page-shell { padding: 14px 14px 12px; }
+  .vy-hero-title { font-size: 1.4rem; line-height: 1.15; }
+  .vy-hero-tag { font-size: 0.58rem; }
+
+  .vy-page-shell { padding: 12px 12px 10px; border-radius: 14px; }
+
+  /* "Powered by" footer is dead weight at the bottom of a phone screen —
+   * skip it entirely on mobile. */
+  .vy-foot { display: none; }
+
   .mobile-nav { display: flex; }
+
+  /* Lighten backdrop-filter cost on the elements that stay visible —
+   * phone GPUs throttle on 22px blurs, and the visual difference at
+   * mobile sizes is minimal. Heavy panels (hero, trip cards) drop the
+   * blur entirely; the gradient background still reads as glassy. */
+  .app-header,
+  .mobile-nav {
+    backdrop-filter: blur(10px) saturate(1.1);
+    -webkit-backdrop-filter: blur(10px) saturate(1.1);
+  }
+  .vy-hero,
+  .trip-card,
+  .auth-card {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  /* The live-collab dot is hidden along with .vy-topbar-live above, but
+   * its pulse animation keeps ticking on the offscreen element. Stop it
+   * so mobile CPUs aren't repainting a hidden box every frame. */
+  .vy-livedot { animation: none; }
+
+  /* Pull the toast clear of the fixed bottom nav so it never lands
+   * underneath the tab bar. */
+  .toast { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+
+  /* The page-head row on each tab wraps a primary action button.
+   * Let it wrap fully and shrink the inline tool buttons so they
+   * never collide with the title block. */
+  .vy-itin-head { gap: 10px; }
+  .vy-itin-head-r { flex: 1 1 100%; justify-content: flex-end; }
 }
 
 @media (max-width: 720px) {
-  .app-header { padding: 10px 14px; }
+  .app-header { padding: 8px 12px; gap: 8px; }
   .view-trips { padding: 14px; padding-bottom: 90px; }
 
   .brand::after { display: none; }
+
+  /* App-header on narrow screens — the email badge is the easiest win
+   * since it can grow to ~40 chars and crowd everything else out. The
+   * print button collapses to its icon for the same reason. */
+  .user-badge { display: none; }
+  #printTripBtn { font-size: 0; padding: 6px 10px; }
+  #printTripBtn::before { content: "🖨"; font-size: 14px; }
 
   .day-header { gap: 8px; }
   .day-header input[type=text] { font-size: 14px; }
