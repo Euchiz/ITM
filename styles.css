@@ -1207,17 +1207,30 @@ body[data-view="trip"] .app-header { display: none; }
 }
 .vy-daypill.is-selected .vy-daypill-num { color: var(--vbl-viridian); }
 
-/* Drag-to-reorder states */
-.vy-daypill[draggable="true"] { cursor: grab; }
-.vy-daypill.is-dragging {
-  opacity: 0.5;
-  cursor: grabbing;
+/* Drag-to-reorder states.
+ *
+ * Drag is pointer-event-based now; siblings dodge via translateX on a
+ * transition. The base .vy-daypill already has a `transform` value
+ * (translateY(-1px) on :hover), but that hover transform doesn't
+ * compete with translateX from the dodge — they're set inline on the
+ * element from JS, replacing the hover transform mid-drag is fine.
+ *
+ * The transition rule on .vy-daypill below covers the dodge animation
+ * for non-dragged siblings. The dragged element gets transition:none
+ * inline from JS so it tracks the pointer 1:1. */
+.vy-daypill {
+  transition:
+    transform 200ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    background 140ms,
+    box-shadow 140ms;
 }
-.vy-daypill.is-drop-target {
+.vy-daypill.is-dragging {
+  cursor: grabbing;
   box-shadow:
-    inset 0 0 0 2px rgba(78,159,146,0.65),
-    0 6px 14px -6px rgba(40,103,95,0.35);
-  transform: translateY(-2px);
+    inset 0 0 0 1px rgba(78,159,146,0.55),
+    0 14px 28px -8px rgba(40,103,95,0.40);
+  /* No opacity dim — keep the dragged pill prominent so the user
+   * can see where it'll land. */
 }
 
 /* ─── Right-click context menu ─────────────────────────────────── */
@@ -2387,7 +2400,9 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
 
 .vy-tl-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  /* Three columns: content · right rail (duration + quick toggles) ·
+   * drag grip. Grip is auto-width and pinned at the far right. */
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 10px;
   padding: 11px 14px;
   border-radius: 12px;
@@ -2400,6 +2415,28 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
     0 4px 12px -8px rgba(40,103,95,0.18);
   transition: transform 120ms, box-shadow 120ms, background 120ms;
 }
+/* Editor view collapses to a single column block — grid template
+ * would otherwise stretch the editor across just one column. */
+.vy-tl-card.is-editing { grid-template-columns: 1fr; }
+
+.vy-tl-card-grip {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  width: 18px;
+  align-self: stretch;
+  display: grid; place-items: center;
+  color: var(--vbl-fg-4);
+  cursor: grab;
+  opacity: 0.4;
+  border-radius: 6px;
+  padding: 0;
+  transition: opacity 120ms, background 120ms;
+}
+.vy-tl-card:hover .vy-tl-card-grip { opacity: 1; }
+.vy-tl-card-grip:hover { background: rgba(20,32,31,0.06); }
+.vy-tl-card-grip:active { cursor: grabbing; }
+.vy-tl-card-grip .material-symbols-outlined { font-size: 16px; line-height: 1; }
 .vy-tl-card:not(.is-editing):hover {
   background: rgba(255,255,255,0.95);
   transform: translateY(-1px);
@@ -2509,6 +2546,22 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
 .vy-tl-item[data-status="done"]      { opacity: 0.55; }
 .vy-tl-item[data-status="cancelled"] { opacity: 0.4; }
 .vy-tl-item[data-status="cancelled"] .vy-tl-card-title { text-decoration: line-through; }
+
+/* Drag-and-drop states for event items.
+ *
+ * Pointer-event drag uses translateY transitions on siblings for the
+ * dodge animation. The dragged item itself gets transition:none
+ * inline from JS so it tracks the pointer 1:1, then transition is
+ * re-enabled for the post-drop settle slide. */
+.vy-tl-item {
+  transition: transform 200ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.vy-tl-item.is-dragging .vy-tl-card {
+  cursor: grabbing;
+  box-shadow:
+    inset 0 0 0 2px rgba(78,159,146,0.55),
+    0 18px 36px -10px rgba(40,103,95,0.40);
+}
 
 .vy-tl-add-row {
   grid-column: 1 / -1;

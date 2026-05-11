@@ -239,6 +239,11 @@ function renderTripPage() {
       renderTripPage();
     },
     refresh: refreshTrip,
+    // Local re-render against current state without re-fetching from
+    // the server — used for optimistic UI updates after a drag reorder
+    // so the user sees the new order instantly while the API call
+    // runs in the background.
+    rerender: renderTripPage,
     navigate,
     onSaveStart: noteSaveStart,
     onSaveDone: noteSaveDone,
@@ -650,14 +655,9 @@ function paintDayStrip() {
     const num = (i + 1).toString().padStart(2, "0");
     const city = (d.city || "").slice(0, 3).toUpperCase();
     const sel = i === selectedIdx ? "is-selected" : "";
-    // The whole pill is HTML5-draggable but a mousedown handler below
-    // sets pill.draggable=false if the press lands OUTSIDE the grip,
-    // so a regular click never starts a drag — only grabbing the grip
-    // does. Restored on mouseup so the next interaction can drag again.
     return `
       <button class="vy-daypill ${sel}" data-day-idx="${i}"
-              ${canEdit ? "draggable=\"true\"" : ""}
-              title="${escapeText(d.title || "Day " + (i + 1))}${canEdit ? "  ·  right-click for actions" : ""}">
+              title="${escapeText(d.title || "Day " + (i + 1))}${canEdit ? "  ·  drag the grip to reorder, right-click for actions" : ""}">
         <span class="vy-daypill-body">
           <span class="vy-daypill-wd">${wd}</span>
           <span class="vy-daypill-num">${num}</span>
@@ -674,111 +674,186 @@ function paintDayStrip() {
     `;
   }).join("");
 
-  // Click: select that day. Same handler for itinerary and today — both
-  // pages re-render against state.selectedDayIdx. No more "today jumps
-  // to itinerary"; users can preview any day's today-recap view.
-  host.querySelectorAll("button[data-day-idx]").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      // Suppress clicks that follow a drag (set in dragend below).
+  const pills = Array.from(host.querySelectorAll("button[data-day-idx]"));
+
+  // Click → select that day. Same handler for itinerary and today — both
+  // pages re-render against state.selectedDayIdx. Plain click on the
+  // grip never fires this (startDayDrag stopPropagation's the
+  // pointerdown, so subsequent click is suppressed by the browser).
+  pills.forEach((btn) => {
+    btn.addEventListener("click", () => {
       if (btn._suppressClick) { btn._suppressClick = false; return; }
       state.selectedDayIdx = Number(btn.dataset.dayIdx);
       renderTripPage();
     });
   });
 
-  if (!canEdit) return;
+  // Right-click → context menu (Go to / Move / Delete).
+  if (canEdit) {
+    pills.forEach((btn) => {
+      btn.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        const idx = Number(btn.dataset.dayIdx);
+        openContextMenu(e.clientX, e.clientY, [
+          { label: "Go to this day",  glyph: "open_in_new",
+            onClick: () => { state.selectedDayIdx = idx; renderTripPage(); } },
+          { label: "Move left",       glyph: "chevron_left",
+            disabled: idx === 0,
+            onClick: () => commitDayReorder(idx, idx - 1) },
+          { label: "Move right",      glyph: "chevron_right",
+            disabled: idx === days.length - 1,
+            onClick: () => commitDayReorder(idx, idx + 1) },
+          { type: "sep" },
+          { label: "Delete this day", glyph: "delete", danger: true,
+            onClick: () => deleteDayConfirm(days[idx]) },
+        ]);
+      });
+    });
+  }
 
-  // ── Drag-to-reorder via HTML5 D&D ─────────────────────────────────
-  // Gate drag on grip: if the user pressed the pill body (not the
-  // grip), set draggable=false so HTML5 D&D never starts. Restore on
-  // mouseup so the next press evaluates the target again.
-  let dragFromIdx = null;
-  host.querySelectorAll("button[data-day-idx]").forEach((btn) => {
-    btn.addEventListener("mousedown", (e) => {
-      const onGrip = !!e.target.closest(".vy-daypill-grip");
-      btn.draggable = onGrip;
+  // Pointer-event drag — only the grip starts a drag; siblings dodge
+  // via translateX as the dragged pill moves. Drop commits an
+  // optimistic local reorder (state mutated, paintTabs re-rendered)
+  // and fires the API in the background.
+  if (canEdit) {
+    pills.forEach((btn) => {
+      const grip = btn.querySelector(".vy-daypill-grip");
+      if (!grip) return;
+      grip.addEventListener("pointerdown", (e) => startDayDrag(e, btn, pills, host));
     });
-    btn.addEventListener("dragstart", (e) => {
-      dragFromIdx = Number(btn.dataset.dayIdx);
-      btn.classList.add("is-dragging");
-      try {
-        e.dataTransfer.effectAllowed = "move";
-        // Firefox needs *some* data to start the drag.
-        e.dataTransfer.setData("text/plain", String(dragFromIdx));
-      } catch {}
-    });
-    btn.addEventListener("dragend", () => {
-      btn.classList.remove("is-dragging");
-      host.querySelectorAll(".is-drop-target").forEach((n) => n.classList.remove("is-drop-target"));
-      // Browser dispatches a click right after dragend on some platforms;
-      // suppress one click so the dragged pill doesn't also "select".
-      btn._suppressClick = true;
-      setTimeout(() => { btn._suppressClick = false; }, 50);
-      // Restore draggability for the next interaction.
-      btn.draggable = true;
-    });
-    btn.addEventListener("mouseup", () => { btn.draggable = true; });
-    btn.addEventListener("dragover", (e) => {
-      if (dragFromIdx == null) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      host.querySelectorAll(".is-drop-target").forEach((n) => n.classList.remove("is-drop-target"));
-      btn.classList.add("is-drop-target");
-    });
-    btn.addEventListener("dragleave", () => {
-      btn.classList.remove("is-drop-target");
-    });
-    btn.addEventListener("drop", async (e) => {
-      e.preventDefault();
-      btn.classList.remove("is-drop-target");
-      const toIdx = Number(btn.dataset.dayIdx);
-      const fromIdx = dragFromIdx;
-      dragFromIdx = null;
-      if (fromIdx == null || fromIdx === toIdx) return;
-      await reorderDay(fromIdx, toIdx);
-    });
-  });
-
-  // ── Right-click context menu ──────────────────────────────────────
-  host.querySelectorAll("button[data-day-idx]").forEach((btn) => {
-    btn.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      const idx = Number(btn.dataset.dayIdx);
-      openContextMenu(e.clientX, e.clientY, [
-        { label: "Go to this day",  glyph: "open_in_new",
-          onClick: () => { state.selectedDayIdx = idx; renderTripPage(); } },
-        { label: "Move left",       glyph: "chevron_left",
-          disabled: idx === 0,
-          onClick: () => reorderDay(idx, idx - 1) },
-        { label: "Move right",      glyph: "chevron_right",
-          disabled: idx === days.length - 1,
-          onClick: () => reorderDay(idx, idx + 1) },
-        { type: "sep" },
-        { label: "Delete this day", glyph: "delete", danger: true,
-          onClick: () => deleteDayConfirm(days[idx]) },
-      ]);
-    });
-  });
+  }
 }
 
-// Reorder days[fromIdx] to be at position toIdx, then persist via
-// daysApi.reorder. Keeps state.selectedDayIdx pointing at the same DAY
-// (not the same index) so the user's selection follows the move.
-async function reorderDay(fromIdx, toIdx) {
-  const arr = (state.trip?.days || []).slice();
-  if (fromIdx < 0 || fromIdx >= arr.length || toIdx < 0 || toIdx >= arr.length) return;
-  const [moved] = arr.splice(fromIdx, 1);
-  arr.splice(toIdx, 0, moved);
-  // Track which day was selected before the move so we can preserve it.
-  const selDay = state.trip.days[state.selectedDayIdx];
+function startDayDrag(downEvent, draggedBtn, pills, host) {
+  if (downEvent.button !== 0 && downEvent.pointerType === "mouse") return;
+  downEvent.preventDefault();
+  downEvent.stopPropagation();
+
+  const grip = downEvent.currentTarget;
+  const startIdx = pills.indexOf(draggedBtn);
+  if (startIdx < 0) return;
+
+  // Snapshot each pill's home rect (viewport-space left + width).
+  const homes = pills.map((el) => {
+    const r = el.getBoundingClientRect();
+    return { el, x: r.left, w: r.width };
+  });
+  const homeOf = homes[startIdx];
+  const startX = downEvent.clientX;
+
+  let liveOrder = pills.map((_, i) => i);
+  let lastSlot = startIdx;
+
+  draggedBtn.classList.add("is-dragging");
+  draggedBtn.style.zIndex = "10";
+  draggedBtn.style.willChange = "transform";
+  draggedBtn.style.transition = "none";
+
+  try { grip.setPointerCapture(downEvent.pointerId); } catch {}
+
+  function layoutPeers() {
+    for (let i = 0; i < homes.length; i++) {
+      if (i === startIdx) continue;
+      const newSlot = liveOrder.indexOf(i);
+      const delta = homes[newSlot].x - homes[i].x;
+      homes[i].el.style.transform = delta ? `translateX(${delta}px)` : "";
+    }
+  }
+
+  function onMove(ev) {
+    const dx = ev.clientX - startX;
+    draggedBtn.style.transform = `translateX(${dx}px)`;
+    const draggedCenter = homeOf.x + dx + homeOf.w / 2;
+    let nearest = 0, bestDist = Infinity;
+    for (let i = 0; i < homes.length; i++) {
+      const center = homes[i].x + homes[i].w / 2;
+      const d = Math.abs(center - draggedCenter);
+      if (d < bestDist) { bestDist = d; nearest = i; }
+    }
+    if (nearest !== lastSlot) {
+      lastSlot = nearest;
+      liveOrder = pills.map((_, i) => i).filter((i) => i !== startIdx);
+      liveOrder.splice(nearest, 0, startIdx);
+      layoutPeers();
+    }
+  }
+
+  function cleanup() {
+    grip.removeEventListener("pointermove", onMove);
+    grip.removeEventListener("pointerup", onUp);
+    grip.removeEventListener("pointercancel", onUp);
+    try { grip.releasePointerCapture(downEvent.pointerId); } catch {}
+  }
+
+  function onUp() {
+    cleanup();
+    const finalSlot = liveOrder.indexOf(startIdx);
+    draggedBtn.style.transition = "";
+    const dxFinal = homes[finalSlot].x - homes[startIdx].x;
+    draggedBtn.style.transform = dxFinal ? `translateX(${dxFinal}px)` : "";
+
+    window.setTimeout(() => {
+      for (const h of homes) {
+        h.el.style.transition = "none";
+        h.el.style.transform = "";
+      }
+      draggedBtn.classList.remove("is-dragging");
+      draggedBtn.style.zIndex = "";
+      draggedBtn.style.willChange = "";
+      // Swallow the click that fires synthetically after a pointer drag
+      // on some browsers so the dragged pill doesn't also "select".
+      draggedBtn._suppressClick = true;
+      setTimeout(() => { draggedBtn._suppressClick = false; }, 50);
+
+      if (startIdx !== finalSlot) {
+        commitDayReorder(startIdx, finalSlot);
+      }
+
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        for (const h of homes) h.el.style.transition = "";
+      }));
+    }, 200);
+  }
+
+  grip.addEventListener("pointermove", onMove);
+  grip.addEventListener("pointerup", onUp);
+  grip.addEventListener("pointercancel", onUp);
+}
+
+// Optimistic day-order commit — mutates state.trip.days in place and
+// re-renders the day-strip + sidebar immediately, then fires the API
+// call in the background. On failure, restores the original order.
+async function commitDayReorder(fromIdx, toIdx) {
+  const days = state.trip?.days || [];
+  if (fromIdx < 0 || fromIdx >= days.length) return;
+  if (toIdx   < 0 || toIdx   >= days.length) return;
+  if (fromIdx === toIdx) return;
+
+  const origOrder = days.slice();
+  const newOrder = days.slice();
+  const [moved] = newOrder.splice(fromIdx, 1);
+  newOrder.splice(toIdx, 0, moved);
+
+  // Track which day was selected so the strip selection follows the
+  // move rather than sitting on the wrong day after re-render.
+  const selDay = days[state.selectedDayIdx];
+
+  // Apply locally.
+  days.splice(0, days.length, ...newOrder);
+  const newSel = days.findIndex((d) => d.id === selDay?.id);
+  if (newSel >= 0) state.selectedDayIdx = newSel;
+  paintTabs();
+
+  // Background persistence.
   noteSaveStart();
   try {
-    await daysApi.reorder(arr.map((d) => d.id));
-    await refreshTrip();
-    const newIdx = state.trip.days.findIndex((d) => d.id === selDay?.id);
-    if (newIdx >= 0) state.selectedDayIdx = newIdx;
-    paintTabs();
+    await daysApi.reorder(newOrder.map((d) => d.id));
   } catch (e) {
+    // Revert
+    days.splice(0, days.length, ...origOrder);
+    const restoredSel = days.findIndex((d) => d.id === selDay?.id);
+    if (restoredSel >= 0) state.selectedDayIdx = restoredSel;
+    paintTabs();
     toast("Reorder failed: " + e.message, true);
   } finally {
     noteSaveDone();
