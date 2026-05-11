@@ -229,54 +229,167 @@ export function renderItinerary(host, ctx) {
   }
 
   // Attach HTML5 drag-and-drop to every .vy-tl-item inside the day's
-  // timeline. The grip column is the only thing that can start a drag —
-  // a mousedown anywhere else on the row sets wrap.draggable=false so
-  // a click into the card body (opening the editor) doesn't begin a
-  // drag. Restored on mouseup so the next grip-grab works again.
+  // timeline. Uses pointer events + live transforms so siblings smoothly
+  // dodge to make space for the dragged item (iOS-style), and applies
+  // the new order optimistically — the local trip state is mutated and
+  // re-rendered immediately, then the API calls fire in the background.
   function wireEventDragReorder(tl, day) {
-    let dragFromIdx = null;
-    tl.querySelectorAll(".vy-tl-item").forEach((wrap) => {
-      wrap.draggable = true;
-      wrap.addEventListener("mousedown", (e) => {
-        const onGrip = !!e.target.closest(".vy-tl-card-grip");
-        wrap.draggable = onGrip;
-      });
-      wrap.addEventListener("mouseup", () => { wrap.draggable = true; });
-
-      wrap.addEventListener("dragstart", (e) => {
-        dragFromIdx = Number(wrap.dataset.idx);
-        wrap.classList.add("is-dragging");
-        try {
-          e.dataTransfer.effectAllowed = "move";
-          // Firefox needs *some* data to start the drag.
-          e.dataTransfer.setData("text/plain", String(dragFromIdx));
-        } catch {}
-      });
-      wrap.addEventListener("dragend", () => {
-        wrap.classList.remove("is-dragging");
-        tl.querySelectorAll(".is-drop-target").forEach((n) => n.classList.remove("is-drop-target"));
-        wrap.draggable = true;
-      });
-      wrap.addEventListener("dragover", (e) => {
-        if (dragFromIdx == null) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "move";
-        tl.querySelectorAll(".is-drop-target").forEach((n) => n.classList.remove("is-drop-target"));
-        wrap.classList.add("is-drop-target");
-      });
-      wrap.addEventListener("dragleave", () => {
-        wrap.classList.remove("is-drop-target");
-      });
-      wrap.addEventListener("drop", async (e) => {
-        e.preventDefault();
-        wrap.classList.remove("is-drop-target");
-        const toIdx = Number(wrap.dataset.idx);
-        const fromIdx = dragFromIdx;
-        dragFromIdx = null;
-        if (fromIdx == null || fromIdx === toIdx) return;
-        await reorderItemTo(day, fromIdx, toIdx);
-      });
+    const all = Array.from(tl.querySelectorAll(".vy-tl-item"));
+    all.forEach((wrap) => {
+      const grip = wrap.querySelector(".vy-tl-card-grip");
+      if (!grip) return;
+      grip.addEventListener("pointerdown", (e) => startItemDrag(e, wrap, all, tl));
     });
+  }
+
+  function startItemDrag(downEvent, draggedWrap, allItems, tl) {
+    if (downEvent.button !== 0 && downEvent.pointerType === "mouse") return;
+    downEvent.preventDefault();
+    downEvent.stopPropagation();
+
+    const grip = downEvent.currentTarget;
+    const startIdx = allItems.indexOf(draggedWrap);
+    if (startIdx < 0) return;
+
+    // Snapshot every peer's home rect (viewport-space top + height).
+    const homes = allItems.map((el) => {
+      const r = el.getBoundingClientRect();
+      return { el, y: r.top, h: r.height };
+    });
+    const homeOf = homes[startIdx];
+    const startY = downEvent.clientY;
+
+    // liveOrder: array of original indexes in their current slot order.
+    let liveOrder = allItems.map((_, i) => i);
+    let lastSlot = startIdx;
+
+    draggedWrap.classList.add("is-dragging");
+    draggedWrap.style.zIndex = "10";
+    draggedWrap.style.willChange = "transform";
+    // Dragged element shouldn't transition while tracking the pointer
+    // — siblings keep their default transition for the smooth dodge.
+    draggedWrap.style.transition = "none";
+
+    try { grip.setPointerCapture(downEvent.pointerId); } catch {}
+
+    function layoutPeers() {
+      for (let i = 0; i < homes.length; i++) {
+        if (i === startIdx) continue;
+        const newSlot = liveOrder.indexOf(i);
+        const delta = homes[newSlot].y - homes[i].y;
+        homes[i].el.style.transform = delta ? `translateY(${delta}px)` : "";
+      }
+    }
+
+    function onMove(ev) {
+      const dy = ev.clientY - startY;
+      draggedWrap.style.transform = `translateY(${dy}px)`;
+
+      // Snap to whichever slot's centre is closest to the dragged
+      // item's centre. This is the same "nearest neighbour" rule the
+      // design canvas's grip drag uses — robust to fast pointer jumps.
+      const draggedCenter = homeOf.y + dy + homeOf.h / 2;
+      let nearest = 0, bestDist = Infinity;
+      for (let i = 0; i < homes.length; i++) {
+        const center = homes[i].y + homes[i].h / 2;
+        const d = Math.abs(center - draggedCenter);
+        if (d < bestDist) { bestDist = d; nearest = i; }
+      }
+      if (nearest !== lastSlot) {
+        lastSlot = nearest;
+        liveOrder = allItems.map((_, i) => i).filter((i) => i !== startIdx);
+        liveOrder.splice(nearest, 0, startIdx);
+        layoutPeers();
+      }
+    }
+
+    function cleanup() {
+      grip.removeEventListener("pointermove", onMove);
+      grip.removeEventListener("pointerup", onUp);
+      grip.removeEventListener("pointercancel", onUp);
+      try { grip.releasePointerCapture(downEvent.pointerId); } catch {}
+    }
+
+    function onUp() {
+      cleanup();
+      const finalSlot = liveOrder.indexOf(startIdx);
+      // Re-enable the dragged element's transition for the settle slide.
+      draggedWrap.style.transition = "";
+      const dyFinal = homes[finalSlot].y - homes[startIdx].y;
+      draggedWrap.style.transform = dyFinal ? `translateY(${dyFinal}px)` : "";
+
+      // After the settle animation, clear all transforms and commit the
+      // new order. We disable transitions on every peer for the commit
+      // frame so the cleared transforms don't trigger a snap-back, then
+      // re-enable in two RAFs once the DOM is repainted.
+      const SETTLE_MS = 200;
+      window.setTimeout(() => {
+        for (const h of homes) {
+          h.el.style.transition = "none";
+          h.el.style.transform = "";
+        }
+        draggedWrap.classList.remove("is-dragging");
+        draggedWrap.style.zIndex = "";
+        draggedWrap.style.willChange = "";
+
+        if (startIdx !== finalSlot) {
+          const newItemsOrder = liveOrder.map((i) => day.items[i]);
+          commitItemReorder(day, newItemsOrder);
+        }
+
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          for (const h of homes) h.el.style.transition = "";
+        }));
+      }, SETTLE_MS);
+    }
+
+    grip.addEventListener("pointermove", onMove);
+    grip.addEventListener("pointerup", onUp);
+    grip.addEventListener("pointercancel", onUp);
+  }
+
+  // Optimistic local reorder — mutates day.items in place, retimes,
+  // re-renders the page immediately, then sends the API calls in the
+  // background. On failure, restores the original snapshot and toasts.
+  async function commitItemReorder(day, newItemsOrder) {
+    const origOrder = day.items.slice();
+    const origTimes = day.items.map((it) => ({
+      id: it.id, start_time: it.start_time, end_time: it.end_time,
+    }));
+    const timeUpdates = recomputeItemTimes(origOrder, newItemsOrder);
+    const updatesById = new Map(timeUpdates.map((u) => [u.id, u]));
+
+    // Apply locally.
+    day.items.splice(0, day.items.length, ...newItemsOrder);
+    for (const item of day.items) {
+      const u = updatesById.get(item.id);
+      if (u) { item.start_time = u.start_time; item.end_time = u.end_time; }
+    }
+    // Snappy local re-render — no network wait.
+    ctx.rerender?.();
+
+    // Background persistence. We don't block the UI on the round-trip;
+    // failures revert local state and re-render so the user isn't left
+    // with a phantom order.
+    ctx.onSaveStart?.();
+    try {
+      await items.reorder(newItemsOrder.map((x) => x.id));
+      // Parallelise the time updates — they're independent rows.
+      await Promise.all(timeUpdates.map((u) =>
+        items.update(u.id, { start_time: u.start_time, end_time: u.end_time })
+      ));
+    } catch (e) {
+      // Revert: restore the original order + times.
+      day.items.splice(0, day.items.length, ...origOrder);
+      for (const ot of origTimes) {
+        const item = day.items.find((it) => it.id === ot.id);
+        if (item) { item.start_time = ot.start_time; item.end_time = ot.end_time; }
+      }
+      ctx.rerender?.();
+      (ctx.toast || alert)("Reorder failed: " + e.message, true);
+    } finally {
+      ctx.onSaveDone?.();
+    }
   }
 
   function timelineItem(day, it, idx) {
@@ -630,34 +743,18 @@ export function renderItinerary(host, ctx) {
     return reorderItemTo(day, idx, j);
   }
 
-  // Reorder day.items[fromIdx] → toIdx, preserving each event's
-  // duration. Positional gaps between consecutive timed items travel
-  // with their slot index (treated as implicit rest, never persisted
-  // as events). Used by both drag-and-drop and the context menu.
+  // Compute the new order from a from/to index pair and forward to
+  // commitItemReorder so the context-menu Move up / Move down path
+  // shares the same optimistic + retime flow as drag-drop.
   async function reorderItemTo(day, fromIdx, toIdx) {
-    const snapshot = (day.items || []).slice();
-    if (fromIdx < 0 || fromIdx >= snapshot.length) return;
-    if (toIdx   < 0 || toIdx   >= snapshot.length) return;
+    const list = day.items || [];
+    if (fromIdx < 0 || fromIdx >= list.length) return;
+    if (toIdx   < 0 || toIdx   >= list.length) return;
     if (fromIdx === toIdx) return;
-
-    const newOrder = snapshot.slice();
+    const newOrder = list.slice();
     const [moved] = newOrder.splice(fromIdx, 1);
     newOrder.splice(toIdx, 0, moved);
-
-    const timeUpdates = recomputeItemTimes(snapshot, newOrder);
-
-    ctx.onSaveStart?.();
-    try {
-      await items.reorder(newOrder.map((x) => x.id));
-      for (const u of timeUpdates) {
-        await items.update(u.id, { start_time: u.start_time, end_time: u.end_time });
-      }
-      await ctx.refresh();
-    } catch (e) {
-      alert("Reorder failed: " + e.message);
-    } finally {
-      ctx.onSaveDone?.();
-    }
+    return commitItemReorder(day, newOrder);
   }
 }
 
