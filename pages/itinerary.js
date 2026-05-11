@@ -518,7 +518,15 @@ export function renderItinerary(host, ctx) {
 
     function timeCell(it) {
       const t = formatTimeRange(it.start_time, it.end_time) || formatTime(it.start_time) || "—";
-      return el("div", { class: "vy-tl-time", text: t });
+      const cell = el("div", { class: "vy-tl-time", text: t });
+      // Overnight (end < start) — quietly mark the cell so the user
+      // sees the event spills into the next morning. Keeps the day
+      // independent: the event still belongs to this day's column.
+      if (endsNextDay(it.start_time, it.end_time)) {
+        cell.classList.add("is-overnight");
+        cell.appendChild(el("span", { class: "vy-tl-time-next", text: "+1d", title: "Ends next morning" }));
+      }
+      return cell;
     }
 
     function pipCell(it) {
@@ -642,6 +650,16 @@ export function renderItinerary(host, ctx) {
       const durChip = el("span", { class: "vy-edit-dur",
         text: computeDuration(it.start_time, it.end_time) || "—" });
 
+      // Subtle "+1d" badge that shows up next to the end-time input
+      // when the event spills past midnight. Reflects the same logic
+      // the timeline-time cell uses on collapsed cards.
+      const nextDayBadge = el("span", {
+        class: "vy-edit-nextday",
+        title: "Ends the next morning",
+        text: "+1d",
+      });
+      nextDayBadge.hidden = !endsNextDay(it.start_time, it.end_time);
+
       function tryCommitTime(field, raw) {
         const value = raw || "";
         const newStart = field === "start" ? value : lastGoodStart;
@@ -650,8 +668,9 @@ export function renderItinerary(host, ctx) {
         if (conflict) {
           const ot = formatTimeRange(conflict.start_time, conflict.end_time) ||
                      formatTime(conflict.start_time) || "untimed";
+          const overnight = endsNextDay(conflict.start_time, conflict.end_time) ? " +1d" : "";
           (ctx.toast || alert)(
-            `Time conflicts with "${conflict.title || "untitled"}" (${ot})`,
+            `Time conflicts with "${conflict.title || "untitled"}" (${ot}${overnight})`,
             true
           );
           if (field === "start") startInput.value = lastGoodStart;
@@ -661,6 +680,7 @@ export function renderItinerary(host, ctx) {
         if (field === "start") lastGoodStart = value;
         else                   lastGoodEnd   = value;
         durChip.textContent = computeDuration(newStart, newEnd) || "—";
+        nextDayBadge.hidden = !endsNextDay(newStart, newEnd);
         saveItem({ [field === "start" ? "start_time" : "end_time"]: value || null });
       }
       startInput.addEventListener("change", () => tryCommitTime("start", startInput.value));
@@ -712,6 +732,7 @@ export function renderItinerary(host, ctx) {
       const scheduleSection = section("schedule", "Schedule",
         labeledInline("Start", startInput),
         labeledInline("End",   endInput),
+        nextDayBadge,
         durChip,
         !readOnly ? toggleChip({
           on: !!it.is_fixed,
@@ -885,28 +906,41 @@ function recomputeItemTimes(snapshot, newOrder) {
     return `${String(h).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
   };
 
-  // Only timed items participate. Anchor is the first timed item's
-  // original start time.
+  // Only timed items participate. We project each into an absolute
+  // minute-line that lets the retiming math work across midnight
+  // wraps — when an event's HH:MM appears earlier than the prior
+  // event's, we bump a base offset by 1440 so the schedule stays
+  // monotonic.
   const timedOriginals = snapshot.filter((x) => parseT(x.start_time) != null);
   if (timedOriginals.length < 2) return [];
-  const anchor = parseT(timedOriginals[0].start_time);
 
-  // Positional gaps between consecutive timed originals.
-  const gaps = [];
-  for (let i = 0; i < timedOriginals.length - 1; i++) {
-    const a = timedOriginals[i];
-    const b = timedOriginals[i + 1];
-    const aEnd = parseT(a.end_time) ?? parseT(a.start_time);
-    const bStart = parseT(b.start_time);
-    gaps.push((aEnd != null && bStart != null && bStart >= aEnd) ? bStart - aEnd : 0);
+  const absById = new Map();
+  let base = 0;
+  let prevAbsStart = -Infinity;
+  for (const it of timedOriginals) {
+    let s = parseT(it.start_time);
+    let e = parseT(it.end_time);
+    // Wrap end past midnight if end < start (overnight event).
+    let eAbsOffset = 0;
+    if (e != null && e < s) eAbsOffset = 1440;
+    // Bump base if this start would land before the previous start
+    // on the absolute line (another wrap between consecutive items).
+    while (s + base < prevAbsStart) base += 1440;
+    const absS = s + base;
+    const absE = e != null ? e + base + eAbsOffset : absS;
+    absById.set(it.id, { absS, absE, dur: absE - absS, hasEnd: e != null });
+    prevAbsStart = absS;
   }
 
-  // Per-item original duration (end - start, or 0).
-  const durById = new Map();
-  for (const it of snapshot) {
-    const s = parseT(it.start_time);
-    const e = parseT(it.end_time);
-    durById.set(it.id, s != null && e != null ? Math.max(0, e - s) : 0);
+  const anchor = absById.get(timedOriginals[0].id).absS;
+
+  // Positional gaps between consecutive timed originals (in absolute
+  // minutes — non-negative because we made the line monotonic above).
+  const gaps = [];
+  for (let i = 0; i < timedOriginals.length - 1; i++) {
+    const a = absById.get(timedOriginals[i].id);
+    const b = absById.get(timedOriginals[i + 1].id);
+    gaps.push(Math.max(0, b.absS - a.absE));
   }
 
   const origById = new Map(snapshot.map((x) => [x.id, x]));
@@ -918,11 +952,13 @@ function recomputeItemTimes(snapshot, newOrder) {
     const orig = origById.get(it.id);
     if (!orig || parseT(orig.start_time) == null) continue;
 
-    const dur = durById.get(it.id) || 0;
+    const abs = absById.get(it.id);
+    const dur = abs ? abs.dur : 0;
+    const hasEnd = abs ? abs.hasEnd : false;
     const newStart = cursor;
     const newEnd = newStart + dur;
     const newStartStr = fmtT(newStart);
-    const newEndStr = dur > 0 ? fmtT(newEnd) : null;
+    const newEndStr = hasEnd ? fmtT(newEnd) : null;
 
     const origStartStr = orig.start_time ? orig.start_time.slice(0, 5) : null;
     const origEndStr   = orig.end_time   ? orig.end_time.slice(0, 5)   : null;
@@ -997,38 +1033,79 @@ function pipColor(chipClass) {
   return "viridian";
 }
 
+// Parse HH:MM string to minutes-of-day (0–1439), or null.
+function parseHM(s) {
+  if (!s) return null;
+  const m = String(s).slice(0, 5).match(/^(\d{2}):(\d{2})$/);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+
+// True if end is strictly earlier than start — the event wraps past
+// midnight into the next morning. Each day's events are independent,
+// so an event that ends at 02:00 still belongs to the day where it
+// started at 23:00.
+function endsNextDay(startStr, endStr) {
+  const s = parseHM(startStr);
+  const e = parseHM(endStr);
+  if (s == null || e == null) return false;
+  return e < s;
+}
+
+// Expand an event's HH:MM range into one or two minute-of-day
+// intervals in [0, 1440). A wrapping event 23:00→02:00 becomes
+// [[1380, 1440], [0, 120]]. Used by findOverlap so an overnight
+// event correctly conflicts with another late-night or early-morning
+// event on the same day.
+function intervalsOf(startStr, endStr) {
+  const s = parseHM(startStr);
+  if (s == null) return [];
+  const e = parseHM(endStr);
+  if (e == null || e === s) return [[s, s]];
+  if (e > s) return [[s, e]];
+  return [[s, 1440], [0, e]];
+}
+
+function intervalsCollide(a, b) {
+  for (const [aS, aE] of a) {
+    for (const [bS, bE] of b) {
+      // Strict inequality — touching boundaries (one ends exactly
+      // when the next starts) are not a conflict.
+      if (aS < bE && bS < aE) return true;
+      // Two zero-duration points at the same minute count as a
+      // conflict so the user notices the collision.
+      if (aS === aE && bS === bE && aS === bS) return true;
+    }
+  }
+  return false;
+}
+
 // Find another timed item on this day that overlaps the proposed time
 // range for `selfItem`. Returns the conflicting item, or null if free.
-// Touching boundaries (one ends exactly when another starts) are OK.
 function findOverlap(day, selfItem, newStartStr, newEndStr) {
-  const parse = (s) => {
-    if (!s) return null;
-    const m = String(s).slice(0, 5).match(/^(\d{2}):(\d{2})$/);
-    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
-  };
-  const a = parse(newStartStr);
-  if (a == null) return null;
-  const b = parse(newEndStr);
-  const aEnd = b == null ? a : b;
+  if (parseHM(newStartStr) == null) return null;
+  const a = intervalsOf(newStartStr, newEndStr);
   for (const other of (day.items || [])) {
     if (other.id === selfItem.id) continue;
-    const oa = parse(other.start_time);
-    if (oa == null) continue;
-    const ob = parse(other.end_time);
-    const oEnd = ob == null ? oa : ob;
-    if (a < oEnd && oa < aEnd) return other;
-    if (a === aEnd && oa === oEnd && a === oa) return other;
+    if (parseHM(other.start_time) == null) continue;
+    const b = intervalsOf(other.start_time, other.end_time);
+    if (intervalsCollide(a, b)) return other;
   }
   return null;
 }
 
+// Duration in minutes, wrap-aware. end < start wraps to next day.
+function durationMinutes(startStr, endStr) {
+  const s = parseHM(startStr);
+  const e = parseHM(endStr);
+  if (s == null || e == null) return null;
+  let mins = e - s;
+  if (mins < 0) mins += 1440;
+  return mins;
+}
+
 function computeDuration(s, e) {
-  if (!s || !e) return null;
-  const [sh, sm] = s.split(":").map(Number);
-  const [eh, em] = e.split(":").map(Number);
-  if ([sh, sm, eh, em].some((n) => Number.isNaN(n))) return null;
-  let mins = (eh * 60 + em) - (sh * 60 + sm);
-  if (mins <= 0) return null;
+  const mins = durationMinutes(s, e);
+  if (mins == null || mins <= 0) return null;
   const h = Math.floor(mins / 60), m = mins % 60;
   if (!h) return `${m}m`;
   if (!m) return `${h}h`;

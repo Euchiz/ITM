@@ -2738,6 +2738,35 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
   white-space: nowrap;
 }
 
+/* "+1d" indicator next to the end-time input when the event spills
+ * past midnight. Subtle but distinct from the duration chip. */
+.vy-edit-nextday {
+  font-family: var(--vbl-font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #5b2b6e;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(124,60,140,0.10);
+  box-shadow: inset 0 0 0 1px rgba(124,60,140,0.28);
+  white-space: nowrap;
+}
+.vy-edit-nextday[hidden] { display: none; }
+
+/* Timeline left-column time cell when the event is overnight — the
+ * "+1d" chip appears under the time range. */
+.vy-tl-time.is-overnight { line-height: 1.15; }
+.vy-tl-time-next {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--vbl-font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #5b2b6e;
+}
+
 /* In-editor labeled toggle pills (Fixed / Highlight). */
 .vy-edit-toggle {
   appearance: none; border: 0;
