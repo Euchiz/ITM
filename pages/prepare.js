@@ -18,17 +18,17 @@ const CATEGORY_LABELS = {
   other: "Other",
 };
 
-// Each category maps onto a Voyage chip palette + glyph. Aligned with
-// the item-type vocabulary in the design (STAYS/TRANSIT/DINING/…) so
-// the visual language is consistent across Plan-mode pages.
+// Each category gets its own hue so the filter row visually ranks them
+// by importance — critical (document, coral) through routine (other,
+// slate). Greens/blues/golds in between map onto everyday categories.
 const CATEGORY_VISUALS = {
-  booking:        { chipClass: "stay",    glyph: "bookmark",       label: "BOOKING" },
-  document:       { chipClass: "thing",   glyph: "description",    label: "DOCUMENTS" },
-  packing:        { chipClass: "thing",   glyph: "luggage",        label: "PACKING" },
-  payment:        { chipClass: "meal",    glyph: "payments",       label: "PAYMENT" },
-  transportation: { chipClass: "transit", glyph: "directions_railway", label: "TRANSIT" },
-  health:         { chipClass: "note",    glyph: "medication",     label: "HEALTH" },
-  other:          { chipClass: "note",    glyph: "more_horiz",     label: "OTHER" },
+  document:       { chipClass: "doc",           glyph: "description",        label: "DOCUMENTS" },
+  booking:        { chipClass: "booking",       glyph: "bookmark",           label: "BOOKING" },
+  payment:        { chipClass: "payment",       glyph: "payments",           label: "PAYMENT" },
+  transportation: { chipClass: "transport-cat", glyph: "directions_railway", label: "TRANSIT" },
+  health:         { chipClass: "health",        glyph: "medication",         label: "HEALTH" },
+  packing:        { chipClass: "packing",       glyph: "luggage",            label: "PACKING" },
+  other:          { chipClass: "other",         glyph: "more_horiz",         label: "OTHER" },
 };
 
 const FILTER_STORAGE_KEY = "voyage:prepare-filter";

@@ -435,17 +435,17 @@ function paintSidebar() {
 
     <div class="vy-side-foot">
       <div class="vy-side-quick">
-        <button data-page="members" class="${state.page === "members" ? "is-active" : ""}" title="Members &amp; roles">
-          <span class="material-symbols-outlined" aria-hidden>group</span>
-        </button>
-        <button data-page="io"      class="${state.page === "io" ? "is-active" : ""}" title="Import / Export">
-          <span class="material-symbols-outlined" aria-hidden>swap_vert</span>
-        </button>
         <button data-page="overview" class="${state.page === "overview" ? "is-active" : ""}" title="Trip settings">
           <span class="material-symbols-outlined" aria-hidden>tune</span>
         </button>
+        <button data-page="members" class="${state.page === "members" ? "is-active" : ""}" title="Members &amp; roles">
+          <span class="material-symbols-outlined" aria-hidden>group</span>
+        </button>
         <button id="sidePrintBtn" title="Print preview">
           <span class="material-symbols-outlined" aria-hidden>print</span>
+        </button>
+        <button data-page="io"      class="${state.page === "io" ? "is-active" : ""}" title="Import / Export">
+          <span class="material-symbols-outlined" aria-hidden>swap_vert</span>
         </button>
       </div>
 
@@ -695,8 +695,6 @@ function paintDayStrip() {
         e.preventDefault();
         const idx = Number(btn.dataset.dayIdx);
         openContextMenu(e.clientX, e.clientY, [
-          { label: "Go to this day",  glyph: "open_in_new",
-            onClick: () => { state.selectedDayIdx = idx; renderTripPage(); } },
           { label: "Move left",       glyph: "chevron_left",
             disabled: idx === 0,
             onClick: () => commitDayReorder(idx, idx - 1) },

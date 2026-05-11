@@ -97,6 +97,33 @@ Rules:
 - Do not add comments outside the JSON.
 - Return only valid JSON.
 
+Object shapes (use these exact field names — strings unless noted; "" or [] when unknown):
+
+  trip:
+    title, destination, start_date, end_date, summary, general_notes
+    travelers              array of strings
+
+  days[]:
+    date, title, city, notes
+    items                  array of item objects (see below)
+    todos                  array of day-todo objects (see below)
+
+  days[].items[]:
+    title, type, start_time, end_time, location_name, map_url, notes, status
+    is_fixed               boolean (locked-in schedule, not movable)
+    is_highlight           boolean (must-do / favourite of the trip)
+
+  days[].todos[]:
+    text, category, due_date, notes
+    is_done                boolean
+
+  preparation_checklist[]:
+    text, category, due_date, notes
+    is_done                boolean
+
+  notes[]:
+    title, body
+
 Task:
 [Write your request here]
 

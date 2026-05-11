@@ -2237,6 +2237,38 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
   box-shadow: inset 0 0 0 1px var(--vbl-hairline);
 }
 
+/* Prepare-category chip palettes — one hue per category so a glance
+ * across the filter row reflects relative importance. Ordered from
+ * critical (document) through routine (other). */
+.vy-chip--doc {
+  background: rgba(196,56,72,0.12); color: #8a2a36;
+  box-shadow: inset 0 0 0 1px rgba(196,56,72,0.30);
+}
+.vy-chip--booking {
+  background: rgba(216,127,42,0.16); color: #8a4a14;
+  box-shadow: inset 0 0 0 1px rgba(216,127,42,0.32);
+}
+.vy-chip--payment {
+  background: rgba(184,148,42,0.18); color: #6f560d;
+  box-shadow: inset 0 0 0 1px rgba(184,148,42,0.34);
+}
+.vy-chip--transport-cat {
+  background: rgba(51,89,131,0.14); color: #2c4a72;
+  box-shadow: inset 0 0 0 1px rgba(51,89,131,0.30);
+}
+.vy-chip--health {
+  background: rgba(124,60,140,0.13); color: #5b2b6e;
+  box-shadow: inset 0 0 0 1px rgba(124,60,140,0.28);
+}
+.vy-chip--packing {
+  background: rgba(47,125,114,0.14); color: var(--vbl-viridian-deep);
+  box-shadow: inset 0 0 0 1px rgba(47,125,114,0.30);
+}
+.vy-chip--other {
+  background: var(--vbl-surface-soft); color: var(--vbl-fg-3);
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+}
+
 /* Button-form chips (filter row) */
 .vy-chip--button {
   appearance: none; border: 0;
@@ -2466,8 +2498,8 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
   margin-top: 6px; flex-wrap: wrap;
 }
 .vy-tl-card-r {
-  display: flex; flex-direction: column;
-  gap: 6px; align-items: end;
+  display: flex; flex-direction: row;
+  gap: 6px; align-items: center;
   padding-top: 2px;
 }
 .vy-tl-card-dur {
