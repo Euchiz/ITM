@@ -33,7 +33,9 @@ const TYPE_VISUALS = {
 };
 
 const VIEW_STORAGE_KEY = "voyage:itinerary-view";
-const VIEW_OPTIONS = ["timeline", "list", "cards"];
+// Only two distinct visual modes — the previous "list" view was almost
+// identical to "timeline" and added no real affordance.
+const VIEW_OPTIONS = ["timeline", "cards"];
 
 export function renderItinerary(host, ctx) {
   const t = ctx.trip;

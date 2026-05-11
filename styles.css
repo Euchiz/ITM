@@ -1018,16 +1018,20 @@ body[data-view="trip"] .app-header { display: none; }
 .vy-topbar .vy-btn-primary:hover { transform: translateY(-1px); }
 .vy-topbar .vy-btn-primary .material-symbols-outlined { font-size: 16px; line-height: 1; }
 
-/* hero block */
+/* hero block — left content can be wide (long titles, many city
+ * badges), so the left column uses minmax(0, 1fr) and the inner block
+ * gets min-width:0 so its descendants honour overflow rules. Without
+ * minmax(0,…), a 1fr column expands to fit content and bleeds over the
+ * right pane's edge. */
 .vy-hero {
   position: relative;
   overflow: hidden;
   padding: 18px 22px;
   border-radius: 18px;
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 16px;
+  gap: 20px;
   background: linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.25));
   box-shadow:
     inset 0 0 0 1px rgba(255,255,255,0.7),
@@ -1042,7 +1046,15 @@ body[data-view="trip"] .app-header { display: none; }
     radial-gradient(circle at 30% 50%, hsl(172 40% 60% / 0.5), transparent 60%),
     radial-gradient(circle at 70% 70%, hsl(198 40% 70% / 0.4), transparent 60%);
 }
-.vy-hero-left { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.vy-hero-left {
+  display: flex; flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  /* Hard cap so the column never elbows into the right pane even when a
+   * title or city badge would naturally overflow. The inner title +
+   * cities row both honour overflow so they truncate / wrap inside. */
+  overflow: hidden;
+}
 .vy-hero-tag {
   display: inline-flex; gap: 8px; align-items: center;
   font-family: var(--vbl-font-display);
@@ -1061,10 +1073,17 @@ body[data-view="trip"] .app-header { display: none; }
   color: var(--vbl-ink);
   line-height: 1.1;
   margin: 2px 0 0;
+  /* Allow long titles to wrap to a second line; min-width:0 lets text-
+   * overflow ellipsis kick in on the final line if even wrapping
+   * exceeds the column. */
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .vy-hero-cities {
   display: flex; gap: 6px; align-items: center;
   margin-top: 6px; flex-wrap: wrap;
+  min-width: 0;
 }
 .vy-citybadge {
   display: inline-flex; align-items: center; gap: 6px;
@@ -1154,6 +1173,75 @@ body[data-view="trip"] .app-header { display: none; }
     0 6px 14px -6px rgba(40,103,95,0.3);
 }
 .vy-daypill.is-selected .vy-daypill-num { color: var(--vbl-viridian); }
+
+/* Drag-to-reorder states */
+.vy-daypill[draggable="true"] { cursor: grab; }
+.vy-daypill.is-dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+}
+.vy-daypill.is-drop-target {
+  box-shadow:
+    inset 0 0 0 2px rgba(78,159,146,0.65),
+    0 6px 14px -6px rgba(40,103,95,0.35);
+  transform: translateY(-2px);
+}
+
+/* ─── Right-click context menu ─────────────────────────────────── */
+
+.vy-ctxmenu {
+  position: fixed;
+  z-index: 200;
+  min-width: 200px;
+  padding: 4px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.97), rgba(255,255,255,0.9));
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.7),
+    inset 1px 1px 0 -0.5px rgba(40,103,95,0.18),
+    0 18px 48px -10px rgba(40,103,95,0.30);
+  font-family: var(--vbl-font-display);
+}
+.vy-ctxmenu button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 7px;
+  color: var(--vbl-ink);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+}
+.vy-ctxmenu button:hover:not(.is-disabled) { background: rgba(78,159,146,0.10); color: var(--vbl-viridian-deep); }
+.vy-ctxmenu button .material-symbols-outlined {
+  font-size: 16px; line-height: 1;
+  color: var(--vbl-fg-3);
+}
+.vy-ctxmenu button:hover:not(.is-disabled) .material-symbols-outlined { color: var(--vbl-viridian); }
+.vy-ctxmenu button.is-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.vy-ctxmenu button.is-danger { color: var(--vbl-red); }
+.vy-ctxmenu button.is-danger:hover:not(.is-disabled) {
+  background: rgba(180,35,24,0.10);
+  color: var(--vbl-red);
+}
+.vy-ctxmenu button.is-danger .material-symbols-outlined { color: var(--vbl-red); }
+.vy-ctxmenu hr {
+  border: 0;
+  border-top: 1px solid rgba(20,32,31,0.10);
+  margin: 4px 6px;
+}
 
 /* page shell (timeline-card frame around the existing page module) */
 .vy-page-shell {
@@ -2370,12 +2458,7 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
 .vy-edit-row > textarea { flex: 1 1 100%; min-width: 0; }
 .vy-edit-row > .item-title-input { flex: 1 1 200px; min-width: 0; font-weight: 600; }
 
-/* List + Cards view variants — swap the timeline rails for flatter layouts */
-.day-list[data-view="list"] .vy-tl-line { display: none; }
-.day-list[data-view="list"] .vy-tl-item { grid-template-columns: 60px 1fr; gap: 10px; }
-.day-list[data-view="list"] .vy-tl-pip-col { display: none; }
-.day-list[data-view="list"] .vy-tl-card { background: rgba(255,255,255,0.55); }
-
+/* Cards view variant — swaps the timeline rails for a flat grid. */
 .day-list[data-view="cards"] .vy-tl-line { display: none; }
 .day-list[data-view="cards"] .vy-tl { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
 .day-list[data-view="cards"] .vy-tl-item { display: block; padding: 0; }
