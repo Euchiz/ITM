@@ -27,17 +27,39 @@ import { renderToday } from "./pages/today.js";
 import { renderNotes } from "./pages/notes.js";
 import { renderMembers } from "./pages/members.js";
 import { renderIO } from "./pages/io.js";
+import { renderMap } from "./pages/map.js";
+import { renderBudget } from "./pages/budget.js";
+import { renderCosts } from "./pages/costs.js";
 import { openPrintView } from "./pages/print-view.js";
 
 const PAGES = {
   overview: renderOverview,
   itinerary: renderItinerary,
+  map: renderMap,
   prepare: renderPrepare,
+  budget: renderBudget,
   today: renderToday,
   notes: renderNotes,
+  costs: renderCosts,
   members: renderMembers,
   io: renderIO,
 };
+
+// Pages grouped by mode. The sidebar renders one group at a time;
+// the bottom "mode switch" toggles between them. Pages outside any
+// mode group (members, io, overview) remain reachable by URL but
+// are surfaced from app-header / from inside the itinerary editor.
+const MODE_PAGES = {
+  plan:   ["itinerary", "map", "prepare", "budget"],
+  travel: ["today",     "notes", "costs"],
+};
+
+function modeForPage(page) {
+  for (const [mode, list] of Object.entries(MODE_PAGES)) {
+    if (list.includes(page)) return mode;
+  }
+  return "plan";
+}
 
 const state = {
   view: "auth",
@@ -272,24 +294,18 @@ function paintTabs() {
 // Documents / Budget) are rendered disabled with a "SOON" badge — they
 // match the design but no page module exists yet.
 
-const SIDE_NAV_PRIMARY = [
-  { page: "overview",  glyph: "summarize",        label: "Overview" },
-  { page: "itinerary", glyph: "calendar_month",   label: "Itinerary" },
-  { page: "today",     glyph: "today",            label: "Today" },
-  { page: "prepare",   glyph: "fact_check",       label: "Prepare" },
-  { page: "notes",     glyph: "edit_note",        label: "Notes" },
-  { page: "members",   glyph: "group",            label: "Members" },
-  { page: "io",        glyph: "swap_vert",        label: "Import / Export" },
+// Sidebar nav definitions per mode. SOON items are proposed features that
+// don't have a backing page module yet — rendered disabled.
+const NAV_PLAN = [
+  { page: "itinerary", glyph: "calendar_month", label: "Itinerary" },
+  { page: "map",       glyph: "map",            label: "Map",    soon: true },
+  { page: "prepare",   glyph: "fact_check",     label: "Prepare" },
+  { page: "budget",    glyph: "payments",       label: "Budget", soon: true },
 ];
-
-const SIDE_NAV_PROPOSED = [
-  { glyph: "map",                label: "Map" },
-  { glyph: "bed",                label: "Stays" },
-  { glyph: "directions_railway", label: "Transit" },
-  { glyph: "restaurant",         label: "Dining" },
-  { glyph: "explore",            label: "Activities" },
-  { glyph: "description",        label: "Documents" },
-  { glyph: "payments",           label: "Budget" },
+const NAV_TRAVEL = [
+  { page: "today",     glyph: "today",          label: "Today" },
+  { page: "notes",     glyph: "edit_note",      label: "Notes" },
+  { page: "costs",     glyph: "receipt_long",   label: "Costs", soon: true },
 ];
 
 function paintSidebar() {
@@ -302,71 +318,112 @@ function paintSidebar() {
 
   const trip = state.trip;
   const dayCount = (trip.days || []).length;
-  const cities = deriveCities(trip);
-  const initials = (trip.title || "Trip").slice(0, 2).toUpperCase();
+  const initials = (trip.title || "Trip").trim().slice(0, 2).toUpperCase() || "··";
   const dateRange = formatTripDateRange(trip);
+  const currentMode = modeForPage(state.page);
 
   const counts = {
-    overview: "",
-    itinerary: dayCount ? `${dayCount} day${dayCount === 1 ? "" : "s"}` : "",
+    itinerary: dayCount ? `${dayCount}d` : "",
+    prepare: (trip.checklist_items || []).filter((c) => !c.day_id).length || "",
+    notes: (trip.notes || []).length || "",
     today: "",
-    prepare: (trip.checklist_items || []).length ? `${(trip.checklist_items).length}` : "",
-    notes: (trip.notes || []).length ? `${trip.notes.length}` : "",
-    members: (trip.members || []).length ? `${trip.members.length}` : "",
-    io: "",
+    map: "", budget: "", costs: "",
   };
 
-  const primaryHtml = SIDE_NAV_PRIMARY.map((n) => `
-    <button data-page="${n.page}" class="${n.page === state.page ? "is-active" : ""}">
-      <span class="material-symbols-outlined" aria-hidden>${n.glyph}</span>
-      <span>${n.label}</span>
-      <small>${counts[n.page] || ""}</small>
-    </button>
-  `).join("");
-
-  const proposedHtml = SIDE_NAV_PROPOSED.map((n) => `
-    <button class="is-stale" disabled title="Proposed — not yet implemented">
-      <span class="material-symbols-outlined" aria-hidden>${n.glyph}</span>
-      <span>${n.label}</span>
-      <small>SOON</small>
-    </button>
-  `).join("");
+  const navItems = currentMode === "travel" ? NAV_TRAVEL : NAV_PLAN;
+  const navHtml = navItems.map((n) => {
+    const isActive = n.page === state.page;
+    const isSoon = !!n.soon;
+    const cls = [
+      isActive ? "is-active" : "",
+      isSoon ? "is-soon" : "",
+    ].filter(Boolean).join(" ");
+    const trailing = isSoon ? '<small class="vy-soon-badge">SOON</small>'
+                            : `<small>${escapeText(String(counts[n.page] || ""))}</small>`;
+    return `
+      <button class="${cls}" data-page="${n.page}" title="${escapeText(n.label)}${isSoon ? " — proposed feature" : ""}">
+        <span class="material-symbols-outlined" aria-hidden>${n.glyph}</span>
+        <span>${escapeText(n.label)}</span>
+        ${trailing}
+      </button>
+    `;
+  }).join("");
 
   aside.innerHTML = `
     <div class="vy-brand-side">
       <strong>VOYAGE</strong>
       <span>— ∞ — INTEGRATED TRIP MANAGER</span>
     </div>
+
     <button class="vy-trip-switcher" id="sideBackBtn" title="Back to all trips">
       <span class="vy-trip-switcher-img">${escapeText(initials)}</span>
-      <div>
+      <div class="vy-trip-switcher-text">
         <b>${escapeText(trip.title || "Untitled trip")}</b>
-        <span>${escapeText(dateRange || "—")}</span>
+        <span>${escapeText(dateRange || "Dates not set")}</span>
       </div>
-      <span class="material-symbols-outlined" aria-hidden style="color:var(--vbl-fg-4)">unfold_more</span>
+      <span class="material-symbols-outlined" aria-hidden>unfold_more</span>
     </button>
 
-    <div class="vy-side-section">This trip</div>
-    <nav class="vy-side-nav" id="sideNavPrimary">${primaryHtml}</nav>
+    <div class="vy-side-section">${currentMode === "travel" ? "Travel · in trip" : "Plan · before trip"}</div>
+    <nav class="vy-side-nav" id="sideNavMode">${navHtml}</nav>
 
-    <div class="vy-side-section">Proposed</div>
-    <nav class="vy-side-nav vy-side-nav--stale">${proposedHtml}</nav>
+    <div class="vy-side-spacer"></div>
 
-    <div class="vy-side-budget">
-      <div class="vy-side-budget-hd">
-        <b>This session</b>
-        <span>${cities.length ? cities.length + " stop" + (cities.length === 1 ? "" : "s") : "—"}</span>
+    <div class="vy-side-foot">
+      <div class="vy-side-quick">
+        <button data-page="members" class="${state.page === "members" ? "is-active" : ""}" title="Members &amp; roles">
+          <span class="material-symbols-outlined" aria-hidden>group</span>
+        </button>
+        <button data-page="io"      class="${state.page === "io" ? "is-active" : ""}" title="Import / Export">
+          <span class="material-symbols-outlined" aria-hidden>swap_vert</span>
+        </button>
+        <button data-page="overview" class="${state.page === "overview" ? "is-active" : ""}" title="Trip settings">
+          <span class="material-symbols-outlined" aria-hidden>tune</span>
+        </button>
+        <button id="sidePrintBtn" title="Print preview">
+          <span class="material-symbols-outlined" aria-hidden>print</span>
+        </button>
       </div>
-      <div class="vy-side-budget-fig">${dayCount}<small> / days planned</small></div>
-      <span class="vy-meta">${state.trip?.role ? state.trip.role.toUpperCase() : "VIEWER"} ROLE</span>
+
+      <div class="vy-mode-switch" data-mode="${currentMode}">
+        <button data-mode="plan"   class="${currentMode === "plan"   ? "is-active" : ""}">
+          <span class="material-symbols-outlined" aria-hidden>edit_calendar</span>
+          <b>PLAN</b>
+          <small>Before trip</small>
+        </button>
+        <button data-mode="travel" class="${currentMode === "travel" ? "is-active" : ""}">
+          <span class="material-symbols-outlined" aria-hidden>explore</span>
+          <b>TRAVEL</b>
+          <small>In trip</small>
+        </button>
+      </div>
     </div>
   `;
 
-  aside.querySelectorAll("#sideNavPrimary button[data-page]").forEach((btn) => {
+  aside.querySelectorAll("#sideNavMode button[data-page]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (btn.classList.contains("is-soon")) return;
+      navigate({ page: btn.dataset.page });
+    });
+  });
+  aside.querySelectorAll(".vy-side-quick button[data-page]").forEach((btn) => {
     btn.addEventListener("click", () => navigate({ page: btn.dataset.page }));
+  });
+  aside.querySelectorAll(".vy-mode-switch button[data-mode]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const m = btn.dataset.mode;
+      if (m === currentMode) return;
+      // Switch to the default page of the target mode.
+      const target = m === "travel" ? "today" : "itinerary";
+      navigate({ page: target });
+    });
   });
   const back = aside.querySelector("#sideBackBtn");
   if (back) back.addEventListener("click", () => navigate({ trip: null }));
+  const printBtn = aside.querySelector("#sidePrintBtn");
+  if (printBtn) printBtn.addEventListener("click", () => {
+    if (state.trip) openPrintView(state.trip);
+  });
 }
 
 function paintHero() {
