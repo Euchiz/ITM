@@ -36,12 +36,17 @@
   font-weight: 700; font-display: swap;
 }
 
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap");
+/* Google fonts (Inter, JetBrains Mono, Material Symbols Outlined) are
+ * loaded via <link> tags in index.html — putting them as @import here
+ * after the local @font-face blocks above silently invalidates them
+ * (CSS spec requires @import to precede every other at-rule). */
 
-/* Material Symbols base — keep glyphs from breaking layout while the font loads */
+/* Material Symbols base — until the font loads, hide the literal
+ * ligature text so we don't flash "calendar_month" over labels.
+ * font-display:block on the link tag pairs with this to give the
+ * font ~3s of invisible time, then it either renders or stays hidden. */
 .material-symbols-outlined {
-  font-family: "Material Symbols Outlined", sans-serif;
+  font-family: "Material Symbols Outlined";
   font-weight: normal;
   font-style: normal;
   display: inline-block;
@@ -53,7 +58,12 @@
   direction: ltr;
   -webkit-font-feature-settings: "liga";
   font-feature-settings: "liga";
+  /* Hide the literal ligature text — only show after the icon font is
+   * available. .fonts-loaded is toggled on <html> once document.fonts
+   * is ready (see app.js). */
+  visibility: hidden;
 }
+html.fonts-loaded .material-symbols-outlined { visibility: visible; }
 
 /* ---- Tokens ---- */
 
