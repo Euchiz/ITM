@@ -432,7 +432,7 @@ function paintSidebar() {
 
   aside.innerHTML = `
     <div class="vy-brand-side">
-      <strong>VOYAGE</strong>
+      <strong>BON VOYAGE</strong>
       <span>— ∞ — INTEGRATED TRIP MANAGER</span>
     </div>
 
