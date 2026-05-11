@@ -124,6 +124,17 @@ function handleAuthChange(event, session) {
   if (!!state.user !== !!wasUser) routeFromUrl();
 }
 
+// Default landing page depends on viewport — mobile users almost
+// always want "Today" (the day-of view), while desktop users land on
+// the planning Overview. Re-evaluated every navigation so a rotation
+// or window resize on the boundary takes effect next click.
+function defaultLandingPage() {
+  try {
+    if (window.matchMedia?.("(max-width: 900px)").matches) return "today";
+  } catch {}
+  return "overview";
+}
+
 async function routeFromUrl() {
   paintHeader();
   if (state.recoveryMode) { setView("auth"); return; }
@@ -131,7 +142,7 @@ async function routeFromUrl() {
 
   const url = new URL(location.href);
   const tripId = url.searchParams.get("trip");
-  const page = url.searchParams.get("page") || "overview";
+  const page = url.searchParams.get("page") || defaultLandingPage();
 
   if (tripId) {
     await openTrip(tripId, page);
@@ -164,7 +175,7 @@ function setView(view) {
     });
   } else if (view === "trips") {
     renderDashboard(document.getElementById("view-trips"), {
-      onOpen: (id) => navigate({ trip: id, page: "overview" }),
+      onOpen: (id) => navigate({ trip: id, page: defaultLandingPage() }),
     });
   }
   paintHeader();
@@ -172,11 +183,12 @@ function setView(view) {
 
 // ===== Trip loading =====
 
-export async function openTrip(id, page = "overview") {
+export async function openTrip(id, page) {
+  if (!page) page = defaultLandingPage();
   try {
     const trip = await trips.getFull(id);
     state.trip = trip;
-    state.page = PAGES[page] ? page : "overview";
+    state.page = PAGES[page] ? page : defaultLandingPage();
     state.selectedDayIdx = pickDefaultDayIdx(trip);
     // Seed the "LAST CHANGE" timestamp from the server-side updated_at
     // if present; otherwise fall back to "now" so the topbar never shows
@@ -277,14 +289,18 @@ export function navigate(opts = {}) {
     if (opts.trip) url.searchParams.set("trip", opts.trip);
     else url.searchParams.delete("trip");
   }
+  // We strip ?page only when it equals the viewport's default (overview
+  // on desktop, today on mobile) so the URL stays clean for the common
+  // landing target on each device.
+  const stripDefault = defaultLandingPage();
   if ("page" in opts) {
-    if (opts.page && opts.page !== "overview") url.searchParams.set("page", opts.page);
+    if (opts.page && opts.page !== stripDefault) url.searchParams.set("page", opts.page);
     else url.searchParams.delete("page");
   }
   history.replaceState(null, "", url);
 
   const tripId = url.searchParams.get("trip");
-  const page = url.searchParams.get("page") || "overview";
+  const page = url.searchParams.get("page") || stripDefault;
 
   if (!tripId) {
     state.trip = null;
@@ -294,7 +310,7 @@ export function navigate(opts = {}) {
 
   // Same trip, different page: just swap pages without refetching.
   if (state.trip && state.trip.id === tripId) {
-    state.page = PAGES[page] ? page : "overview";
+    state.page = PAGES[page] ? page : stripDefault;
     renderTripPage();
     return;
   }
@@ -307,7 +323,8 @@ function syncUrl({ trip, page }) {
   const url = new URL(location.href);
   if (trip) url.searchParams.set("trip", trip);
   else url.searchParams.delete("trip");
-  if (page && page !== "overview") url.searchParams.set("page", page);
+  const stripDefault = defaultLandingPage();
+  if (page && page !== stripDefault) url.searchParams.set("page", page);
   else url.searchParams.delete("page");
   history.replaceState(null, "", url);
 }
