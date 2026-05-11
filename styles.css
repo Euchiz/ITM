@@ -2609,30 +2609,198 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
 /* ─── Inline editor (expanded card) ─────────────────────────────── */
 
 .vy-tl-card.is-editing {
-  display: block;
+  display: flex; flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px 12px;
   cursor: default;
-  background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85));
+  background: linear-gradient(180deg, rgba(255,255,255,0.97), rgba(247,250,249,0.94));
   box-shadow:
-    0 12px 30px -10px rgba(40,103,95,0.30),
-    inset 0 0 0 1px rgba(78,159,146,0.35);
+    0 18px 40px -16px rgba(40,103,95,0.32),
+    inset 0 0 0 1px rgba(78,159,146,0.34);
 }
+
+/* Header bar — chip, EDITING badge, hint, close button. */
 .vy-edit-head {
-  display: flex; justify-content: space-between; align-items: center;
-  margin: -2px 0 10px;
+  display: flex; align-items: center; gap: 10px;
+  padding-bottom: 10px;
+  margin: 0;
+  border-bottom: 1px dashed rgba(78,159,146,0.22);
 }
-.vy-edit-row {
-  display: flex; flex-wrap: wrap;
-  align-items: center; gap: 8px;
-  margin-bottom: 10px;
+.vy-edit-state {
+  font-family: var(--vbl-font-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--vbl-viridian);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(78,159,146,0.10);
+  box-shadow: inset 0 0 0 1px rgba(78,159,146,0.22);
+  text-transform: uppercase;
 }
-.vy-edit-row:last-child { margin-bottom: 0; }
-.vy-edit-row > input,
-.vy-edit-row > select,
-.vy-edit-row > textarea { font-family: var(--vbl-font-body); }
-.vy-edit-row > input[type="text"][placeholder*="Location"],
-.vy-edit-row > input[type="url"] { flex: 1 1 220px; min-width: 0; }
-.vy-edit-row > textarea { flex: 1 1 100%; min-width: 0; }
-.vy-edit-row > .item-title-input { flex: 1 1 200px; min-width: 0; font-weight: 600; }
+.vy-edit-hint {
+  flex: 1 1 auto;
+  font-family: var(--vbl-font-body);
+  font-size: 0.72rem;
+  color: var(--vbl-fg-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  min-width: 0;
+}
+.vy-edit-close {
+  appearance: none; border: 0;
+  width: 28px; height: 28px;
+  border-radius: 999px;
+  background: rgba(20,32,31,0.05);
+  color: var(--vbl-fg-3);
+  cursor: pointer;
+  display: inline-grid; place-items: center;
+  transition: background 120ms, color 120ms, transform 120ms;
+}
+.vy-edit-close:hover {
+  background: rgba(196,56,72,0.16); color: #8a2a36;
+  transform: rotate(90deg);
+}
+.vy-edit-close .material-symbols-outlined { font-size: 16px; line-height: 1; }
+
+/* Title row — large but breathy, not a heavy input field. */
+.vy-edit-title-wrap {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 0 2px 2px;
+}
+.vy-edit-title-input {
+  flex: 1 1 auto;
+  font-family: var(--vbl-font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--vbl-ink);
+  background: transparent;
+  border: 0;
+  border-bottom: 1.5px solid rgba(78,159,146,0.22);
+  padding: 4px 2px 6px;
+  outline: none;
+  transition: border-color 120ms, background 120ms;
+}
+.vy-edit-title-input::placeholder { color: var(--vbl-fg-4); font-weight: 500; }
+.vy-edit-title-input:focus {
+  border-bottom-color: var(--vbl-viridian);
+  background: rgba(255,255,255,0.6);
+}
+
+/* Sections — icon + label on the left, flowing controls on the right. */
+.vy-edit-section {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 6px 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.55);
+  box-shadow: inset 0 0 0 1px rgba(20,32,31,0.06);
+}
+.vy-edit-section-head {
+  grid-column: 1;
+  display: inline-flex; align-items: center; gap: 6px;
+  align-self: start;
+  padding-top: 7px;
+  font-family: var(--vbl-font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--vbl-fg-3);
+  white-space: nowrap;
+}
+.vy-edit-section-head .material-symbols-outlined {
+  font-size: 15px; line-height: 1;
+  color: var(--vbl-viridian);
+}
+.vy-edit-fields {
+  grid-column: 2;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  min-width: 0;
+}
+.vy-edit-fields > input,
+.vy-edit-fields > select,
+.vy-edit-fields > textarea { font-family: var(--vbl-font-body); }
+.vy-edit-fields > input[type="text"],
+.vy-edit-fields > input[type="url"] {
+  flex: 1 1 200px; min-width: 0;
+}
+.vy-edit-fields > textarea { flex: 1 1 100%; min-width: 0; }
+
+/* Duration chip inside the schedule section — read-only computed value. */
+.vy-edit-dur {
+  font-family: var(--vbl-font-mono);
+  font-size: 0.72rem;
+  color: var(--vbl-fg-3);
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(20,32,31,0.05);
+  white-space: nowrap;
+}
+
+/* In-editor labeled toggle pills (Fixed / Highlight). */
+.vy-edit-toggle {
+  appearance: none; border: 0;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 28px;
+  padding: 0 11px 0 9px;
+  border-radius: 999px;
+  font-family: var(--vbl-font-display);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--vbl-fg-3);
+  background: rgba(20,32,31,0.04);
+  cursor: pointer;
+  transition: background 120ms, color 120ms, transform 120ms, box-shadow 120ms;
+}
+.vy-edit-toggle .material-symbols-outlined { font-size: 15px; line-height: 1; }
+.vy-edit-toggle:hover { transform: translateY(-1px); background: rgba(255,255,255,0.85); }
+.vy-edit-toggle.is-on {
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.45), 0 4px 10px -4px rgba(40,103,95,0.40);
+}
+.vy-edit-toggle.vy-edit-toggle--viridian.is-on {
+  background: linear-gradient(180deg, rgba(78,159,146,0.95), rgba(47,125,114,0.92));
+}
+.vy-edit-toggle.vy-edit-toggle--amber.is-on {
+  background: linear-gradient(180deg, rgba(224,189,141,0.95), rgba(154,91,30,0.85));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.45), 0 4px 10px -4px rgba(154,91,30,0.45);
+}
+
+/* Footer with the destructive action — kept apart so it's never the
+ * default click target. */
+.vy-edit-foot {
+  display: flex; justify-content: flex-end;
+  padding-top: 2px;
+}
+.vy-edit-delete {
+  appearance: none; border: 0;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px 6px 10px;
+  border-radius: 8px;
+  background: rgba(196,56,72,0.08);
+  color: #8a2a36;
+  font-family: var(--vbl-font-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms, transform 120ms, box-shadow 120ms;
+}
+.vy-edit-delete:hover {
+  background: rgba(196,56,72,0.18);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px -4px rgba(196,56,72,0.40);
+}
+.vy-edit-delete .material-symbols-outlined { font-size: 16px; line-height: 1; }
+
+/* Narrow viewports — sections fold to a single column, head sits on top. */
+@media (max-width: 760px) {
+  .vy-edit-section { grid-template-columns: 1fr; }
+  .vy-edit-section-head { padding-top: 0; }
+  .vy-edit-fields { grid-column: 1; }
+  .vy-edit-hint { display: none; }
+}
 
 /* Cards view variant — swaps the timeline rails for a flat grid. */
 .day-list[data-view="cards"] .vy-tl-line { display: none; }
