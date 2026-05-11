@@ -243,6 +243,8 @@ function renderTripPage() {
     onSaveStart: noteSaveStart,
     onSaveDone: noteSaveDone,
     onTitleChange: handleTripTitleChange,
+    openContextMenu,
+    toast,
   });
   paintTabs();
   paintHeader();
@@ -648,13 +650,26 @@ function paintDayStrip() {
     const num = (i + 1).toString().padStart(2, "0");
     const city = (d.city || "").slice(0, 3).toUpperCase();
     const sel = i === selectedIdx ? "is-selected" : "";
+    // The whole pill is HTML5-draggable but a mousedown handler below
+    // sets pill.draggable=false if the press lands OUTSIDE the grip,
+    // so a regular click never starts a drag — only grabbing the grip
+    // does. Restored on mouseup so the next interaction can drag again.
     return `
       <button class="vy-daypill ${sel}" data-day-idx="${i}"
               ${canEdit ? "draggable=\"true\"" : ""}
-              title="${escapeText(d.title || "Day " + (i + 1))}${canEdit ? "  ·  Drag to reorder, right-click for actions" : ""}">
-        <span class="vy-daypill-wd">${wd}</span>
-        <span class="vy-daypill-num">${num}</span>
-        <span class="vy-daypill-city">${escapeText(city || "—")}</span>
+              title="${escapeText(d.title || "Day " + (i + 1))}${canEdit ? "  ·  right-click for actions" : ""}">
+        <span class="vy-daypill-body">
+          <span class="vy-daypill-wd">${wd}</span>
+          <span class="vy-daypill-num">${num}</span>
+          <span class="vy-daypill-city">${escapeText(city || "—")}</span>
+        </span>
+        ${canEdit ? `<span class="vy-daypill-grip" title="Drag to reorder" aria-hidden>
+          <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor">
+            <circle cx="2" cy="2" r="1"/><circle cx="6" cy="2" r="1"/>
+            <circle cx="2" cy="7" r="1"/><circle cx="6" cy="7" r="1"/>
+            <circle cx="2" cy="12" r="1"/><circle cx="6" cy="12" r="1"/>
+          </svg>
+        </span>` : ""}
       </button>
     `;
   }).join("");
@@ -674,8 +689,15 @@ function paintDayStrip() {
   if (!canEdit) return;
 
   // ── Drag-to-reorder via HTML5 D&D ─────────────────────────────────
+  // Gate drag on grip: if the user pressed the pill body (not the
+  // grip), set draggable=false so HTML5 D&D never starts. Restore on
+  // mouseup so the next press evaluates the target again.
   let dragFromIdx = null;
   host.querySelectorAll("button[data-day-idx]").forEach((btn) => {
+    btn.addEventListener("mousedown", (e) => {
+      const onGrip = !!e.target.closest(".vy-daypill-grip");
+      btn.draggable = onGrip;
+    });
     btn.addEventListener("dragstart", (e) => {
       dragFromIdx = Number(btn.dataset.dayIdx);
       btn.classList.add("is-dragging");
@@ -692,7 +714,10 @@ function paintDayStrip() {
       // suppress one click so the dragged pill doesn't also "select".
       btn._suppressClick = true;
       setTimeout(() => { btn._suppressClick = false; }, 50);
+      // Restore draggability for the next interaction.
+      btn.draggable = true;
     });
+    btn.addEventListener("mouseup", () => { btn.draggable = true; });
     btn.addEventListener("dragover", (e) => {
       if (dragFromIdx == null) return;
       e.preventDefault();
