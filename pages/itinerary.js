@@ -223,24 +223,12 @@ export function renderItinerary(host, ctx) {
     }
     card.appendChild(tl);
 
-    if (!readOnly) wireEventDragReorder(tl, day);
-
     return card;
   }
 
-  // Attach HTML5 drag-and-drop to every .vy-tl-item inside the day's
-  // timeline. Uses pointer events + live transforms so siblings smoothly
-  // dodge to make space for the dragged item (iOS-style), and applies
-  // the new order optimistically — the local trip state is mutated and
-  // re-rendered immediately, then the API calls fire in the background.
-  function wireEventDragReorder(tl, day) {
-    const all = Array.from(tl.querySelectorAll(".vy-tl-item"));
-    all.forEach((wrap) => {
-      const grip = wrap.querySelector(".vy-tl-card-grip");
-      if (!grip) return;
-      grip.addEventListener("pointerdown", (e) => startItemDrag(e, wrap, all, tl));
-    });
-  }
+  // Drag wiring lives on each grip inside cardCell so it survives
+  // wrap re-renders (e.g. the inline editor closing after a time edit).
+  // startItemDrag below pulls allItems from the DOM at pointerdown time.
 
   function startItemDrag(downEvent, draggedWrap, allItems, tl) {
     if (downEvent.button !== 0 && downEvent.pointerType === "mouse") return;
@@ -456,6 +444,11 @@ export function renderItinerary(host, ctx) {
               else renderCardView();
             } },
           { type: "sep" },
+          { label: "Add event before", glyph: "arrow_upward",
+            onClick: () => addNewItem(day, idx) },
+          { label: "Add event after",  glyph: "arrow_downward",
+            onClick: () => addNewItem(day, idx + 1) },
+          { type: "sep" },
           { label: "Move up",   glyph: "north",
             disabled: idx === 0,
             onClick: () => moveItem(day, idx, -1) },
@@ -524,8 +517,6 @@ export function renderItinerary(host, ctx) {
       card.appendChild(lhs);
 
       const rhs = el("div", { class: "vy-tl-card-r" });
-      const dur = computeDuration(it.start_time, it.end_time);
-      if (dur) rhs.appendChild(el("span", { class: "vy-tl-card-dur", text: dur }));
       if (!readOnly) {
         // Quick-toggle buttons — always visible so users can flip a flag
         // without opening the editor or the context menu.
@@ -544,10 +535,12 @@ export function renderItinerary(host, ctx) {
           onClick: () => saveItemNow({ is_highlight: !it.is_highlight }),
         }));
       }
+      const dur = computeDuration(it.start_time, it.end_time);
+      if (dur) rhs.appendChild(el("span", { class: "vy-tl-card-dur", text: dur }));
       card.appendChild(rhs);
-      // Drag grip — its own column on the far right. Mousedown handler
-      // below toggles wrap.draggable so plain clicks elsewhere never
-      // start a drag.
+      // Drag grip — its own column on the far right. Pointerdown wires
+      // here so the grip stays draggable after any wrap re-render (e.g.
+      // closing the inline editor after editing the event's time).
       if (!readOnly) {
         const grip = el("button", {
           class: "vy-tl-card-grip",
@@ -557,6 +550,12 @@ export function renderItinerary(host, ctx) {
         },
           el("span", { class: "material-symbols-outlined", text: "drag_indicator" }),
         );
+        grip.addEventListener("pointerdown", (e) => {
+          const tlEl = grip.closest(".vy-tl");
+          if (!tlEl) return;
+          const allItems = Array.from(tlEl.querySelectorAll(".vy-tl-item"));
+          startItemDrag(e, wrap, allItems, tlEl);
+        });
         card.appendChild(grip);
       }
       return card;
@@ -588,8 +587,35 @@ export function renderItinerary(host, ctx) {
         value: (it.start_time || "").slice(0, 5), disabled: readOnly, title: "Start time" });
       const endInput   = el("input", { type: "time", class: "time-input",
         value: (it.end_time   || "").slice(0, 5), disabled: readOnly, title: "End time" });
-      startInput.addEventListener("input", () => saveItem({ start_time: startInput.value || null }));
-      endInput.addEventListener("input", () => saveItem({ end_time: endInput.value || null }));
+
+      // Time-overlap guard. The committed start/end are tracked locally
+      // so a rejected entry can snap the input back without re-rendering.
+      let lastGoodStart = (it.start_time || "").slice(0, 5);
+      let lastGoodEnd   = (it.end_time   || "").slice(0, 5);
+
+      function tryCommitTime(field, raw) {
+        const value = raw || "";
+        const newStart = field === "start" ? value : lastGoodStart;
+        const newEnd   = field === "end"   ? value : lastGoodEnd;
+        const conflict = findOverlap(day, it, newStart, newEnd);
+        if (conflict) {
+          const ot = formatTimeRange(conflict.start_time, conflict.end_time) ||
+                     formatTime(conflict.start_time) || "untimed";
+          (ctx.toast || alert)(
+            `Time conflicts with "${conflict.title || "untitled"}" (${ot})`,
+            true
+          );
+          if (field === "start") startInput.value = lastGoodStart;
+          else                   endInput.value   = lastGoodEnd;
+          return;
+        }
+        if (field === "start") lastGoodStart = value;
+        else                   lastGoodEnd   = value;
+        saveItem({ [field === "start" ? "start_time" : "end_time"]: value || null });
+      }
+
+      startInput.addEventListener("change", () => tryCommitTime("start", startInput.value));
+      endInput.addEventListener("change",   () => tryCommitTime("end",   endInput.value));
 
       const titleInput = el("input", { type: "text", class: "item-title-input",
         value: it.title || "", placeholder: "Item title", disabled: readOnly });
@@ -648,10 +674,6 @@ export function renderItinerary(host, ctx) {
             } }, "✕"),
         ),
         row1, row2, row3, row4,
-        !readOnly
-          ? el("button", { class: "btn ghost inline-add",
-              onClick: () => addNewItem(day, idx + 1) }, "+ Add event below this one")
-          : null,
       );
       return cell;
     }
@@ -866,6 +888,31 @@ function pipColor(chipClass) {
   if (chipClass === "meal") return "amber";
   if (chipClass === "note") return "muted";
   return "viridian";
+}
+
+// Find another timed item on this day that overlaps the proposed time
+// range for `selfItem`. Returns the conflicting item, or null if free.
+// Touching boundaries (one ends exactly when another starts) are OK.
+function findOverlap(day, selfItem, newStartStr, newEndStr) {
+  const parse = (s) => {
+    if (!s) return null;
+    const m = String(s).slice(0, 5).match(/^(\d{2}):(\d{2})$/);
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  };
+  const a = parse(newStartStr);
+  if (a == null) return null;
+  const b = parse(newEndStr);
+  const aEnd = b == null ? a : b;
+  for (const other of (day.items || [])) {
+    if (other.id === selfItem.id) continue;
+    const oa = parse(other.start_time);
+    if (oa == null) continue;
+    const ob = parse(other.end_time);
+    const oEnd = ob == null ? oa : ob;
+    if (a < oEnd && oa < aEnd) return other;
+    if (a === aEnd && oa === oEnd && a === oa) return other;
+  }
+  return null;
 }
 
 function computeDuration(s, e) {

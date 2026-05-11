@@ -234,7 +234,6 @@ Recommended sections:
 - Summary
 - Preparation progress
 - Current or upcoming day
-- Highlights
 - Important notes
 - Next fixed item
 
@@ -249,16 +248,6 @@ Progress:
 Preparation: 12 / 18 done
 Itinerary: 8 days planned
 Today: Day 3 · Kyoto
-
-Highlights:
-- Fushimi Inari
-- Kyoto tea house
-- Osaka street food
-
-Needs Attention:
-□ Buy train ticket
-□ Confirm hotel check-in time
-□ Save passport photo
 ```
 
 ### 5.3 Itinerary Page
@@ -910,6 +899,33 @@ Rules:
 - Do not add comments outside the JSON.
 - Return only valid JSON.
 
+Object shapes (use these exact field names — strings unless noted; "" or [] when unknown):
+
+  trip:
+    title, destination, start_date, end_date, summary, general_notes
+    travelers              array of strings
+
+  days[]:
+    date, title, city, notes
+    items                  array of item objects (see below)
+    todos                  array of day-todo objects (see below)
+
+  days[].items[]:
+    title, type, start_time, end_time, location_name, map_url, notes, status
+    is_fixed               boolean (locked-in schedule, not movable)
+    is_highlight           boolean (must-do / favourite of the trip)
+
+  days[].todos[]:
+    text, category, due_date, notes
+    is_done                boolean
+
+  preparation_checklist[]:
+    text, category, due_date, notes
+    is_done                boolean
+
+  notes[]:
+    title, body
+
 Task:
 [User writes request here]
 
@@ -1243,18 +1259,7 @@ Location: Hilton Kyoto
 Note: Reservation under Zac
 ```
 
-### 20.2 Needs Attention Section
-
-Automatically show incomplete important items:
-
-```text
-Needs attention:
-□ Buy train ticket
-□ Confirm hotel check-in time
-□ Save passport photo
-```
-
-### 20.3 Day Progress
+### 20.2 Day Progress
 
 For each day:
 
@@ -1262,7 +1267,7 @@ For each day:
 3 / 5 todos done
 ```
 
-### 20.4 Labels
+### 20.3 Labels
 
 Recommended labels:
 
@@ -1276,7 +1281,7 @@ Optional
 Highlight
 ```
 
-### 20.5 Simple Visual Hierarchy
+### 20.4 Simple Visual Hierarchy
 
 Use a calm, clean hierarchy:
 

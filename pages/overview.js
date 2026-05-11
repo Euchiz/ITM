@@ -24,10 +24,6 @@ export function renderOverview(host, ctx) {
   const todayDay = (t.days || []).find((d) => d.date === todayIso());
   const upcoming = nextUpcoming(t);
   const highlights = allItems.filter((it) => it.is_highlight);
-  const needsAttention = [
-    ...prep.filter((c) => !c.is_done).slice(0, 5),
-    ...allItems.filter((it) => it.status === "needs_booking").slice(0, 5),
-  ].slice(0, 8);
 
   host.appendChild(
     el("div", { class: "overview" },
@@ -96,22 +92,16 @@ export function renderOverview(host, ctx) {
           )
         : null,
 
-      // Highlights
+      // Highlights — derived automatically from itinerary items flagged
+      // as highlights. Not directly editable here; toggle the star on
+      // an event in the itinerary page to add/remove from this list.
       highlights.length > 0
         ? el("section", { class: "card" },
             el("h3", { text: "Highlights" }),
+            el("p", { class: "muted small",
+              text: "Auto-collected from items you’ve starred in the itinerary." }),
             el("ul", { class: "plain-list" },
               ...highlights.slice(0, 8).map((h) => el("li", { text: "⭐ " + (h.title || "(untitled)") }))
-            ),
-          )
-        : null,
-
-      // Needs attention
-      needsAttention.length > 0
-        ? el("section", { class: "card" },
-            el("h3", { text: "Needs attention" }),
-            el("ul", { class: "plain-list" },
-              ...needsAttention.map((n) => el("li", { text: needsAttentionLabel(n) }))
             ),
           )
         : null,
@@ -157,11 +147,6 @@ function dayLabel(day) {
   const date = day.date ? formatDate(day.date) : "";
   const name = day.title || day.city || "";
   return [date, name].filter(Boolean).join(" · ");
-}
-
-function needsAttentionLabel(n) {
-  if ("text" in n) return "□ " + n.text;
-  return "⚠ Needs booking: " + (n.title || "(untitled)");
 }
 
 function nextUpcoming(t) {
