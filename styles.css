@@ -516,42 +516,52 @@ html, body {
   background: rgba(255,255,255,0.2);
 }
 
-/* ===== Trip view shell — sidebar + main, mirroring desktop.jsx ===== */
+/* ===== Trip view shell — sidebar + main, mirroring desktop.jsx =====
+ *
+ * Desktop layout:
+ *   - sidebar is position:fixed, full viewport height, left edge.
+ *   - main column gets margin-left equal to the sidebar width so it
+ *     sits to the right of the sidebar without slipping under.
+ *   - topbar inside main is sticky at the top.
+ *   - app-header (the global one with brand + signout) is hidden on
+ *     the trip view to give the design the chrome-less feel.
+ * Mobile (≤900px):
+ *   - sidebar disappears (mobile-nav at the bottom takes its place),
+ *   - main margin-left collapses to 0,
+ *   - app-header reappears so signout/settings stay reachable.
+ */
+
+body[data-view="trip"] .app-header { display: none; }
 
 .view-trip {
-  display: grid;
-  grid-template-columns: 248px minmax(0, 1fr);
-  max-width: 1380px;
-  margin: 0 auto;
-  padding: 0 16px 24px;
-  gap: 0;
-  align-items: start;
-  min-height: calc(100vh - 60px);
+  display: block;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
   position: relative;
 }
 
-/* ─ sidebar ─────────────────────────────────────────────────────── */
+/* ─ sidebar — fixed full-height left rail ────────────────────────── */
 
 .vy-sidebar {
-  position: sticky;
-  top: 64px;
-  align-self: start;
+  position: fixed;
+  top: 0; bottom: 0; left: 0;
+  width: 248px;
+  z-index: 25;
   display: flex; flex-direction: column;
   gap: 14px;
   padding: 18px 12px 16px;
-  max-height: calc(100vh - 80px);
   overflow-y: auto;
-  border-radius: 18px;
-  margin: 14px 0 0;
-  background: linear-gradient(180deg, rgba(249,250,248,0.72) 0%, rgba(249,250,248,0.35) 100%);
+  border-radius: 0;
+  margin: 0;
+  background: linear-gradient(180deg, rgba(249,250,248,0.85) 0%, rgba(244,249,241,0.65) 100%);
   border: 0;
   backdrop-filter: blur(22px) saturate(1.15);
   -webkit-backdrop-filter: blur(22px) saturate(1.15);
   box-shadow:
-    inset 0 0 0 1px rgba(255,255,255,0.55),
-    inset 1px 1px 0 -0.5px rgba(40,103,95,0.14),
-    inset -1px -1px 0 -0.5px rgba(20,32,31,0.16),
-    0 12px 28px -16px rgba(40,103,95,0.18);
+    inset -1px 0 0 rgba(255,255,255,0.5),
+    1px 0 24px -8px rgba(40,103,95,0.10);
   scrollbar-width: thin;
 }
 .vy-sidebar::-webkit-scrollbar { width: 6px; }
@@ -792,15 +802,221 @@ html, body {
 .vy-mode-switch button.is-active small { color: var(--vbl-viridian); }
 .vy-mode-switch[data-mode="travel"] { background: rgba(78,159,146,0.10); }
 
+/* User identity strip — sits at the very bottom of the sidebar foot */
+.vy-side-user {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 6px 0;
+  border-top: 1px dashed rgba(78,159,146,0.20);
+  margin-top: 4px;
+}
+.vy-avatar--sm {
+  width: 28px; height: 28px;
+  font-size: 0.62rem;
+}
+.vy-side-user-text { display: grid; gap: 1px; min-width: 0; }
+.vy-side-user-text b {
+  font-family: var(--vbl-font-body);
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--vbl-ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.vy-side-user-text span {
+  font-family: var(--vbl-font-display);
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--vbl-fg-4);
+}
+.vy-side-signout {
+  appearance: none;
+  border: 0;
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--vbl-fg-3);
+  cursor: pointer;
+  display: grid; place-items: center;
+  transition: background 120ms, color 120ms;
+}
+.vy-side-signout:hover {
+  background: rgba(180,35,24,0.10);
+  color: var(--vbl-red);
+}
+.vy-side-signout .material-symbols-outlined { font-size: 16px; line-height: 1; }
+
 /* ─ main column ─────────────────────────────────────────────────── */
 
 .vy-main {
   min-width: 0;
-  padding: 14px 14px 24px;
+  margin-left: 248px;            /* offset the fixed sidebar's width */
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 14px;
 }
+.vy-main-scroll {
+  padding: 18px 24px 32px;
+  display: flex; flex-direction: column;
+  gap: 14px;
+  max-width: 1280px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ─ topbar — live status · search · bell · members · share ───────── */
+
+.vy-topbar {
+  position: sticky; top: 0; z-index: 20;
+  display: grid;
+  grid-template-columns: auto 1fr auto auto auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px 24px;
+  background: linear-gradient(180deg, rgba(249,250,248,0.85), rgba(249,250,248,0.45));
+  backdrop-filter: blur(20px) saturate(1.15);
+  -webkit-backdrop-filter: blur(20px) saturate(1.15);
+  box-shadow:
+    inset 0 -1px 0 rgba(40,103,95,0.08),
+    0 8px 22px -16px rgba(40,103,95,0.18);
+}
+.vy-topbar-live {
+  display: flex; align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.vy-topbar-live .vy-meta {
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.vy-livedot {
+  display: inline-block;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--vbl-viridian);
+  box-shadow:
+    0 0 0 3px rgba(78,159,146,0.22),
+    0 0 8px rgba(78,159,146,0.6);
+  animation: vy-pulse 1.8s ease-in-out infinite;
+}
+
+.vy-search {
+  display: flex; align-items: center;
+  gap: 8px;
+  height: 34px;
+  min-width: 260px;
+  max-width: 520px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.6);
+  box-shadow: inset 0 0 0 1px var(--vbl-line);
+  color: var(--vbl-fg-3);
+  font-size: 0.8rem;
+  cursor: not-allowed;
+}
+.vy-search .material-symbols-outlined {
+  font-size: 16px;
+  line-height: 1;
+  color: var(--vbl-fg-3);
+}
+.vy-search-placeholder {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex: 0 1 auto;
+}
+.vy-search-spacer { flex: 1; }
+.vy-search kbd {
+  font-family: var(--vbl-font-mono);
+  font-size: 0.62rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--vbl-fg-3);
+  background: rgba(255,255,255,0.5);
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+}
+
+.vy-topbar .vy-icon-btn {
+  appearance: none;
+  border: 0;
+  width: 34px; height: 34px;
+  border-radius: 10px;
+  display: grid; place-items: center;
+  background: rgba(255,255,255,0.55);
+  box-shadow: inset 0 0 0 1px var(--vbl-line);
+  color: var(--vbl-ink);
+  cursor: pointer;
+  transition: background 120ms, transform 120ms;
+}
+.vy-topbar .vy-icon-btn:hover { background: rgba(255,255,255,0.92); transform: translateY(-1px); }
+.vy-topbar .vy-icon-btn[aria-disabled="true"] {
+  cursor: not-allowed;
+  color: var(--vbl-fg-3);
+}
+.vy-topbar .vy-icon-btn[aria-disabled="true"]:hover { transform: none; }
+.vy-topbar .vy-icon-btn .material-symbols-outlined {
+  font-size: 18px; line-height: 1;
+}
+
+/* member avatar stack */
+.vy-share-stack {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  display: inline-flex; align-items: center;
+  cursor: pointer;
+  padding: 0;
+  height: 34px;
+}
+.vy-share-stack > * { margin-left: -8px; }
+.vy-share-stack > *:first-child { margin-left: 0; }
+.vy-avatar {
+  position: relative;
+  display: inline-grid; place-items: center;
+  width: 34px; height: 34px;
+  border-radius: 999px;
+  font-family: var(--vbl-font-display);
+  font-size: 0.72rem; font-weight: 600;
+  color: rgba(20,32,31,0.78);
+  text-shadow: 0 1px 0 rgba(255,255,255,0.85);
+  isolation: isolate;
+  filter: drop-shadow(0 4px 6px rgba(20,32,31,0.10));
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.85),
+    inset 0 1.5px 0 rgba(255,255,255,0.95),
+    inset 0 -1.5px 0 rgba(255,255,255,0.5);
+  transition: transform 140ms;
+}
+.vy-share-stack:hover .vy-avatar { transform: translateY(-1px); }
+.vy-avatar--more {
+  background: rgba(20,32,31,0.06) !important;
+  color: var(--vbl-fg-2);
+}
+.vy-avatar span { line-height: 1; }
+
+/* Share trip — primary pill */
+.vy-topbar .vy-btn-primary {
+  appearance: none; border: 0;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(78,159,146,0.95) 0%, rgba(47,125,114,0.92) 100%);
+  color: #fff;
+  font-family: var(--vbl-font-display);
+  font-weight: 600;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  text-shadow: 0 1px 0 rgba(20,40,38,0.20);
+  box-shadow:
+    inset 0 0 14px 0 rgba(255,255,255,0.18),
+    inset 0 0 3px 0 rgba(255,255,255,0.45),
+    inset 1px 1px 0.5px -1px rgba(255,255,255,0.95),
+    inset -1px -1px 0.5px -1px rgba(255,255,255,0.6),
+    0 6px 14px -6px rgba(40,103,95,0.45);
+  transition: transform 120ms, box-shadow 140ms;
+}
+.vy-topbar .vy-btn-primary:hover { transform: translateY(-1px); }
+.vy-topbar .vy-btn-primary .material-symbols-outlined { font-size: 16px; line-height: 1; }
 
 /* hero block */
 .vy-hero {
@@ -1759,13 +1975,22 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
 /* ===== Responsive ===== */
 
 @media (max-width: 900px) {
-  .view-trip {
-    grid-template-columns: 1fr;
-    padding: 0 12px 90px;
-    min-height: 0;
-  }
+  /* Mobile: drop the fixed sidebar entirely; restore the global app-
+   * header (so signout / settings stay reachable); the mobile-nav at
+   * the bottom takes over primary navigation. */
+  body[data-view="trip"] .app-header { display: flex; }
+  .view-trip { padding: 0 12px 90px; }
   .vy-sidebar { display: none; }
-  .vy-main { padding: 8px 0; }
+  .vy-main { margin-left: 0; min-height: 0; }
+  .vy-main-scroll { padding: 14px 12px 32px; }
+  .vy-topbar {
+    grid-template-columns: auto 1fr auto auto;
+    padding: 10px 14px;
+    gap: 8px;
+  }
+  .vy-topbar .vy-btn-primary { display: none; }   /* share trip → moved into hero / actions */
+  .vy-search { min-width: 0; }
+  .vy-search-placeholder { display: none; }
   .vy-hero { padding: 14px 16px; grid-template-columns: 1fr; gap: 8px; }
   .vy-hero-right { text-align: left; }
   .vy-page-shell { padding: 14px 14px 12px; }
