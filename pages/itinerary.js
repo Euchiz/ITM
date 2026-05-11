@@ -230,12 +230,38 @@ export function renderItinerary(host, ctx) {
     const wrap = el("div", { class: "vy-tl-item", "data-status": it.status, "data-id": it.id });
     wrap.classList.toggle("is-fixed", !!it.is_fixed);
     wrap.classList.toggle("is-highlight", !!it.is_highlight);
+    // Surface the event type on the wrap so CSS can tint the highlight
+    // background to match the chip palette (highlight bg picks up the
+    // event's hue rather than always being amber).
+    wrap.dataset.type = it.type || "activity";
+
+    // saveItemNow lifted to closure scope so cardCell + contextmenu can
+    // both call it without going through the editor.
+    async function saveItemNow(patch, opts = {}) {
+      ctx.onSaveStart?.();
+      try {
+        await items.update(it.id, patch);
+        Object.assign(it, patch);
+        wrap.classList.toggle("is-fixed", !!it.is_fixed);
+        wrap.classList.toggle("is-highlight", !!it.is_highlight);
+        wrap.dataset.status = it.status;
+        wrap.dataset.type = it.type || "activity";
+        if (opts.keepEditor && expandedItemId === it.id) renderEditorView();
+        else if (expandedItemId === it.id)              renderEditorView();
+        else                                             renderCardView();
+      } catch (e) {
+        alert("Save failed: " + e.message);
+      } finally {
+        ctx.onSaveDone?.();
+      }
+    }
 
     function renderCardView() {
       wrap.innerHTML = "";
       wrap.appendChild(timeCell(it));
       wrap.appendChild(pipCell(it));
       wrap.appendChild(cardCell(it));
+      attachContextMenu();
     }
 
     function renderEditorView() {
@@ -243,6 +269,43 @@ export function renderItinerary(host, ctx) {
       wrap.appendChild(timeCell(it));
       wrap.appendChild(pipCell(it));
       wrap.appendChild(editorCell(day, it, idx));
+      attachContextMenu();
+    }
+
+    function attachContextMenu() {
+      if (readOnly || !ctx.openContextMenu) return;
+      wrap.addEventListener("contextmenu", (e) => {
+        // Let inputs keep their native menu (copy/paste/spellcheck).
+        if (e.target.closest("input, textarea, select")) return;
+        e.preventDefault();
+        const items = day.items || [];
+        ctx.openContextMenu(e.clientX, e.clientY, [
+          { label: expandedItemId === it.id ? "Close editor" : "Edit event",
+            glyph: expandedItemId === it.id ? "close" : "edit",
+            onClick: () => {
+              expandedItemId = (expandedItemId === it.id) ? null : it.id;
+              if (expandedItemId === it.id) renderEditorView();
+              else renderCardView();
+            } },
+          { type: "sep" },
+          { label: "Move up",   glyph: "north",
+            disabled: idx === 0,
+            onClick: () => moveItem(day, idx, -1) },
+          { label: "Move down", glyph: "south",
+            disabled: idx === items.length - 1,
+            onClick: () => moveItem(day, idx, +1) },
+          { type: "sep" },
+          { label: it.is_fixed ? "Mark flexible" : "Mark fixed",
+            glyph: it.is_fixed ? "lock_open" : "lock",
+            onClick: () => saveItemNow({ is_fixed: !it.is_fixed }) },
+          { label: it.is_highlight ? "Unhighlight" : "Highlight",
+            glyph: "star",
+            onClick: () => saveItemNow({ is_highlight: !it.is_highlight }) },
+          { type: "sep" },
+          { label: "Delete event", glyph: "delete", danger: true,
+            onClick: () => deleteItem(it) },
+        ]);
+      });
     }
 
     function timeCell(it) {
@@ -252,9 +315,12 @@ export function renderItinerary(host, ctx) {
 
     function pipCell(it) {
       const v = TYPE_VISUALS[it.type] || TYPE_VISUALS.activity;
-      const on = !!it.is_fixed || it.type === "lodging" || it.type === "transport";
+      // Color follows the event TYPE.
+      // Filled iff is_fixed; empty otherwise (= flexible).
+      // Highlight is communicated by the card background, not the pip.
+      const fill = !!it.is_fixed;
       return el("div", { class: "vy-tl-pip-col" },
-        el("span", { class: `vy-pip vy-pip--${pipColor(v.chipClass)} ${on ? "is-on" : ""}` }),
+        el("span", { class: `vy-pip vy-pip--${pipColor(v.chipClass)} ${fill ? "is-on" : ""}` }),
       );
     }
 
@@ -262,7 +328,8 @@ export function renderItinerary(host, ctx) {
       const v = TYPE_VISUALS[it.type] || TYPE_VISUALS.activity;
       const card = el("div", { class: "vy-tl-card",
         onClick: (e) => {
-          // Don't trigger from inner buttons / inputs
+          // Quick toggles & inner controls swallow their own clicks. Any
+          // other click on the card body opens the inline editor.
           if (e.target.closest("button, input, select, textarea, a")) return;
           if (!readOnly) {
             expandedItemId = it.id;
@@ -284,8 +351,6 @@ export function renderItinerary(host, ctx) {
           : (it.notes ? el("div", { class: "vy-tl-card-sub", text: it.notes }) : null),
       );
       const flagRow = el("div", { class: "vy-tl-card-meta" });
-      if (it.is_fixed) flagRow.appendChild(el("span", { class: "vy-conf", text: "🔒 FIXED" }));
-      if (it.is_highlight) flagRow.appendChild(el("span", { class: "vy-conf", text: "★ HIGHLIGHT" }));
       if (it.status && it.status !== "planned") flagRow.appendChild(el("span", { class: "vy-conf", text: it.status.toUpperCase() }));
       if (flagRow.children.length) lhs.appendChild(flagRow);
       card.appendChild(lhs);
@@ -293,11 +358,37 @@ export function renderItinerary(host, ctx) {
       const rhs = el("div", { class: "vy-tl-card-r" });
       const dur = computeDuration(it.start_time, it.end_time);
       if (dur) rhs.appendChild(el("span", { class: "vy-tl-card-dur", text: dur }));
-      if (!readOnly) rhs.appendChild(
-        el("span", { class: "material-symbols-outlined vy-tl-drag", text: "drag_indicator", title: "Drag (use arrows in edit mode)" })
-      );
+      if (!readOnly) {
+        // Quick-toggle buttons — always visible so users can flip a flag
+        // without opening the editor or the context menu.
+        rhs.appendChild(quickToggle({
+          on: !!it.is_fixed,
+          glyph: it.is_fixed ? "lock" : "lock_open",
+          title: it.is_fixed ? "Fixed — click to make flexible" : "Flexible — click to fix in place",
+          tone: "viridian",
+          onClick: () => saveItemNow({ is_fixed: !it.is_fixed }),
+        }));
+        rhs.appendChild(quickToggle({
+          on: !!it.is_highlight,
+          glyph: "star",
+          title: it.is_highlight ? "Highlighted — click to unhighlight" : "Mark as highlight",
+          tone: "amber",
+          onClick: () => saveItemNow({ is_highlight: !it.is_highlight }),
+        }));
+      }
       card.appendChild(rhs);
       return card;
+    }
+
+    function quickToggle({ on, glyph, title, tone, onClick }) {
+      const btn = el("button", {
+        class: `vy-tl-quick ${on ? "is-on" : ""} vy-tl-quick--${tone || "viridian"}`,
+        title,
+        onClick: (e) => { e.stopPropagation(); onClick(); },
+      },
+        el("span", { class: "material-symbols-outlined", text: glyph }),
+      );
+      return btn;
     }
 
     function editorCell(day, it, idx) {
@@ -307,22 +398,9 @@ export function renderItinerary(host, ctx) {
         await items.update(it.id, patch);
         Object.assign(it, patch);
       }), 600);
-
-      async function saveItemNow(patch) {
-        ctx.onSaveStart?.();
-        try {
-          await items.update(it.id, patch);
-          Object.assign(it, patch);
-          wrap.classList.toggle("is-fixed", !!it.is_fixed);
-          wrap.classList.toggle("is-highlight", !!it.is_highlight);
-          wrap.dataset.status = it.status;
-          renderEditorView();
-        } catch (e) {
-          alert("Save failed: " + e.message);
-        } finally {
-          ctx.onSaveDone?.();
-        }
-      }
+      // `saveItemNow` is the closure-scope function lifted to the parent
+      // timelineItem — re-renders the card on completion so toggled
+      // type/status/flags refresh both the chip and the wrap classes.
 
       const startInput = el("input", { type: "time", class: "time-input",
         value: (it.start_time || "").slice(0, 5), disabled: readOnly, title: "Start time" });
@@ -478,18 +556,108 @@ export function renderItinerary(host, ctx) {
   }
 
   async function moveItem(day, idx, dir) {
-    const arr = day.items.slice();
+    const snapshot = (day.items || []).slice();
     const j = idx + dir;
-    if (j < 0 || j >= arr.length) return;
-    const [it] = arr.splice(idx, 1);
-    arr.splice(j, 0, it);
+    if (j < 0 || j >= snapshot.length) return;
+
+    const newOrder = snapshot.slice();
+    const [moved] = newOrder.splice(idx, 1);
+    newOrder.splice(j, 0, moved);
+
+    // Preserve each event's duration. Treat the original positional
+    // gaps between consecutive timed items as implicit rest — they
+    // travel with their slot index, not with any particular event.
+    const timeUpdates = recomputeItemTimes(snapshot, newOrder);
+
     ctx.onSaveStart?.();
     try {
-      await items.reorder(arr.map((x) => x.id));
+      await items.reorder(newOrder.map((x) => x.id));
+      for (const u of timeUpdates) {
+        await items.update(u.id, { start_time: u.start_time, end_time: u.end_time });
+      }
       await ctx.refresh();
-    } catch (e) { alert("Reorder failed: " + e.message); }
-    finally { ctx.onSaveDone?.(); }
+    } catch (e) {
+      alert("Reorder failed: " + e.message);
+    } finally {
+      ctx.onSaveDone?.();
+    }
   }
+}
+
+// ─── Auto-retime on reorder ────────────────────────────────────────
+//
+// When events are reordered, keep each event's duration but rewrite
+// its start/end times so the day's schedule shifts to match the new
+// order. The "rest gaps" between consecutive timed items are treated
+// as implicit (never persisted as events) and travel with positional
+// slot index — gap[0] is the gap after the first timed slot, etc.
+//
+// Returns a list of { id, start_time, end_time } updates that need
+// to be persisted. Items that originally had no start_time stay
+// untimed and don't participate in the chain.
+function recomputeItemTimes(snapshot, newOrder) {
+  const parseT = (s) => {
+    if (!s) return null;
+    const m = String(s).slice(0, 5).match(/^(\d{2}):(\d{2})$/);
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  };
+  const fmtT = (mins) => {
+    const m = ((mins % 1440) + 1440) % 1440;
+    const h = Math.floor(m / 60);
+    const mm = m % 60;
+    return `${String(h).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+  };
+
+  // Only timed items participate. Anchor is the first timed item's
+  // original start time.
+  const timedOriginals = snapshot.filter((x) => parseT(x.start_time) != null);
+  if (timedOriginals.length < 2) return [];
+  const anchor = parseT(timedOriginals[0].start_time);
+
+  // Positional gaps between consecutive timed originals.
+  const gaps = [];
+  for (let i = 0; i < timedOriginals.length - 1; i++) {
+    const a = timedOriginals[i];
+    const b = timedOriginals[i + 1];
+    const aEnd = parseT(a.end_time) ?? parseT(a.start_time);
+    const bStart = parseT(b.start_time);
+    gaps.push((aEnd != null && bStart != null && bStart >= aEnd) ? bStart - aEnd : 0);
+  }
+
+  // Per-item original duration (end - start, or 0).
+  const durById = new Map();
+  for (const it of snapshot) {
+    const s = parseT(it.start_time);
+    const e = parseT(it.end_time);
+    durById.set(it.id, s != null && e != null ? Math.max(0, e - s) : 0);
+  }
+
+  const origById = new Map(snapshot.map((x) => [x.id, x]));
+
+  let cursor = anchor;
+  let timedPos = 0;
+  const updates = [];
+  for (const it of newOrder) {
+    const orig = origById.get(it.id);
+    if (!orig || parseT(orig.start_time) == null) continue;
+
+    const dur = durById.get(it.id) || 0;
+    const newStart = cursor;
+    const newEnd = newStart + dur;
+    const newStartStr = fmtT(newStart);
+    const newEndStr = dur > 0 ? fmtT(newEnd) : null;
+
+    const origStartStr = orig.start_time ? orig.start_time.slice(0, 5) : null;
+    const origEndStr   = orig.end_time   ? orig.end_time.slice(0, 5)   : null;
+
+    if (newStartStr !== origStartStr || newEndStr !== origEndStr) {
+      updates.push({ id: it.id, start_time: newStartStr, end_time: newEndStr });
+    }
+
+    cursor = newEnd + (gaps[timedPos] || 0);
+    timedPos++;
+  }
+  return updates;
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────
