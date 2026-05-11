@@ -1,20 +1,37 @@
-// Prepare page. Trip-level (day_id NULL) checklist grouped by category,
-// with template seeding.
+// Prepare page (Plan mode). Trip-level (day_id NULL) checklist with
+// a tag-chip filter row at the top — categories surface as Voyage-
+// styled chips (DOCUMENTS, BOOKING, TRANSIT, …), and clicking one
+// filters the list to that group.
 
 import { checklist } from "../supabase.js";
 import { CHECKLIST_CATEGORIES } from "../io/schema.js";
 import { TEMPLATES } from "../templates.js";
-import { el, debouncedSave, autosize, withSaveIndicator, groupBy } from "./_utils.js";
+import { el, debouncedSave, withSaveIndicator, groupBy } from "./_utils.js";
 
 const CATEGORY_LABELS = {
   booking: "Booking",
   document: "Documents",
   packing: "Packing",
   payment: "Payment",
-  transportation: "Transportation",
+  transportation: "Transit",
   health: "Health",
   other: "Other",
 };
+
+// Each category maps onto a Voyage chip palette + glyph. Aligned with
+// the item-type vocabulary in the design (STAYS/TRANSIT/DINING/…) so
+// the visual language is consistent across Plan-mode pages.
+const CATEGORY_VISUALS = {
+  booking:        { chipClass: "stay",    glyph: "bookmark",       label: "BOOKING" },
+  document:       { chipClass: "thing",   glyph: "description",    label: "DOCUMENTS" },
+  packing:        { chipClass: "thing",   glyph: "luggage",        label: "PACKING" },
+  payment:        { chipClass: "meal",    glyph: "payments",       label: "PAYMENT" },
+  transportation: { chipClass: "transit", glyph: "directions_railway", label: "TRANSIT" },
+  health:         { chipClass: "note",    glyph: "medication",     label: "HEALTH" },
+  other:          { chipClass: "note",    glyph: "more_horiz",     label: "OTHER" },
+};
+
+const FILTER_STORAGE_KEY = "voyage:prepare-filter";
 
 export function renderPrepare(host, ctx) {
   const t = ctx.trip;
@@ -27,27 +44,82 @@ export function renderPrepare(host, ctx) {
   const total = prep.length;
   const done = prep.filter((c) => c.is_done).length;
 
+  // Read persisted filter (or default "all").
+  let filter = readFilter();
+  if (filter !== "all" && !CHECKLIST_CATEGORIES.includes(filter)) filter = "all";
+
+  // ── Page head ───────────────────────────────────────────────────────
   host.appendChild(
-    el("section", { class: "page-head" },
-      el("h2", { text: "Before you go" }),
-      el("p", { class: "muted",
-        text: total > 0
-          ? `${done} / ${total} done. Group items by category — Documents, Booking, Packing, etc.`
-          : "Add items you need to handle before leaving. Try a template to get started." }),
+    el("section", { class: "page-head vy-prep-head" },
+      el("div", { class: "vy-prep-head-l" },
+        el("h2", { text: "Prepare" }),
+        el("p", { class: "muted",
+          text: total > 0
+            ? `${done} / ${total} done. Tag-filter to focus on a category — Booking, Transit, Packing, …`
+            : "Tag-filter to focus on a category. Add items below or seed one of the templates." }),
+      ),
       !readOnly ? toolbar() : null,
     )
   );
+
+  // ── Filter chip row ─────────────────────────────────────────────────
+  const counts = countByCategory(prep);
+  const filterRow = el("div", { class: "vy-tagfilter" });
+  filterRow.appendChild(makeChip("all", "All", { chipClass: "thing", glyph: "filter_list", label: "ALL" }, total));
+  CHECKLIST_CATEGORIES.forEach((cat) => {
+    filterRow.appendChild(makeChip(cat, CATEGORY_LABELS[cat] || cat, CATEGORY_VISUALS[cat], counts[cat] || 0));
+  });
+  host.appendChild(filterRow);
 
   if (prep.length === 0 && !readOnly) {
     host.appendChild(emptyState());
     return;
   }
 
-  const grouped = groupBy(prep, "category");
-  for (const cat of CHECKLIST_CATEGORIES) {
-    const list = grouped.get(cat) || [];
-    if (list.length === 0) continue;
-    host.appendChild(categorySection(cat, list));
+  // ── Category sections (filtered) ─────────────────────────────────────
+  const list = el("div", { class: "vy-prep-groups" });
+  host.appendChild(list);
+  renderList();
+
+  function renderList() {
+    list.innerHTML = "";
+    const grouped = groupBy(prep, "category");
+    const cats = filter === "all"
+      ? CHECKLIST_CATEGORIES
+      : [filter];
+    let any = false;
+    for (const cat of cats) {
+      const items = grouped.get(cat) || [];
+      if (!items.length) continue;
+      any = true;
+      list.appendChild(categorySection(cat, items));
+    }
+    if (!any) {
+      list.appendChild(el("div", { class: "empty-state vy-prep-empty" },
+        el("h3", { text: "Nothing in this category yet" }),
+        el("p", { text: "Switch to All to see the rest, or add an item below." }),
+      ));
+    }
+  }
+
+  function makeChip(value, label, vis, count) {
+    const v = vis || CATEGORY_VISUALS.other;
+    const btn = el("button", {
+      class: `vy-chip vy-chip--${v.chipClass} vy-chip--button ${value === filter ? "is-active" : ""}`,
+      onClick: () => {
+        filter = value;
+        writeFilter(filter);
+        filterRow.querySelectorAll("button").forEach((b) =>
+          b.classList.toggle("is-active", b.dataset.v === filter));
+        renderList();
+      },
+    },
+      el("span", { class: "material-symbols-outlined", text: v.glyph }),
+      el("span", { text: label.toUpperCase() }),
+      count != null ? el("small", { text: count }) : null,
+    );
+    btn.dataset.v = value;
+    return btn;
   }
 
   function toolbar() {
@@ -70,9 +142,16 @@ export function renderPrepare(host, ctx) {
   }
 
   function categorySection(cat, list) {
-    const wrap = el("section", { class: "card prep-cat" });
+    const wrap = el("section", { class: "card prep-cat", "data-cat": cat });
+    const v = CATEGORY_VISUALS[cat] || CATEGORY_VISUALS.other;
     wrap.append(
-      el("h3", { class: "prep-cat-title", text: CATEGORY_LABELS[cat] || cat }),
+      el("div", { class: "vy-prep-cat-head" },
+        el("span", { class: `vy-chip vy-chip--${v.chipClass}` },
+          el("span", { class: "material-symbols-outlined", text: v.glyph }),
+          el("span", { text: v.label }),
+        ),
+        el("span", { class: "vy-meta", text: `${list.filter((c) => c.is_done).length} / ${list.length} DONE` }),
+      ),
     );
     list.forEach((c) => wrap.appendChild(itemRow(c)));
     return wrap;
@@ -86,10 +165,8 @@ export function renderPrepare(host, ctx) {
 
     const row = el("div", { class: "check-row" });
 
-    const cb = el("input", {
-      type: "checkbox", class: "big-check",
-      checked: c.is_done, disabled: readOnly,
-    });
+    const cb = el("input", { type: "checkbox", class: "big-check",
+      checked: c.is_done, disabled: readOnly });
     cb.addEventListener("change", () => {
       c.is_done = cb.checked;
       row.classList.toggle("done", cb.checked);
@@ -100,17 +177,13 @@ export function renderPrepare(host, ctx) {
     });
     row.classList.toggle("done", c.is_done);
 
-    const txt = el("input", {
-      type: "text", class: "check-text",
+    const txt = el("input", { type: "text", class: "check-text",
       value: c.text || "", placeholder: "What needs to be done?",
-      disabled: readOnly,
-    });
+      disabled: readOnly });
     txt.addEventListener("input", () => save({ text: txt.value }));
 
-    const dueInput = el("input", {
-      type: "date", value: c.due_date || "", title: "Due date",
-      class: "due-date", disabled: readOnly,
-    });
+    const dueInput = el("input", { type: "date", value: c.due_date || "",
+      title: "Due date", class: "due-date", disabled: readOnly });
     dueInput.addEventListener("input", () => save({ due_date: dueInput.value || null }));
 
     const catSelect = el("select", { class: "cat-select", disabled: readOnly });
@@ -136,34 +209,26 @@ export function renderPrepare(host, ctx) {
     if (!readOnly) {
       row.appendChild(
         el("button", {
-          class: "icon-btn danger",
-          title: "Delete",
+          class: "icon-btn danger", title: "Delete",
           onClick: async () => {
             if (!confirm("Delete this item?")) return;
             ctx.onSaveStart?.();
             try {
               await checklist.remove(c.id);
               await ctx.refresh();
-            } catch (e) {
-              alert("Delete failed: " + e.message);
-            } finally {
-              ctx.onSaveDone?.();
-            }
+            } catch (e) { alert("Delete failed: " + e.message); }
+            finally { ctx.onSaveDone?.(); }
           },
         }, "✕")
       );
     }
 
     if (c.notes) {
-      const notes = el("input", {
-        type: "text", class: "check-notes",
-        value: c.notes, placeholder: "Notes",
-        disabled: readOnly,
-      });
+      const notes = el("input", { type: "text", class: "check-notes",
+        value: c.notes, placeholder: "Notes", disabled: readOnly });
       notes.addEventListener("input", () => save({ notes: notes.value }));
       row.appendChild(notes);
     }
-
     return row;
   }
 
@@ -171,9 +236,7 @@ export function renderPrepare(host, ctx) {
     ctx.onSaveStart?.();
     try {
       await checklist.add(t.id, {
-        day_id: null,
-        text,
-        category,
+        day_id: null, text, category,
         sort_order: prep.length,
       });
       await ctx.refresh();
@@ -190,12 +253,7 @@ export function renderPrepare(host, ctx) {
     try {
       let order = prep.length;
       for (const [text, category] of tpl.items) {
-        await checklist.add(t.id, {
-          day_id: null,
-          text,
-          category,
-          sort_order: order++,
-        });
+        await checklist.add(t.id, { day_id: null, text, category, sort_order: order++ });
       }
       await ctx.refresh();
     } catch (e) {
@@ -204,4 +262,17 @@ export function renderPrepare(host, ctx) {
       ctx.onSaveDone?.();
     }
   }
+}
+
+function countByCategory(items) {
+  const out = {};
+  for (const c of items) out[c.category] = (out[c.category] || 0) + 1;
+  return out;
+}
+
+function readFilter() {
+  try { return localStorage.getItem(FILTER_STORAGE_KEY) || "all"; } catch { return "all"; }
+}
+function writeFilter(v) {
+  try { localStorage.setItem(FILTER_STORAGE_KEY, v); } catch {}
 }

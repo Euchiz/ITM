@@ -510,7 +510,7 @@ html, body {
 
 .view-trip {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-columns: 248px minmax(0, 1fr);
   max-width: 1380px;
   margin: 0 auto;
   padding: 0 16px 24px;
@@ -526,8 +526,9 @@ html, body {
   position: sticky;
   top: 64px;
   align-self: start;
-  display: flex; flex-direction: column; gap: 16px;
-  padding: 18px 12px 18px;
+  display: flex; flex-direction: column;
+  gap: 14px;
+  padding: 18px 12px 16px;
   max-height: calc(100vh - 80px);
   overflow-y: auto;
   border-radius: 18px;
@@ -565,7 +566,7 @@ html, body {
   appearance: none;
   border: 0;
   display: grid;
-  grid-template-columns: 36px 1fr auto;
+  grid-template-columns: 36px minmax(0, 1fr) 16px;
   gap: 10px;
   align-items: center;
   padding: 9px 10px;
@@ -594,7 +595,8 @@ html, body {
     inset 0 0 0 1px rgba(255,255,255,0.4),
     inset 0 1px 0 rgba(255,255,255,0.4);
 }
-.vy-trip-switcher b {
+.vy-trip-switcher-text { min-width: 0; display: grid; gap: 1px; }
+.vy-trip-switcher-text b {
   font-family: var(--vbl-font-display);
   font-size: 0.82rem;
   font-weight: 600;
@@ -604,12 +606,17 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.vy-trip-switcher span:not(.material-symbols-outlined):not(.vy-trip-switcher-img) {
+.vy-trip-switcher-text span {
   font-size: 0.66rem;
   color: var(--vbl-fg-3);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.vy-trip-switcher > .material-symbols-outlined {
+  color: var(--vbl-fg-4);
+  font-size: 16px;
+  line-height: 1;
 }
 
 .vy-side-section {
@@ -620,7 +627,7 @@ html, body {
   text-transform: uppercase;
   color: var(--vbl-fg-4);
   padding: 0 10px;
-  margin-top: 4px;
+  margin: 6px 0 -4px;
 }
 
 .vy-side-nav { display: flex; flex-direction: column; gap: 1px; }
@@ -628,36 +635,39 @@ html, body {
   appearance: none;
   border: 0;
   display: grid;
-  grid-template-columns: 22px 1fr auto;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
-  padding: 8px 10px;
+  padding: 9px 10px;
   border-radius: 10px;
   background: transparent;
   text-align: left;
   font-family: var(--vbl-font-display);
-  font-size: 0.76rem;
+  font-size: 0.78rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--vbl-ink);
   cursor: pointer;
-  transition: background 120ms;
+  transition: background 120ms, color 120ms;
+}
+.vy-side-nav button > span:nth-child(2) {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .vy-side-nav button .material-symbols-outlined {
   font-size: 18px;
   line-height: 1;
   color: var(--vbl-fg-3);
 }
-.vy-side-nav button:hover { background: rgba(255,255,255,0.55); }
+.vy-side-nav button:hover:not(.is-soon) { background: rgba(255,255,255,0.6); }
 .vy-side-nav button.is-active {
-  color: var(--vbl-viridian);
-  background: linear-gradient(180deg, rgba(255,255,255,0.75), rgba(255,255,255,0.3));
+  color: var(--vbl-viridian-deep);
+  background: linear-gradient(180deg, rgba(255,255,255,0.85), rgba(255,255,255,0.45));
   box-shadow:
-    inset 0 0 0 1px rgba(255,255,255,0.7),
-    inset 1px 1px 0 -0.5px rgba(40,103,95,0.18),
+    inset 0 0 0 1px rgba(255,255,255,0.75),
+    inset 1px 1px 0 -0.5px rgba(40,103,95,0.22),
     inset -1px -1px 0 -0.5px rgba(20,32,31,0.16),
-    0 4px 12px -6px rgba(40,103,95,0.16);
+    0 4px 12px -6px rgba(40,103,95,0.18);
 }
 .vy-side-nav button.is-active .material-symbols-outlined { color: var(--vbl-viridian); }
 .vy-side-nav small {
@@ -667,62 +677,110 @@ html, body {
   letter-spacing: 0.04em;
   text-transform: none;
 }
-
-.vy-side-nav--stale button {
-  opacity: 0.65;
+.vy-side-nav button.is-soon {
+  opacity: 0.6;
   cursor: not-allowed;
 }
-.vy-side-nav--stale button:hover { background: transparent; }
-.vy-side-nav--stale small {
+.vy-side-nav button.is-soon:hover { background: transparent; }
+.vy-soon-badge {
+  font-family: var(--vbl-font-display) !important;
+  font-size: 0.55rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.12em !important;
   background: rgba(20,32,31,0.05);
-  color: var(--vbl-fg-3);
-  padding: 1px 6px;
+  color: var(--vbl-fg-3) !important;
+  padding: 2px 6px !important;
   border-radius: 999px;
   box-shadow: inset 0 0 0 1px var(--vbl-hairline);
-  letter-spacing: 0.12em;
 }
 
-.vy-side-budget {
-  margin-top: auto;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: linear-gradient(180deg, rgba(223,241,236,0.6), rgba(223,241,236,0.25));
-  box-shadow:
-    inset 0 0 0 1px rgba(255,255,255,0.7),
-    inset 1px 1px 0 -0.5px rgba(40,103,95,0.18),
-    inset -1px -1px 0 -0.5px rgba(20,32,31,0.18);
+/* Flex spacer pushing the foot to the bottom */
+.vy-side-spacer { flex: 1 1 auto; min-height: 6px; }
+
+/* Sidebar foot — quick actions row + big mode switcher */
+.vy-side-foot {
+  display: flex; flex-direction: column;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(78,159,146,0.20);
 }
-.vy-side-budget-hd {
-  display: flex; justify-content: space-between; align-items: baseline;
-  margin-bottom: 6px;
+.vy-side-quick {
+  display: flex; gap: 4px;
+  padding: 0 4px;
 }
-.vy-side-budget-hd b {
-  font-family: var(--vbl-font-display);
-  font-size: 0.64rem;
-  letter-spacing: 0.14em;
+.vy-side-quick button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  display: grid; place-items: center;
   color: var(--vbl-fg-3);
-  text-transform: uppercase;
-  font-weight: 700;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
 }
-.vy-side-budget-hd span {
-  font-family: var(--vbl-font-mono);
-  font-size: 0.66rem;
+.vy-side-quick button:hover { background: rgba(255,255,255,0.6); color: var(--vbl-ink); }
+.vy-side-quick button.is-active {
+  background: rgba(255,255,255,0.85);
+  color: var(--vbl-viridian);
+  box-shadow: inset 0 0 0 1px rgba(78,159,146,0.30);
+}
+.vy-side-quick button .material-symbols-outlined { font-size: 18px; line-height: 1; }
+
+/* Mode switch — the bottom "PLAN | TRAVEL" pill */
+.vy-mode-switch {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 14px;
+  background: rgba(20,32,31,0.06);
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+}
+.vy-mode-switch button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 8px 6px;
+  border-radius: 10px;
+  display: grid;
+  grid-template-rows: auto auto;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  cursor: pointer;
   color: var(--vbl-fg-3);
-}
-.vy-side-budget-fig {
   font-family: var(--vbl-font-display);
-  font-size: 1.6rem;
-  font-weight: 600;
+  transition: background 140ms, color 140ms, box-shadow 140ms;
+  text-align: center;
+}
+.vy-mode-switch button .material-symbols-outlined {
+  font-size: 20px;
   line-height: 1;
-  letter-spacing: -0.01em;
-  color: var(--vbl-ink);
+  margin-bottom: 2px;
 }
-.vy-side-budget-fig small {
+.vy-mode-switch button b {
   font-size: 0.7rem;
-  color: var(--vbl-fg-3);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.vy-mode-switch button small {
+  font-family: var(--vbl-font-mono);
+  font-size: 0.58rem;
   font-weight: 500;
+  color: var(--vbl-fg-4);
   letter-spacing: 0.04em;
 }
+.vy-mode-switch button.is-active {
+  background: linear-gradient(180deg, #ffffff, rgba(255,255,255,0.85));
+  color: var(--vbl-viridian-deep);
+  box-shadow:
+    0 4px 10px -4px rgba(40,103,95,0.30),
+    inset 0 0 0 1px rgba(78,159,146,0.30);
+}
+.vy-mode-switch button.is-active .material-symbols-outlined { color: var(--vbl-viridian); }
+.vy-mode-switch button.is-active small { color: var(--vbl-viridian); }
+.vy-mode-switch[data-mode="travel"] { background: rgba(78,159,146,0.10); }
 
 /* ─ main column ─────────────────────────────────────────────────── */
 
@@ -1729,6 +1787,430 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
   .schedule-row .badge { display: none; }
   .check-row { gap: 6px; }
   .due-date, .cat-select { width: 110px; }
+}
+
+/* ============================================================
+ *  Voyage timeline · type chips · stale cards · tag filter
+ *  (adopted from desktop.jsx via voyage.css)
+ * ============================================================ */
+
+/* ─── Itinerary page head ───────────────────────────────────────── */
+
+.vy-itin-head {
+  display: flex; flex-wrap: wrap; gap: 12px;
+  align-items: flex-end; justify-content: space-between;
+}
+.vy-itin-head-l { flex: 1 1 320px; min-width: 0; }
+.vy-itin-head-r {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+}
+.vy-itin-tools {
+  display: inline-flex; gap: 4px;
+  padding-left: 8px;
+  border-left: 1px dashed rgba(78,159,146,0.20);
+}
+
+/* ─── View toggle (Timeline / List / Cards) ─────────────────────── */
+
+.vy-view-toggle {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgba(20,32,31,0.05);
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+}
+.vy-view-toggle button {
+  appearance: none; border: 0;
+  background: transparent;
+  padding: 5px 11px;
+  font-family: var(--vbl-font-display);
+  font-size: 0.66rem; font-weight: 700;
+  letter-spacing: 0.10em; text-transform: uppercase;
+  color: var(--vbl-fg-3); cursor: pointer;
+  border-radius: 7px;
+  transition: background 140ms, color 140ms, box-shadow 140ms;
+}
+.vy-view-toggle button:hover { color: var(--vbl-ink); }
+.vy-view-toggle button.is-active {
+  background: #fff;
+  color: var(--vbl-ink);
+  box-shadow: 0 1px 3px rgba(20,32,31,0.06), inset 0 0 0 1px var(--vbl-hairline);
+}
+
+/* ─── Type chips (timeline-style) ───────────────────────────────── */
+
+.vy-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 22px; padding: 0 9px;
+  border-radius: 999px;
+  font-family: var(--vbl-font-display);
+  font-size: 0.6rem; font-weight: 700;
+  letter-spacing: 0.10em; text-transform: uppercase;
+  white-space: nowrap;
+}
+.vy-chip .material-symbols-outlined { font-size: 13px; line-height: 1; }
+.vy-chip--flight,
+.vy-chip--transit {
+  background: var(--vbl-blue-soft); color: #335983;
+  box-shadow: inset 0 0 0 1px rgba(51,89,131,0.20);
+}
+.vy-chip--stay,
+.vy-chip--thing {
+  background: var(--vbl-viridian-soft); color: var(--vbl-viridian-deep);
+  box-shadow: inset 0 0 0 1px rgba(47,125,114,0.20);
+}
+.vy-chip--meal {
+  background: var(--vbl-amber-soft); color: var(--vbl-amber);
+  box-shadow: inset 0 0 0 1px rgba(154,91,30,0.20);
+}
+.vy-chip--note {
+  background: var(--vbl-surface-soft); color: var(--vbl-fg-3);
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+}
+
+/* Button-form chips (filter row) */
+.vy-chip--button {
+  appearance: none; border: 0;
+  cursor: pointer;
+  height: 28px;
+  padding: 0 11px 0 8px;
+  font-family: var(--vbl-font-display);
+  transition: transform 120ms, box-shadow 120ms;
+  outline-offset: 2px;
+}
+.vy-chip--button:hover { transform: translateY(-1px); }
+.vy-chip--button small {
+  font-family: var(--vbl-font-mono);
+  font-size: 0.62rem;
+  font-weight: 500;
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.4);
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+.vy-chip--button.is-active {
+  box-shadow: inset 0 0 0 2px currentColor;
+  background: rgba(255,255,255,0.85);
+}
+
+/* ─── Timeline pip ──────────────────────────────────────────────── */
+
+.vy-pip {
+  display: inline-block;
+  width: 10px; height: 10px; border-radius: 50%;
+  border: 2px solid var(--vbl-viridian);
+  background: var(--vbl-canvas);
+  flex-shrink: 0;
+}
+.vy-pip.is-on {
+  background: var(--vbl-viridian);
+  box-shadow: 0 0 0 3px rgba(78,159,146,0.22);
+}
+.vy-pip--blue  { border-color: var(--vbl-blue); }
+.vy-pip--blue.is-on  { background: var(--vbl-blue); box-shadow: 0 0 0 3px rgba(92,125,143,0.22); }
+.vy-pip--amber { border-color: var(--vbl-amber); }
+.vy-pip--amber.is-on { background: var(--vbl-amber); box-shadow: 0 0 0 3px rgba(154,91,30,0.22); }
+.vy-pip--muted { border-color: var(--vbl-fg-4); }
+.vy-pip--muted.is-on { background: var(--vbl-fg-4); }
+
+/* ─── Confirmation tag ──────────────────────────────────────────── */
+
+.vy-conf {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--vbl-font-mono);
+  font-size: 0.65rem;
+  color: var(--vbl-fg-2);
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.6);
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+  letter-spacing: 0.02em;
+}
+
+/* ─── Itinerary day card ────────────────────────────────────────── */
+
+.vy-page-shell .vy-day-card {
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+
+.vy-day-header {
+  display: grid; grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed rgba(78,159,146,0.18);
+}
+.vy-day-header-l { display: flex; gap: 12px; align-items: baseline; min-width: 0; }
+.vy-day-header-r {
+  display: flex; align-items: center; gap: 10px;
+  flex-wrap: wrap; justify-content: flex-end;
+}
+.vy-day-num {
+  font-family: var(--vbl-font-display);
+  font-size: 2rem; font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--vbl-ink);
+}
+.vy-day-num small {
+  font-size: 0.92rem;
+  color: var(--vbl-fg-3);
+  letter-spacing: 0;
+  margin-left: 2px;
+}
+.vy-day-name { display: grid; gap: 2px; min-width: 0; }
+.vy-day-name b {
+  font-family: var(--vbl-font-display);
+  font-size: 0.95rem; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.vy-day-name span {
+  font-family: var(--vbl-font-mono);
+  font-size: 0.66rem;
+  color: var(--vbl-fg-3);
+  letter-spacing: 0.06em;
+}
+
+.vy-day-editor {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  padding: 12px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  background: rgba(20,32,31,0.03);
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+}
+.vy-day-editor .field { margin-bottom: 0; }
+.vy-day-editor textarea.vy-day-notes {
+  grid-column: 1 / -1;
+}
+
+.vy-day-notes-strip {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  color: var(--vbl-amber);
+  background: rgba(255,242,223,0.55);
+  border-left: 3px solid var(--vbl-amber-line);
+  border-radius: 8px;
+}
+
+/* ─── Timeline ──────────────────────────────────────────────────── */
+
+.vy-tl { position: relative; padding-left: 0; }
+.vy-tl-line {
+  position: absolute;
+  left: 79px; top: 6px; bottom: 36px;
+  width: 1px;
+  background: repeating-linear-gradient(180deg, var(--vbl-hairline) 0 4px, transparent 4px 8px);
+  pointer-events: none;
+}
+.vy-tl-item {
+  display: grid;
+  grid-template-columns: 64px 26px 1fr;
+  gap: 8px;
+  align-items: start;
+  padding: 6px 0;
+}
+.vy-tl-time {
+  font-family: var(--vbl-font-mono);
+  font-size: 0.82rem;
+  color: var(--vbl-fg-2);
+  padding-top: 12px;
+  text-align: right;
+}
+.vy-tl-pip-col {
+  display: flex; flex-direction: column;
+  align-items: center;
+  padding-top: 16px;
+}
+
+.vy-tl-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.65);
+  cursor: pointer;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.7),
+    inset 1px 1px 0 -0.5px rgba(40,103,95,0.14),
+    inset -1px -1px 0 -0.5px rgba(20,32,31,0.16),
+    0 4px 12px -8px rgba(40,103,95,0.18);
+  transition: transform 120ms, box-shadow 120ms, background 120ms;
+}
+.vy-tl-card:not(.is-editing):hover {
+  background: rgba(255,255,255,0.95);
+  transform: translateY(-1px);
+}
+.vy-tl-card-l { min-width: 0; }
+.vy-tl-card-head {
+  display: flex; gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.vy-tl-card-title {
+  font-family: var(--vbl-font-display);
+  font-size: 0.94rem; font-weight: 600;
+  color: var(--vbl-ink);
+  line-height: 1.25;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex: 1 1 auto; min-width: 0;
+}
+.vy-tl-card-sub {
+  font-size: 0.78rem;
+  color: var(--vbl-fg-3);
+  line-height: 1.4;
+  margin-top: 2px;
+}
+.vy-tl-card-meta {
+  display: flex; gap: 8px; align-items: center;
+  margin-top: 6px; flex-wrap: wrap;
+}
+.vy-tl-card-r {
+  display: flex; flex-direction: column;
+  gap: 6px; align-items: end;
+  padding-top: 2px;
+}
+.vy-tl-card-dur {
+  font-family: var(--vbl-font-mono);
+  font-size: 0.72rem;
+  color: var(--vbl-fg-3);
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(20,32,31,0.05);
+}
+.vy-tl-drag {
+  color: var(--vbl-fg-4);
+  font-size: 16px;
+}
+
+.vy-tl-item.is-fixed .vy-tl-card { box-shadow: inset 0 0 0 1px rgba(78,159,146,0.40), 0 4px 12px -8px rgba(40,103,95,0.22); }
+.vy-tl-item.is-highlight .vy-tl-card { background: linear-gradient(180deg, rgba(255,242,223,0.7), rgba(255,255,255,0.6)); }
+.vy-tl-item[data-status="done"]      { opacity: 0.55; }
+.vy-tl-item[data-status="cancelled"] { opacity: 0.4; }
+.vy-tl-item[data-status="cancelled"] .vy-tl-card-title { text-decoration: line-through; }
+
+.vy-tl-add-row {
+  grid-column: 1 / -1;
+  display: grid; grid-template-columns: 64px 26px 1fr;
+  gap: 8px;
+  padding: 8px 0 2px;
+}
+.vy-tl-add-row .inline-add {
+  grid-column: 3;
+  justify-self: start;
+}
+
+/* ─── Inline editor (expanded card) ─────────────────────────────── */
+
+.vy-tl-card.is-editing {
+  display: block;
+  cursor: default;
+  background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85));
+  box-shadow:
+    0 12px 30px -10px rgba(40,103,95,0.30),
+    inset 0 0 0 1px rgba(78,159,146,0.35);
+}
+.vy-edit-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin: -2px 0 10px;
+}
+.vy-edit-row {
+  display: flex; flex-wrap: wrap;
+  align-items: center; gap: 8px;
+  margin-bottom: 10px;
+}
+.vy-edit-row:last-child { margin-bottom: 0; }
+.vy-edit-row > input,
+.vy-edit-row > select,
+.vy-edit-row > textarea { font-family: var(--vbl-font-body); }
+.vy-edit-row > input[type="text"][placeholder*="Location"],
+.vy-edit-row > input[type="url"] { flex: 1 1 220px; min-width: 0; }
+.vy-edit-row > textarea { flex: 1 1 100%; min-width: 0; }
+.vy-edit-row > .item-title-input { flex: 1 1 200px; min-width: 0; font-weight: 600; }
+
+/* List + Cards view variants — swap the timeline rails for flatter layouts */
+.day-list[data-view="list"] .vy-tl-line { display: none; }
+.day-list[data-view="list"] .vy-tl-item { grid-template-columns: 60px 1fr; gap: 10px; }
+.day-list[data-view="list"] .vy-tl-pip-col { display: none; }
+.day-list[data-view="list"] .vy-tl-card { background: rgba(255,255,255,0.55); }
+
+.day-list[data-view="cards"] .vy-tl-line { display: none; }
+.day-list[data-view="cards"] .vy-tl { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.day-list[data-view="cards"] .vy-tl-item { display: block; padding: 0; }
+.day-list[data-view="cards"] .vy-tl-time {
+  padding: 0; text-align: left;
+  margin-bottom: 6px; font-weight: 500;
+}
+.day-list[data-view="cards"] .vy-tl-pip-col { display: none; }
+.day-list[data-view="cards"] .vy-tl-card { display: block; }
+.day-list[data-view="cards"] .vy-tl-card-r { flex-direction: row; justify-content: flex-end; margin-top: 8px; }
+.day-list[data-view="cards"] .vy-tl-add-row { grid-column: 1 / -1; display: block; padding: 8px 0; }
+
+/* ─── Stale card pattern ────────────────────────────────────────── */
+
+.vy-stale-card {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 16px;
+  align-items: center;
+  padding: 16px 18px;
+  background: linear-gradient(180deg, rgba(244,236,213,0.45), rgba(244,236,213,0.18));
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+}
+.vy-stale-mark {
+  width: 56px; height: 56px;
+  border-radius: 14px;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, rgba(255,242,223,0.7), rgba(224,189,141,0.45));
+  color: var(--vbl-amber);
+  box-shadow: inset 0 0 0 1px rgba(224,189,141,0.45);
+}
+.vy-stale-mark .material-symbols-outlined { font-size: 28px; line-height: 1; }
+.vy-stale-body {
+  display: grid; gap: 4px;
+}
+.vy-stale-title {
+  font-family: var(--vbl-font-display);
+  font-size: 1rem; font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--vbl-ink);
+}
+.vy-stale-body p { margin: 4px 0 0; color: var(--vbl-fg-3); }
+.vy-route-stale { margin-top: 16px; }
+
+/* ─── Prepare tag-filter ────────────────────────────────────────── */
+
+.vy-tagfilter {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin: 0 0 14px;
+}
+.vy-prep-cat-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px;
+}
+.vy-prep-empty {
+  background: rgba(255,255,255,0.4);
+  padding: 28px 16px;
+}
+.vy-page-shell .prep-cat-title { display: none; }
+
+/* ─── Responsive (sidebar) ──────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .vy-side-foot { padding-top: 6px; }
+  .vy-mode-switch button .material-symbols-outlined { font-size: 18px; }
+  .vy-day-header-l { gap: 8px; }
+  .vy-day-num { font-size: 1.6rem; }
+  .vy-tl-line { left: 65px; }
+  .vy-tl-item { grid-template-columns: 54px 22px 1fr; }
 }
 
 .no-print {}

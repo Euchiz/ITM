@@ -43,11 +43,11 @@
   </main>
 
   <nav class="mobile-nav no-print" id="mobileNav" hidden role="tablist">
-    <button data-page="today"     role="tab">Today</button>
-    <button data-page="itinerary" role="tab">Plan</button>
-    <button data-page="prepare"   role="tab">Prepare</button>
-    <button data-page="notes"     role="tab">Notes</button>
-    <button data-page="overview"  role="tab">More</button>
+    <button data-page="itinerary" role="tab" data-mode="plan">Itinerary</button>
+    <button data-page="prepare"   role="tab" data-mode="plan">Prepare</button>
+    <button data-page="today"     role="tab" data-mode="travel">Today</button>
+    <button data-page="notes"     role="tab" data-mode="travel">Notes</button>
+    <button data-page="overview"  role="tab" data-mode="any">More</button>
   </nav>
 
   <dialog id="settingsDialog" class="settings-dialog no-print">
