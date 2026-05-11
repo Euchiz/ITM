@@ -911,13 +911,6 @@ function paintHeader() {
     }
   }
 
-  const foot = document.getElementById("tripFootMeta");
-  if (foot) {
-    foot.textContent = state.view === "trip"
-      ? (state.saving > 0 ? "· SYNCING NOW…" : "· SYNCED · DRAFT v∞")
-      : "";
-  }
-
   // Topbar last-change text — update without redoing paintTopbar so the
   // pulsing dot doesn't restart on every keystroke / tick.
   const topbarLastChange = document.getElementById("topbarLastChange");
