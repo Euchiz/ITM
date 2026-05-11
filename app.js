@@ -247,15 +247,237 @@ function bindAppHeader() {
 }
 
 function bindTabs() {
-  document.querySelectorAll("#tripTabs button, #mobileNav button").forEach((btn) => {
+  document.querySelectorAll("#mobileNav button").forEach((btn) => {
     btn.addEventListener("click", () => navigate({ page: btn.dataset.page }));
   });
 }
 
 function paintTabs() {
-  document.querySelectorAll("#tripTabs button, #mobileNav button").forEach((btn) => {
+  document.querySelectorAll("#mobileNav button").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.page === state.page);
   });
+  paintSidebar();
+  paintHero();
+  paintDayStrip();
+}
+
+// ===== Voyage sidebar + hero + day strip =====
+//
+// Adapts the desktop trip-manager layout from the design handoff: left
+// sidebar with trip switcher + categorized nav, top hero block summarising
+// the trip, and a horizontal day pill strip when viewing day-anchored pages
+// (itinerary / today).
+//
+// "Proposed" sidebar items (Map / Stays / Transit / Dining / Activities /
+// Documents / Budget) are rendered disabled with a "SOON" badge — they
+// match the design but no page module exists yet.
+
+const SIDE_NAV_PRIMARY = [
+  { page: "overview",  glyph: "summarize",        label: "Overview" },
+  { page: "itinerary", glyph: "calendar_month",   label: "Itinerary" },
+  { page: "today",     glyph: "today",            label: "Today" },
+  { page: "prepare",   glyph: "fact_check",       label: "Prepare" },
+  { page: "notes",     glyph: "edit_note",        label: "Notes" },
+  { page: "members",   glyph: "group",            label: "Members" },
+  { page: "io",        glyph: "swap_vert",        label: "Import / Export" },
+];
+
+const SIDE_NAV_PROPOSED = [
+  { glyph: "map",                label: "Map" },
+  { glyph: "bed",                label: "Stays" },
+  { glyph: "directions_railway", label: "Transit" },
+  { glyph: "restaurant",         label: "Dining" },
+  { glyph: "explore",            label: "Activities" },
+  { glyph: "description",        label: "Documents" },
+  { glyph: "payments",           label: "Budget" },
+];
+
+function paintSidebar() {
+  const aside = document.getElementById("tripSidebar");
+  if (!aside) return;
+  if (state.view !== "trip" || !state.trip) {
+    aside.innerHTML = "";
+    return;
+  }
+
+  const trip = state.trip;
+  const dayCount = (trip.days || []).length;
+  const cities = deriveCities(trip);
+  const initials = (trip.title || "Trip").slice(0, 2).toUpperCase();
+  const dateRange = formatTripDateRange(trip);
+
+  const counts = {
+    overview: "",
+    itinerary: dayCount ? `${dayCount} day${dayCount === 1 ? "" : "s"}` : "",
+    today: "",
+    prepare: (trip.checklist_items || []).length ? `${(trip.checklist_items).length}` : "",
+    notes: (trip.notes || []).length ? `${trip.notes.length}` : "",
+    members: (trip.members || []).length ? `${trip.members.length}` : "",
+    io: "",
+  };
+
+  const primaryHtml = SIDE_NAV_PRIMARY.map((n) => `
+    <button data-page="${n.page}" class="${n.page === state.page ? "is-active" : ""}">
+      <span class="material-symbols-outlined" aria-hidden>${n.glyph}</span>
+      <span>${n.label}</span>
+      <small>${counts[n.page] || ""}</small>
+    </button>
+  `).join("");
+
+  const proposedHtml = SIDE_NAV_PROPOSED.map((n) => `
+    <button class="is-stale" disabled title="Proposed — not yet implemented">
+      <span class="material-symbols-outlined" aria-hidden>${n.glyph}</span>
+      <span>${n.label}</span>
+      <small>SOON</small>
+    </button>
+  `).join("");
+
+  aside.innerHTML = `
+    <div class="vy-brand-side">
+      <strong>VOYAGE</strong>
+      <span>— ∞ — INTEGRATED TRIP MANAGER</span>
+    </div>
+    <button class="vy-trip-switcher" id="sideBackBtn" title="Back to all trips">
+      <span class="vy-trip-switcher-img">${escapeText(initials)}</span>
+      <div>
+        <b>${escapeText(trip.title || "Untitled trip")}</b>
+        <span>${escapeText(dateRange || "—")}</span>
+      </div>
+      <span class="material-symbols-outlined" aria-hidden style="color:var(--vbl-fg-4)">unfold_more</span>
+    </button>
+
+    <div class="vy-side-section">This trip</div>
+    <nav class="vy-side-nav" id="sideNavPrimary">${primaryHtml}</nav>
+
+    <div class="vy-side-section">Proposed</div>
+    <nav class="vy-side-nav vy-side-nav--stale">${proposedHtml}</nav>
+
+    <div class="vy-side-budget">
+      <div class="vy-side-budget-hd">
+        <b>This session</b>
+        <span>${cities.length ? cities.length + " stop" + (cities.length === 1 ? "" : "s") : "—"}</span>
+      </div>
+      <div class="vy-side-budget-fig">${dayCount}<small> / days planned</small></div>
+      <span class="vy-meta">${state.trip?.role ? state.trip.role.toUpperCase() : "VIEWER"} ROLE</span>
+    </div>
+  `;
+
+  aside.querySelectorAll("#sideNavPrimary button[data-page]").forEach((btn) => {
+    btn.addEventListener("click", () => navigate({ page: btn.dataset.page }));
+  });
+  const back = aside.querySelector("#sideBackBtn");
+  if (back) back.addEventListener("click", () => navigate({ trip: null }));
+}
+
+function paintHero() {
+  const host = document.getElementById("tripHero");
+  if (!host) return;
+  if (state.view !== "trip" || !state.trip) { host.hidden = true; host.innerHTML = ""; return; }
+
+  const trip = state.trip;
+  const cities = deriveCities(trip);
+  const dayCount = (trip.days || []).length;
+  const nightCount = Math.max(0, dayCount - 1);
+  const travelerCount = (trip.members || []).length || 1;
+  const range = formatTripDateRange(trip);
+
+  host.hidden = false;
+  host.innerHTML = `
+    <div class="vy-hero-art" aria-hidden></div>
+    <div class="vy-hero-left">
+      <span class="vy-hero-tag"><i></i> ITINERARY · STATUS <b style="color:var(--vbl-viridian)"> ${trip.id ? "CONFIRMED" : "DRAFT"}</b></span>
+      <h1 class="vy-hero-title">${escapeText(trip.title || "Untitled trip")}</h1>
+      <div class="vy-hero-cities">
+        ${cities.length
+          ? cities.map((c, i) => `
+              <span class="vy-citybadge">
+                <b>${escapeText(cityCode(c))}</b>
+                <span>${escapeText(c)}</span>
+              </span>
+              ${i < cities.length - 1 ? '<span class="vy-hero-sep">→</span>' : ""}
+            `).join("")
+          : '<span class="vy-meta">NO CITIES YET · ADD ONE TO A DAY</span>'}
+      </div>
+    </div>
+    <div class="vy-hero-right">
+      <div class="vy-hero-dates">${escapeText(range || "Dates not set")}</div>
+      <div class="vy-hero-meta">${dayCount} DAY${dayCount === 1 ? "" : "S"} · ${nightCount} NIGHT${nightCount === 1 ? "" : "S"} · ${travelerCount} TRAVELER${travelerCount === 1 ? "" : "S"}</div>
+      <div class="vy-hero-meta">TRIP · <b style="color:var(--vbl-viridian)">${escapeText((trip.id || "—").toString().slice(0, 8))}</b></div>
+    </div>
+  `;
+}
+
+function paintDayStrip() {
+  const host = document.getElementById("tripDayStrip");
+  if (!host) return;
+  const showOn = new Set(["itinerary", "today"]);
+  if (state.view !== "trip" || !state.trip || !showOn.has(state.page) || !(state.trip.days || []).length) {
+    host.hidden = true; host.innerHTML = "";
+    return;
+  }
+  const days = state.trip.days;
+  host.hidden = false;
+  host.innerHTML = days.map((d, i) => {
+    const wd = d.date ? new Date(d.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short" }).toUpperCase() : "DAY";
+    const num = (i + 1).toString().padStart(2, "0");
+    const city = (d.city || "").slice(0, 3).toUpperCase();
+    const sel = i === 0 ? "is-selected" : "";
+    return `
+      <button class="vy-daypill ${sel}" data-day-idx="${i}" title="${escapeText(d.title || "Day " + (i + 1))}">
+        <span class="vy-daypill-wd">${wd}</span>
+        <span class="vy-daypill-num">${num}</span>
+        <span class="vy-daypill-city">${escapeText(city || "—")}</span>
+      </button>
+    `;
+  }).join("");
+  // Day pill click: jump to itinerary and scroll to that day card.
+  host.querySelectorAll("button[data-day-idx]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = Number(btn.dataset.dayIdx);
+      host.querySelectorAll("button").forEach((b) => b.classList.remove("is-selected"));
+      btn.classList.add("is-selected");
+      if (state.page !== "itinerary") { navigate({ page: "itinerary" }); return; }
+      const dayId = state.trip.days[idx]?.id;
+      const card = dayId && document.querySelector(`.day-card[data-id="${CSS.escape(String(dayId))}"]`);
+      if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
+}
+
+function deriveCities(trip) {
+  const seen = new Set();
+  const out = [];
+  for (const d of trip.days || []) {
+    const c = (d.city || "").trim();
+    if (!c || seen.has(c.toLowerCase())) continue;
+    seen.add(c.toLowerCase());
+    out.push(c);
+  }
+  return out;
+}
+
+function cityCode(name) {
+  const trimmed = (name || "").trim();
+  if (!trimmed) return "—";
+  return trimmed.slice(0, 3).toUpperCase();
+}
+
+function formatTripDateRange(trip) {
+  const days = (trip.days || []).filter((d) => d.date).sort((a, b) => a.date.localeCompare(b.date));
+  if (!days.length) return "";
+  const fmt = (s) => {
+    const d = new Date(s + "T00:00:00");
+    if (isNaN(d.getTime())) return s;
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  };
+  const start = fmt(days[0].date);
+  const end = fmt(days[days.length - 1].date);
+  const yr = new Date(days[0].date + "T00:00:00").getFullYear();
+  return start === end ? `${start}, ${yr}` : `${start} → ${end}, ${yr}`;
+}
+
+function escapeText(s) {
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 function paintHeader() {
@@ -284,6 +506,13 @@ function paintHeader() {
       saveEl.dataset.kind = "clean";
       saveEl.textContent = "Saved";
     }
+  }
+
+  const foot = document.getElementById("tripFootMeta");
+  if (foot) {
+    foot.textContent = state.view === "trip"
+      ? (state.saving > 0 ? "· SYNCING NOW…" : "· SYNCED · DRAFT v∞")
+      : "";
   }
 }
 
