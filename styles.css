@@ -1050,11 +1050,16 @@ body[data-view="trip"] .app-header { display: none; }
   display: flex; flex-direction: column;
   gap: 4px;
   min-width: 0;
-  /* Hard cap so the column never elbows into the right pane even when a
-   * title or city badge would naturally overflow. The inner title +
-   * cities row both honour overflow so they truncate / wrap inside. */
-  overflow: hidden;
+  /* No overflow:hidden here — that would clip the box-shadow glow on
+   * the small viridian dot in .vy-hero-tag (whose `<i>` sits flush
+   * against the column's left edge). The title + cities rows each
+   * carry their own min-width:0 / overflow rules below to stop them
+   * elbowing into the right pane.
+   *
+   * Every direct child gets min-width:0 explicitly so flex's default
+   * min-width:auto can't push the column wider than its grid slot. */
 }
+.vy-hero-left > * { min-width: 0; max-width: 100%; }
 .vy-hero-tag {
   display: inline-flex; gap: 8px; align-items: center;
   font-family: var(--vbl-font-display);
@@ -1083,7 +1088,18 @@ body[data-view="trip"] .app-header { display: none; }
 .vy-hero-cities {
   display: flex; gap: 6px; align-items: center;
   margin-top: 6px; flex-wrap: wrap;
+  /* Claim the full column width so flex-wrap has a real boundary to
+   * wrap against — without an explicit width, the flex container can
+   * size to its content and an oversized row of badges + seps bleeds
+   * past the column. min-width:0 keeps it from exceeding the grid
+   * slot; max-width:100% is the safety belt. */
+  align-self: stretch;
+  width: 100%;
   min-width: 0;
+  max-width: 100%;
+  /* If a single badge is still too wide to wrap, clip at the column
+   * edge so it can never poke into the right pane. */
+  overflow: hidden;
 }
 .vy-citybadge {
   display: inline-flex; align-items: center; gap: 6px;
