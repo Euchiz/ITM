@@ -10,21 +10,24 @@ export function renderToday(host, ctx) {
   const t = ctx.trip;
   const today = todayIso();
 
-  // Pick today's day. If no exact match, find the closest upcoming day.
-  let day = (t.days || []).find((d) => d.date === today);
-  let isToday = !!day;
-  if (!day) {
-    const upcoming = (t.days || []).filter((d) => d.date && d.date > today);
-    upcoming.sort((a, b) => a.date.localeCompare(b.date));
-    day = upcoming[0];
-  }
+  // The day strip drives which day is shown — that lets users preview
+  // any day's today-recap, not just literal today's. The default
+  // selectedDayIdx is set in app.js (today's day if in range, else the
+  // next upcoming one, else day 0) so first paint already lands on
+  // the "right" day.
+  const idx = Math.min(
+    Math.max(0, ctx.selectedDayIdx || 0),
+    Math.max(0, (t.days || []).length - 1),
+  );
+  const day = (t.days || [])[idx];
+  const isToday = !!(day && day.date === today);
 
   if (!day) {
     host.appendChild(noTrips());
     return;
   }
 
-  const dayIdx = (t.days || []).indexOf(day) + 1;
+  const dayIdx = idx + 1;
   const items = (day.items || []).slice().sort((a, b) => {
     const at = a.start_time || "99:99";
     const bt = b.start_time || "99:99";
@@ -32,15 +35,16 @@ export function renderToday(host, ctx) {
     return a.sort_order - b.sort_order;
   });
 
-  // "Next" = first item with start_time >= now (only when isToday)
+  // "Next" = first item with start_time >= now (only when isToday).
+  // For previewing other days, no item is "next" — all show in the list.
   let next = null;
   let upcoming = items;
   if (isToday) {
     const now = currentTime();
-    const idx = items.findIndex((it) => (it.start_time || "00:00") >= now && it.status !== "done" && it.status !== "cancelled");
-    if (idx >= 0) {
-      next = items[idx];
-      upcoming = items.slice(idx + 1);
+    const nextIdx = items.findIndex((it) => (it.start_time || "00:00") >= now && it.status !== "done" && it.status !== "cancelled");
+    if (nextIdx >= 0) {
+      next = items[nextIdx];
+      upcoming = items.slice(nextIdx + 1);
     } else {
       upcoming = items;
     }
@@ -51,10 +55,18 @@ export function renderToday(host, ctx) {
 
   const tripNotes = (t.notes || []).slice().sort((a, b) => a.sort_order - b.sort_order);
 
+  // Eyebrow text: "Today" only if we're actually on today's day; "Past"
+  // for previous days; "Upcoming" otherwise. Lets users browse other
+  // days without misleading them about which one is live.
+  let eyebrow;
+  if (isToday) eyebrow = "Today";
+  else if (day.date && day.date < today) eyebrow = `Past · day ${dayIdx}`;
+  else                                   eyebrow = `Preview · day ${dayIdx}`;
+
   // Heading
   host.appendChild(
     el("section", { class: "today-head" },
-      el("div", { class: "today-eyebrow", text: isToday ? "Today" : "Upcoming" }),
+      el("div", { class: "today-eyebrow", text: eyebrow }),
       el("h2", { class: "today-title",
         text: `Day ${dayIdx}${day.title ? " · " + day.title : ""}` }),
       el("div", { class: "today-meta muted",

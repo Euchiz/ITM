@@ -17,6 +17,7 @@
 
 import {
   initSupabase, isConfigured, configSource, auth, trips,
+  days as daysApi,
 } from "./supabase.js";
 import { renderAuthView } from "./auth.js";
 import { renderDashboard } from "./pages/dashboard.js";
@@ -69,6 +70,10 @@ const state = {
   page: "overview",
   selectedDayIdx: 0,    // which day the itinerary + day-strip are focused on
   saving: 0,            // active save count for the global indicator
+  lastChangeAt: null,   // ms timestamp of the most recent save; used by
+                        // the topbar's "LAST CHANGE <t>" telemetry. Seeded
+                        // from trip.updated_at on openTrip; bumped on every
+                        // noteSaveDone.
 };
 
 // ===== Boot =====
@@ -145,6 +150,9 @@ function setView(view) {
   document.getElementById("view-trip").hidden = view !== "trip";
   document.getElementById("mobileNav").hidden = view !== "trip";
 
+  if (view === "trip") startTopbarTick();
+  else stopTopbarTick();
+
   if (view === "auth") {
     renderAuthView(document.getElementById("view-auth"), {
       initialMode: state.recoveryMode ? "reset" : "sign-in",
@@ -170,6 +178,11 @@ export async function openTrip(id, page = "overview") {
     state.trip = trip;
     state.page = PAGES[page] ? page : "overview";
     state.selectedDayIdx = pickDefaultDayIdx(trip);
+    // Seed the "LAST CHANGE" timestamp from the server-side updated_at
+    // if present; otherwise fall back to "now" so the topbar never shows
+    // a missing value. Bumped on every save (noteSaveDone).
+    const seed = Date.parse(trip?.updated_at || "") || Date.now();
+    state.lastChangeAt = seed;
     syncUrl({ trip: id, page: state.page });
     setView("trip");
     renderTripPage();
@@ -506,11 +519,20 @@ function paintTopbar() {
   const visibleMembers = members.slice(0, 4);
   const overflowCount = Math.max(0, members.length - visibleMembers.length);
 
+  // Editors count: members with a role of owner/editor. If the trip
+  // object doesn't carry members (e.g. solo trip), the count falls back
+  // to the current user (1).
+  const editors = members.filter((m) => {
+    const r = (m.role || "").toLowerCase();
+    return r === "owner" || r === "editor";
+  }).length || 1;
+
   bar.innerHTML = `
     <div class="vy-topbar-live">
       <span class="vy-meta">
         <i class="vy-livedot" aria-hidden></i>
-        <span id="topbarSaveLabel">SYNCED · DRAFT v∞</span>
+        LIVE COLLAB · <b id="topbarEditors">${editors}</b> EDITOR${editors === 1 ? "" : "S"} · LAST CHANGE
+        <b id="topbarLastChange">${formatLastChange(state.lastChangeAt)}</b>
       </span>
     </div>
     <div class="vy-search" title="Search — coming soon" aria-disabled="true">
@@ -617,6 +639,9 @@ function paintDayStrip() {
   }
   const days = state.trip.days;
   const selectedIdx = state.selectedDayIdx;
+  const role = (state.trip.role || "viewer").toLowerCase();
+  const canEdit = role === "owner" || role === "editor";
+
   host.hidden = false;
   host.innerHTML = days.map((d, i) => {
     const wd = d.date ? new Date(d.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short" }).toUpperCase() : "DAY";
@@ -624,27 +649,202 @@ function paintDayStrip() {
     const city = (d.city || "").slice(0, 3).toUpperCase();
     const sel = i === selectedIdx ? "is-selected" : "";
     return `
-      <button class="vy-daypill ${sel}" data-day-idx="${i}" title="${escapeText(d.title || "Day " + (i + 1))}">
+      <button class="vy-daypill ${sel}" data-day-idx="${i}"
+              ${canEdit ? "draggable=\"true\"" : ""}
+              title="${escapeText(d.title || "Day " + (i + 1))}${canEdit ? "  ·  Drag to reorder, right-click for actions" : ""}">
         <span class="vy-daypill-wd">${wd}</span>
         <span class="vy-daypill-num">${num}</span>
         <span class="vy-daypill-city">${escapeText(city || "—")}</span>
       </button>
     `;
   }).join("");
-  // Clicking a pill selects that day. On itinerary, that swaps the rendered
-  // day; on today, it doesn't change today's auto-pick but lands on the
-  // itinerary view for that day so users have one expected affordance.
+
+  // Click: select that day. Same handler for itinerary and today — both
+  // pages re-render against state.selectedDayIdx. No more "today jumps
+  // to itinerary"; users can preview any day's today-recap view.
   host.querySelectorAll("button[data-day-idx]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const idx = Number(btn.dataset.dayIdx);
-      state.selectedDayIdx = idx;
-      if (state.page !== "itinerary") {
-        navigate({ page: "itinerary" });
-      } else {
-        renderTripPage();
-      }
+    btn.addEventListener("click", (e) => {
+      // Suppress clicks that follow a drag (set in dragend below).
+      if (btn._suppressClick) { btn._suppressClick = false; return; }
+      state.selectedDayIdx = Number(btn.dataset.dayIdx);
+      renderTripPage();
     });
   });
+
+  if (!canEdit) return;
+
+  // ── Drag-to-reorder via HTML5 D&D ─────────────────────────────────
+  let dragFromIdx = null;
+  host.querySelectorAll("button[data-day-idx]").forEach((btn) => {
+    btn.addEventListener("dragstart", (e) => {
+      dragFromIdx = Number(btn.dataset.dayIdx);
+      btn.classList.add("is-dragging");
+      try {
+        e.dataTransfer.effectAllowed = "move";
+        // Firefox needs *some* data to start the drag.
+        e.dataTransfer.setData("text/plain", String(dragFromIdx));
+      } catch {}
+    });
+    btn.addEventListener("dragend", () => {
+      btn.classList.remove("is-dragging");
+      host.querySelectorAll(".is-drop-target").forEach((n) => n.classList.remove("is-drop-target"));
+      // Browser dispatches a click right after dragend on some platforms;
+      // suppress one click so the dragged pill doesn't also "select".
+      btn._suppressClick = true;
+      setTimeout(() => { btn._suppressClick = false; }, 50);
+    });
+    btn.addEventListener("dragover", (e) => {
+      if (dragFromIdx == null) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      host.querySelectorAll(".is-drop-target").forEach((n) => n.classList.remove("is-drop-target"));
+      btn.classList.add("is-drop-target");
+    });
+    btn.addEventListener("dragleave", () => {
+      btn.classList.remove("is-drop-target");
+    });
+    btn.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      btn.classList.remove("is-drop-target");
+      const toIdx = Number(btn.dataset.dayIdx);
+      const fromIdx = dragFromIdx;
+      dragFromIdx = null;
+      if (fromIdx == null || fromIdx === toIdx) return;
+      await reorderDay(fromIdx, toIdx);
+    });
+  });
+
+  // ── Right-click context menu ──────────────────────────────────────
+  host.querySelectorAll("button[data-day-idx]").forEach((btn) => {
+    btn.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      const idx = Number(btn.dataset.dayIdx);
+      openContextMenu(e.clientX, e.clientY, [
+        { label: "Go to this day",  glyph: "open_in_new",
+          onClick: () => { state.selectedDayIdx = idx; renderTripPage(); } },
+        { label: "Move left",       glyph: "chevron_left",
+          disabled: idx === 0,
+          onClick: () => reorderDay(idx, idx - 1) },
+        { label: "Move right",      glyph: "chevron_right",
+          disabled: idx === days.length - 1,
+          onClick: () => reorderDay(idx, idx + 1) },
+        { type: "sep" },
+        { label: "Delete this day", glyph: "delete", danger: true,
+          onClick: () => deleteDayConfirm(days[idx]) },
+      ]);
+    });
+  });
+}
+
+// Reorder days[fromIdx] to be at position toIdx, then persist via
+// daysApi.reorder. Keeps state.selectedDayIdx pointing at the same DAY
+// (not the same index) so the user's selection follows the move.
+async function reorderDay(fromIdx, toIdx) {
+  const arr = (state.trip?.days || []).slice();
+  if (fromIdx < 0 || fromIdx >= arr.length || toIdx < 0 || toIdx >= arr.length) return;
+  const [moved] = arr.splice(fromIdx, 1);
+  arr.splice(toIdx, 0, moved);
+  // Track which day was selected before the move so we can preserve it.
+  const selDay = state.trip.days[state.selectedDayIdx];
+  noteSaveStart();
+  try {
+    await daysApi.reorder(arr.map((d) => d.id));
+    await refreshTrip();
+    const newIdx = state.trip.days.findIndex((d) => d.id === selDay?.id);
+    if (newIdx >= 0) state.selectedDayIdx = newIdx;
+    paintTabs();
+  } catch (e) {
+    toast("Reorder failed: " + e.message, true);
+  } finally {
+    noteSaveDone();
+  }
+}
+
+async function deleteDayConfirm(day) {
+  if (!day) return;
+  if (!confirm("Delete this day and everything in it?")) return;
+  noteSaveStart();
+  try {
+    await daysApi.remove(day.id);
+    await refreshTrip();
+    // Clamp selectedDayIdx in case the deleted day was the last one.
+    const max = Math.max(0, (state.trip?.days || []).length - 1);
+    if (state.selectedDayIdx > max) state.selectedDayIdx = max;
+    paintTabs();
+  } catch (e) {
+    toast("Delete failed: " + e.message, true);
+  } finally {
+    noteSaveDone();
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Custom right-click context menu
+//
+// A tiny floating menu rendered into a singleton container. Each call
+// to openContextMenu replaces the previous one. The menu closes on any
+// outside pointerdown, on Escape, on scroll, or on resize.
+//
+// Items: { label, glyph?, onClick, disabled?, danger?, type? }
+//   - type:'sep' renders a thin divider
+//   - disabled items don't fire onClick
+// ───────────────────────────────────────────────────────────────────
+function openContextMenu(x, y, items) {
+  closeContextMenu();
+  const el = document.createElement("div");
+  el.id = "vy-ctxmenu";
+  el.className = "vy-ctxmenu";
+  el.style.left = `${x}px`;
+  el.style.top = `${y}px`;
+  el.innerHTML = items.map((it) => {
+    if (it.type === "sep") return `<hr>`;
+    const cls = [it.danger ? "is-danger" : "", it.disabled ? "is-disabled" : ""].filter(Boolean).join(" ");
+    return `<button class="${cls}" ${it.disabled ? "disabled" : ""}>
+      ${it.glyph ? `<span class="material-symbols-outlined">${it.glyph}</span>` : ""}
+      <span>${escapeText(it.label)}</span>
+    </button>`;
+  }).join("");
+  document.body.appendChild(el);
+  // Clamp inside viewport so a click near the right edge doesn't render
+  // the menu off-screen.
+  const r = el.getBoundingClientRect();
+  if (r.right > window.innerWidth - 4)  el.style.left = `${window.innerWidth - r.width - 4}px`;
+  if (r.bottom > window.innerHeight - 4) el.style.top  = `${window.innerHeight - r.height - 4}px`;
+
+  let realIdx = 0;
+  el.querySelectorAll("button, hr").forEach((node) => {
+    if (node.tagName === "HR") return;
+    const myIdx = realIdx++;
+    const meta = items.filter((it) => it.type !== "sep")[myIdx];
+    if (meta && meta.onClick && !meta.disabled) {
+      node.addEventListener("click", () => {
+        closeContextMenu();
+        try { meta.onClick(); } catch (e) { console.error(e); }
+      });
+    }
+  });
+
+  const off = (e) => { if (!el.contains(e.target)) closeContextMenu(); };
+  const onKey = (e) => { if (e.key === "Escape") closeContextMenu(); };
+  setTimeout(() => {
+    document.addEventListener("pointerdown", off, true);
+    document.addEventListener("keydown", onKey, true);
+    window.addEventListener("scroll", closeContextMenu, true);
+    window.addEventListener("resize", closeContextMenu);
+  }, 0);
+  el._teardown = () => {
+    document.removeEventListener("pointerdown", off, true);
+    document.removeEventListener("keydown", onKey, true);
+    window.removeEventListener("scroll", closeContextMenu, true);
+    window.removeEventListener("resize", closeContextMenu);
+  };
+}
+
+function closeContextMenu() {
+  const el = document.getElementById("vy-ctxmenu");
+  if (!el) return;
+  if (typeof el._teardown === "function") el._teardown();
+  el.remove();
 }
 
 function deriveCities(trip) {
@@ -718,14 +918,44 @@ function paintHeader() {
       : "";
   }
 
-  // Topbar save indicator — update without redoing paintTopbar, so the
-  // pulsing dot doesn't restart on every keystroke.
-  const topbarLabel = document.getElementById("topbarSaveLabel");
-  if (topbarLabel) {
-    topbarLabel.textContent = state.saving > 0
-      ? "SYNCING NOW…"
-      : "SYNCED · DRAFT v∞";
+  // Topbar last-change text — update without redoing paintTopbar so the
+  // pulsing dot doesn't restart on every keystroke / tick.
+  const topbarLastChange = document.getElementById("topbarLastChange");
+  if (topbarLastChange) {
+    topbarLastChange.textContent = formatLastChange(state.lastChangeAt);
   }
+}
+
+// Format the relative-time label shown after "LAST CHANGE" in the topbar.
+// Coarse buckets — we don't need second-precision since the value ticks
+// every ~10s on a setInterval, and trip edits are usually minutes apart.
+function formatLastChange(ts) {
+  if (!ts) return "—";
+  const delta = Math.max(0, Date.now() - ts);
+  const s = Math.floor(delta / 1000);
+  if (s < 5)      return "just now";
+  if (s < 60)     return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60)    return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24)    return `${h}h`;
+  const d = Math.floor(h / 24);
+  return `${d}d`;
+}
+
+// Tick the "LAST CHANGE 11s" label every 10s while a trip is open so the
+// relative time stays roughly accurate without re-rendering the topbar.
+let __topbarTick = null;
+function startTopbarTick() {
+  if (__topbarTick) return;
+  __topbarTick = setInterval(() => {
+    if (state.view !== "trip") return;
+    const node = document.getElementById("topbarLastChange");
+    if (node) node.textContent = formatLastChange(state.lastChangeAt);
+  }, 10_000);
+}
+function stopTopbarTick() {
+  if (__topbarTick) { clearInterval(__topbarTick); __topbarTick = null; }
 }
 
 // ===== Save activity tracker (used by pages) =====
@@ -736,6 +966,7 @@ function noteSaveStart() {
 }
 function noteSaveDone() {
   state.saving = Math.max(0, state.saving - 1);
+  state.lastChangeAt = Date.now();
   paintHeader();
 }
 
