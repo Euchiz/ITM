@@ -2387,7 +2387,9 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
 
 .vy-tl-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  /* Three columns: content · right rail (duration + quick toggles) ·
+   * drag grip. Grip is auto-width and pinned at the far right. */
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 10px;
   padding: 11px 14px;
   border-radius: 12px;
@@ -2400,6 +2402,28 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
     0 4px 12px -8px rgba(40,103,95,0.18);
   transition: transform 120ms, box-shadow 120ms, background 120ms;
 }
+/* Editor view collapses to a single column block — grid template
+ * would otherwise stretch the editor across just one column. */
+.vy-tl-card.is-editing { grid-template-columns: 1fr; }
+
+.vy-tl-card-grip {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  width: 18px;
+  align-self: stretch;
+  display: grid; place-items: center;
+  color: var(--vbl-fg-4);
+  cursor: grab;
+  opacity: 0.4;
+  border-radius: 6px;
+  padding: 0;
+  transition: opacity 120ms, background 120ms;
+}
+.vy-tl-card:hover .vy-tl-card-grip { opacity: 1; }
+.vy-tl-card-grip:hover { background: rgba(20,32,31,0.06); }
+.vy-tl-card-grip:active { cursor: grabbing; }
+.vy-tl-card-grip .material-symbols-outlined { font-size: 16px; line-height: 1; }
 .vy-tl-card:not(.is-editing):hover {
   background: rgba(255,255,255,0.95);
   transform: translateY(-1px);
@@ -2509,6 +2533,15 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
 .vy-tl-item[data-status="done"]      { opacity: 0.55; }
 .vy-tl-item[data-status="cancelled"] { opacity: 0.4; }
 .vy-tl-item[data-status="cancelled"] .vy-tl-card-title { text-decoration: line-through; }
+
+/* Drag-and-drop states for event items (mirrors the day-pill rules) */
+.vy-tl-item.is-dragging { opacity: 0.5; cursor: grabbing; }
+.vy-tl-item.is-drop-target .vy-tl-card {
+  box-shadow:
+    inset 0 0 0 2px rgba(78,159,146,0.55),
+    0 8px 22px -10px rgba(40,103,95,0.30);
+  transform: translateY(-2px);
+}
 
 .vy-tl-add-row {
   grid-column: 1 / -1;

@@ -166,8 +166,8 @@ export function renderItinerary(host, ctx) {
         ? el("div", { class: "day-controls" },
             el("button", { class: "icon-btn", title: "Edit day info",
               onClick: () => toggleDayEditor() }, "✎"),
-            el("button", { class: "icon-btn", title: "Move up", onClick: () => moveDay(idx, -1) }, "↑"),
-            el("button", { class: "icon-btn", title: "Move down", onClick: () => moveDay(idx, +1) }, "↓"),
+            // Reorder is via the day-strip grip / right-click menu — no
+            // ↑/↓ buttons here.
             el("button", { class: "icon-btn danger", title: "Delete day", onClick: () => deleteDay(day) }, "✕"),
           )
         : null,
@@ -223,7 +223,60 @@ export function renderItinerary(host, ctx) {
     }
     card.appendChild(tl);
 
+    if (!readOnly) wireEventDragReorder(tl, day);
+
     return card;
+  }
+
+  // Attach HTML5 drag-and-drop to every .vy-tl-item inside the day's
+  // timeline. The grip column is the only thing that can start a drag —
+  // a mousedown anywhere else on the row sets wrap.draggable=false so
+  // a click into the card body (opening the editor) doesn't begin a
+  // drag. Restored on mouseup so the next grip-grab works again.
+  function wireEventDragReorder(tl, day) {
+    let dragFromIdx = null;
+    tl.querySelectorAll(".vy-tl-item").forEach((wrap) => {
+      wrap.draggable = true;
+      wrap.addEventListener("mousedown", (e) => {
+        const onGrip = !!e.target.closest(".vy-tl-card-grip");
+        wrap.draggable = onGrip;
+      });
+      wrap.addEventListener("mouseup", () => { wrap.draggable = true; });
+
+      wrap.addEventListener("dragstart", (e) => {
+        dragFromIdx = Number(wrap.dataset.idx);
+        wrap.classList.add("is-dragging");
+        try {
+          e.dataTransfer.effectAllowed = "move";
+          // Firefox needs *some* data to start the drag.
+          e.dataTransfer.setData("text/plain", String(dragFromIdx));
+        } catch {}
+      });
+      wrap.addEventListener("dragend", () => {
+        wrap.classList.remove("is-dragging");
+        tl.querySelectorAll(".is-drop-target").forEach((n) => n.classList.remove("is-drop-target"));
+        wrap.draggable = true;
+      });
+      wrap.addEventListener("dragover", (e) => {
+        if (dragFromIdx == null) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        tl.querySelectorAll(".is-drop-target").forEach((n) => n.classList.remove("is-drop-target"));
+        wrap.classList.add("is-drop-target");
+      });
+      wrap.addEventListener("dragleave", () => {
+        wrap.classList.remove("is-drop-target");
+      });
+      wrap.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        wrap.classList.remove("is-drop-target");
+        const toIdx = Number(wrap.dataset.idx);
+        const fromIdx = dragFromIdx;
+        dragFromIdx = null;
+        if (fromIdx == null || fromIdx === toIdx) return;
+        await reorderItemTo(day, fromIdx, toIdx);
+      });
+    });
   }
 
   function timelineItem(day, it, idx) {
@@ -234,6 +287,8 @@ export function renderItinerary(host, ctx) {
     // background to match the chip palette (highlight bg picks up the
     // event's hue rather than always being amber).
     wrap.dataset.type = it.type || "activity";
+    // Stash the item's position so drag-and-drop can read from/to indexes.
+    wrap.dataset.idx = String(idx);
 
     // saveItemNow lifted to closure scope so cardCell + contextmenu can
     // both call it without going through the editor.
@@ -377,6 +432,20 @@ export function renderItinerary(host, ctx) {
         }));
       }
       card.appendChild(rhs);
+      // Drag grip — its own column on the far right. Mousedown handler
+      // below toggles wrap.draggable so plain clicks elsewhere never
+      // start a drag.
+      if (!readOnly) {
+        const grip = el("button", {
+          class: "vy-tl-card-grip",
+          title: "Drag to reorder",
+          tabindex: "-1",
+          onClick: (e) => e.stopPropagation(),
+        },
+          el("span", { class: "material-symbols-outlined", text: "drag_indicator" }),
+        );
+        card.appendChild(grip);
+      }
       return card;
     }
 
@@ -447,10 +516,8 @@ export function renderItinerary(host, ctx) {
           class: "icon-btn", title: it.is_highlight ? "Unhighlight" : "Mark highlight",
           onClick: () => saveItemNow({ is_highlight: !it.is_highlight }),
         }, it.is_highlight ? "⭐" : "☆"),
-        !readOnly && el("button", { class: "icon-btn", title: "Move up",
-          onClick: () => moveItem(day, idx, -1) }, "↑"),
-        !readOnly && el("button", { class: "icon-btn", title: "Move down",
-          onClick: () => moveItem(day, idx, +1) }, "↓"),
+        // Reorder is via the card grip / right-click menu — no ↑/↓
+        // buttons in the editor row.
         !readOnly && el("button", { class: "icon-btn danger", title: "Delete",
           onClick: () => deleteItem(it) }, "✕"),
       );
@@ -556,17 +623,27 @@ export function renderItinerary(host, ctx) {
   }
 
   async function moveItem(day, idx, dir) {
-    const snapshot = (day.items || []).slice();
+    // Backwards-compat shim for the contextmenu callers — delegate to
+    // the canonical from→to reorder so all event moves go through one
+    // path (drag-drop and context-menu).
     const j = idx + dir;
-    if (j < 0 || j >= snapshot.length) return;
+    return reorderItemTo(day, idx, j);
+  }
+
+  // Reorder day.items[fromIdx] → toIdx, preserving each event's
+  // duration. Positional gaps between consecutive timed items travel
+  // with their slot index (treated as implicit rest, never persisted
+  // as events). Used by both drag-and-drop and the context menu.
+  async function reorderItemTo(day, fromIdx, toIdx) {
+    const snapshot = (day.items || []).slice();
+    if (fromIdx < 0 || fromIdx >= snapshot.length) return;
+    if (toIdx   < 0 || toIdx   >= snapshot.length) return;
+    if (fromIdx === toIdx) return;
 
     const newOrder = snapshot.slice();
-    const [moved] = newOrder.splice(idx, 1);
-    newOrder.splice(j, 0, moved);
+    const [moved] = newOrder.splice(fromIdx, 1);
+    newOrder.splice(toIdx, 0, moved);
 
-    // Preserve each event's duration. Treat the original positional
-    // gaps between consecutive timed items as implicit rest — they
-    // travel with their slot index, not with any particular event.
     const timeUpdates = recomputeItemTimes(snapshot, newOrder);
 
     ctx.onSaveStart?.();
