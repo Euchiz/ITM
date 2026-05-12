@@ -79,6 +79,7 @@ the app is served.
 | 10 | `20260511010000_share_links_schema.sql` | Share-link schema: `share_links` table, `itinerary_members.joined_via_link`, `created_by` on child tables + BEFORE INSERT triggers, `random_nickname()` helper. |
 | 11 | `20260511020000_share_links_rpcs.sql` | Share-link RPCs: `peek_share_link` (public preview), `redeem_share_link`, `mint_share_link`, `rotate_share_link`, `revoke_share_link`, `list_share_links`, `default_share_link`. |
 | 12 | `20260511030000_anon_cleanup_cron.sql` | `pg_cron` daily sweep that reaps anonymous users idle >30 days (skips those who linked a non-anon identity). |
+| 13 | `20260512000000_fix_share_links_ambiguous_and_rename.sql` | Fix `list_share_links` ambiguous-column error; rename "Trip Studio" → "Hermes Daybook" in `add_trip_member_by_email`'s user-visible error message. |
 
 ## Adding a new migration
 
