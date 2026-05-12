@@ -133,7 +133,12 @@ html, body {
   padding: 0;
   color: var(--vbl-ink);
   font-family: var(--vbl-font-body);
-  font-size: 14px;
+  /* Fluid root font size. Caps at 14px at desktop widths ≥ ~1820px
+     (so 2K @ 125% renders the same as the previous fixed 14px), and
+     scales down on smaller laptops (≈13px at 1366px). The mobile
+     override below pins a comfortable 15px under 600px so the mobile
+     experience isn't dictated by the small-laptop curve. */
+  font-size: clamp(12px, 0.36vw + 7.6px, 14px);
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
@@ -141,6 +146,13 @@ html, body {
     radial-gradient(900px 500px at 8% 12%, rgba(78,159,146,0.10), transparent 60%),
     radial-gradient(700px 380px at 95% 88%, rgba(92,125,143,0.10), transparent 60%),
     var(--vbl-canvas);
+}
+
+/* Mobile floor — phones aren't well served by the small-laptop curve.
+   15px is the comfortable touch-reading size; below that, tap targets
+   and notes-prep checkboxes get too small. */
+@media (max-width: 600px) {
+  html, body { font-size: 15px; }
 }
 
 ::selection { background: var(--vbl-ink); color: #fff; }
@@ -344,7 +356,7 @@ html, body {
   color: var(--vbl-ink);
 }
 .auth-card h1::before {
-  content: "VOYAGE · ";
+  content: "VIRIDIAN BLUE · ";
   display: block;
   font-size: 10px;
   font-weight: 700;

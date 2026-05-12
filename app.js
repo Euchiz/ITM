@@ -1343,7 +1343,7 @@ function showUnconfigured() {
   document.getElementById("view-auth").hidden = false;
   document.getElementById("view-auth").innerHTML = `
     <div class="auth-card">
-      <h1>Trip Studio</h1>
+      <h1>Hermes Daybook</h1>
       <p>This app needs a Supabase backend to store trips. Click ⚙ in the top right to configure your project URL + publishable key, or deploy with the included GitHub Actions workflow that bakes them in from repo Secrets.</p>
     </div>
   `;
