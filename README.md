@@ -1,8 +1,9 @@
-# Trip Studio
+# Hermes Daybook
 
-A lightweight trip-planning companion. Build a day-by-day itinerary,
-prepare a before-trip checklist, and follow today's schedule + todos
-during travel. Multi-user with Supabase Auth + per-trip access control.
+A lightweight trip-planning companion from **Viridian Blue Labs**. Build
+a day-by-day itinerary, prepare a before-trip checklist, and follow
+today's schedule + todos during travel. Multi-user with Supabase Auth +
+per-trip access control, plus shareable-link guest editing.
 
 > Plan the days. Prepare the details. Follow today's checklist.
 
@@ -153,7 +154,20 @@ The Import/Export page on every trip exposes:
 | editor | ✓    | ✓          | ✓             |             |              |
 | viewer | ✓    |            |               |             |              |
 
-Sharing UI ships in a follow-up; the schema and RLS are ready.
+### Share links
+
+Beyond the email-invite flow above, owners can mint a shareable link
+from the **Share** button in the trip header. Anyone who clicks the
+link can sign in, sign up, or continue as a guest (anonymous Supabase
+session) and start editing immediately. Guests can later promote their
+session to a permanent account from the **👤 Guest · Save trip** chip,
+which preserves their UID and all attributed edits.
+
+Links are per-role (`editor` / `viewer`), revocable individually, and
+rotatable from the same dialog. Labeled variants for different audiences
+live under **Members → Share links**. Abandoned anonymous accounts are
+swept after 30 days of inactivity by a daily `pg_cron` job; converted
+accounts are spared.
 
 ## Out of scope (V1)
 

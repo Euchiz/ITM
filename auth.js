@@ -35,7 +35,7 @@ export function renderAuthView(host, opts = {}) {
       `;
     }
     return `
-      <h1>Itinerary Studio</h1>
+      <h1>Hermes Daybook</h1>
       <p>A collaborative space for planning trips. Sign in to manage your itineraries.</p>
       <div class="auth-tabs" role="tablist">
         <button data-mode="sign-in" class="${m === "sign-in" ? "active" : ""}" role="tab">Sign in</button>

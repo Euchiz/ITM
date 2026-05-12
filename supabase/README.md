@@ -1,6 +1,6 @@
 # Supabase migrations
 
-SQL migrations for the Trip Studio backend. Files follow the
+SQL migrations for the Hermes Daybook backend. Files follow the
 Supabase CLI naming convention `<14-digit-timestamp>_<name>.sql` and
 are applied in lexicographic order.
 
@@ -74,6 +74,11 @@ the app is served.
 | 5 | `20260510030000_create_itinerary_rpc.sql` | `create_itinerary` RPC (legacy, dropped in #7). |
 | 6 | `20260510040000_trip_schema.sql` | **Trip-shaped schema**: drops `markdown`, adds trip metadata + `days` + `itinerary_items` + `checklist_items` + `notes`, with RLS on all child tables. |
 | 7 | `20260510050000_create_trip_rpc.sql` | RPCs `create_trip`, `create_trip_full(jsonb)` (atomic import), `replace_trip_full(uuid, jsonb)` (owner-only). Drops the legacy `create_itinerary`. |
+| 8 | `20260510060000_member_rpcs.sql` | Member-management RPCs (`list_trip_members`, `add_trip_member_by_email`, `update_trip_member_role`, `remove_trip_member`). |
+| 9 | `20260511000000_fix_list_trip_members_ambiguous.sql` | Disambiguation fix for `list_trip_members` column references. |
+| 10 | `20260511010000_share_links_schema.sql` | Share-link schema: `share_links` table, `itinerary_members.joined_via_link`, `created_by` on child tables + BEFORE INSERT triggers, `random_nickname()` helper. |
+| 11 | `20260511020000_share_links_rpcs.sql` | Share-link RPCs: `peek_share_link` (public preview), `redeem_share_link`, `mint_share_link`, `rotate_share_link`, `revoke_share_link`, `list_share_links`, `default_share_link`. |
+| 12 | `20260511030000_anon_cleanup_cron.sql` | `pg_cron` daily sweep that reaps anonymous users idle >30 days (skips those who linked a non-anon identity). |
 
 ## Adding a new migration
 
@@ -88,41 +93,13 @@ the app is served.
    can be re-applied without errors.
 4. Commit alongside any app code that depends on it.
 
-### Example: invite-by-email RPC
+### Pattern: SECURITY DEFINER RPCs for mutations
 
-A future migration to support sharing might add an RPC that adds
-another user as an editor:
-
-```sql
-create or replace function public.invite_to_itinerary(
-  itin uuid,
-  invitee_email text,
-  invitee_role text default 'editor'
-)
-returns uuid
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  invitee_id uuid;
-begin
-  if public.role_in(itin) <> 'owner' then
-    raise exception 'Only the owner can invite';
-  end if;
-  if invitee_role not in ('editor', 'viewer') then
-    raise exception 'Invalid role';
-  end if;
-  select id into invitee_id from public.profiles where email = invitee_email;
-  if invitee_id is null then
-    raise exception 'No user with that email has signed in yet';
-  end if;
-  insert into public.itinerary_members (itinerary_id, user_id, role)
-  values (itin, invitee_id, invitee_role)
-  on conflict (itinerary_id, user_id) do update set role = excluded.role;
-  return invitee_id;
-end;
-$$;
-```
-
-The app would call it via `supabase.rpc("invite_to_itinerary", { itin, invitee_email, invitee_role })`.
+Most mutations on shared tables go through `SECURITY DEFINER` RPCs
+rather than direct `INSERT` / `UPDATE` / `DELETE` under RLS. This avoids
+a known Supabase quirk where `auth.uid()` returns NULL inside `WITH
+CHECK` expressions on the same request, even though it returns the
+correct UUID elsewhere. See `20260510060000_member_rpcs.sql` and
+`20260511020000_share_links_rpcs.sql` for the established pattern:
+verify the caller is authenticated, enforce role-based authorization
+explicitly, then do the write.
