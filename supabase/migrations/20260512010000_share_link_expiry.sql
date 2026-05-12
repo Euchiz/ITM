@@ -32,6 +32,11 @@ alter table public.share_links
 -- =========================================================
 -- peek_share_link — exposes expired-ness to the landing screen
 -- =========================================================
+-- Postgres won't let CREATE OR REPLACE FUNCTION change the RETURNS
+-- TABLE shape, so drop the previous version first. The signature
+-- (parameters) is the same — only the returned row type grew.
+
+drop function if exists public.peek_share_link(uuid);
 
 create or replace function public.peek_share_link(p_token uuid)
 returns table (
@@ -211,6 +216,9 @@ grant execute on function public.mint_share_link(uuid, text, text, timestamptz) 
 -- =========================================================
 -- list_share_links — returns expires_at
 -- =========================================================
+-- Same RETURNS-TABLE-changed dance as peek_share_link above.
+
+drop function if exists public.list_share_links(uuid);
 
 create or replace function public.list_share_links(p_trip_id uuid)
 returns table (
