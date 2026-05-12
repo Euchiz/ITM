@@ -413,17 +413,12 @@ function bindAppHeader() {
     if (state.trip) openPrintView(state.trip);
   });
   document.getElementById("shareTripBtn").addEventListener("click", () => {
-    // Direct navigation to the Members page. Originally this opened
-    // a compact share-link dialog, but that dialog became redundant
-    // once the Members page got a full share-links section with
-    // labels, copy buttons, rotate, revoke, and create-labeled-link
-    // — and the dialog's single-token view was confusing when more
-    // than one link existed for the trip.
-    if (state.trip) navigate({ trip: state.trip.id, page: "members" });
+    if (state.trip) openShareDialog();
   });
   document.getElementById("guestChipBtn").addEventListener("click", () => {
     openConvertDialog();
   });
+  bindShareDialog();
   bindConvertDialog();
 }
 
@@ -431,6 +426,97 @@ function setDialogStatus(el, msg, isError = false) {
   el.textContent = msg || "";
   el.hidden = !msg;
   el.classList.toggle("error", !!isError);
+}
+
+// ===== Share dialog =====
+// Quick-copy dialog for the trip header's Share button. Shows the
+// current default link for the selected role and a copy button — the
+// 80%-case path. Power-user actions (labeled links, expiry, revoke)
+// live on the Members page, reachable via the "Manage all share links"
+// button in the dialog footer.
+
+let _shareRole = "editor";
+
+async function openShareDialog() {
+  if (!state.trip || state.trip.role !== "owner") return;
+  const dlg = document.getElementById("shareDialog");
+  const radios = dlg.querySelectorAll('input[name="shareRole"]');
+  for (const r of radios) r.checked = r.value === _shareRole;
+  document.getElementById("shareManageLink").href =
+    buildUrl({ trip: state.trip.id, page: "members" });
+  paintShareDialogRoleBadge();
+  dlg.showModal();
+  await refreshShareDialog();
+}
+
+function paintShareDialogRoleBadge() {
+  const badge = document.getElementById("shareLinkRoleBadge");
+  badge.textContent = _shareRole === "viewer" ? "Viewer link" : "Editor link";
+  badge.dataset.role = _shareRole;
+}
+
+async function refreshShareDialog() {
+  const input = document.getElementById("shareLinkInput");
+  const statusEl = document.getElementById("shareDialogStatus");
+  input.value = "";
+  setDialogStatus(statusEl, "Loading…");
+  try {
+    let token = await share.getDefault(state.trip.id, _shareRole);
+    if (!token) token = await share.mint(state.trip.id, _shareRole, null);
+    input.value = share.buildUrl(state.trip.id, token);
+    setDialogStatus(statusEl, "");
+    // Pre-select so the user can ⌘C / Ctrl+C immediately without
+    // hunting for the Copy button.
+    input.focus();
+    input.select();
+  } catch (e) {
+    setDialogStatus(statusEl, e.message || String(e), true);
+  }
+}
+
+function bindShareDialog() {
+  const dlg = document.getElementById("shareDialog");
+  dlg.querySelectorAll('input[name="shareRole"]').forEach((r) => {
+    r.addEventListener("change", async () => {
+      if (!r.checked) return;
+      _shareRole = r.value;
+      paintShareDialogRoleBadge();
+      await refreshShareDialog();
+    });
+  });
+  document.getElementById("shareCopyBtn").addEventListener("click", async () => {
+    const input = document.getElementById("shareLinkInput");
+    if (!input.value) return;
+    try {
+      await navigator.clipboard.writeText(input.value);
+      const btn = document.getElementById("shareCopyBtn");
+      const orig = btn.textContent;
+      btn.textContent = "Copied";
+      setTimeout(() => { btn.textContent = orig; }, 1200);
+    } catch {
+      input.select();
+      document.execCommand?.("copy");
+    }
+  });
+  document.getElementById("shareRotateBtn").addEventListener("click", async (e) => {
+    e.preventDefault();
+    if (!state.trip) return;
+    const statusEl = document.getElementById("shareDialogStatus");
+    if (!confirm("Rotate this link? The current one will stop working.")) return;
+    setDialogStatus(statusEl, "Rotating…");
+    try {
+      const newToken = await share.rotate(state.trip.id, _shareRole);
+      const input = document.getElementById("shareLinkInput");
+      input.value = share.buildUrl(state.trip.id, newToken);
+      setDialogStatus(statusEl, "New link ready.");
+      input.focus();
+      input.select();
+    } catch (err) {
+      setDialogStatus(statusEl, err.message || String(err), true);
+    }
+  });
+  // Let the "Manage all share links" anchor navigate as a normal link.
+  // No JS handler needed — its href is set in openShareDialog.
 }
 
 // ===== Convert (anon → registered) dialog =====
