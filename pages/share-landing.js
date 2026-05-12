@@ -50,6 +50,12 @@ export async function renderShareLanding(host, opts) {
     return;
   }
 
+  if (preview.expired) {
+    host.innerHTML = "";
+    host.appendChild(renderError(`This link has expired. Ask ${preview.owner_display_name || "the owner"} for a new one.`));
+    return;
+  }
+
   host.innerHTML = "";
   host.appendChild(renderCard(preview, token, { onAuthRequest, onRedeemed, onError }));
 }

@@ -7,7 +7,10 @@
 // (issue #2).
 
 import { notes } from "../supabase.js";
-import { el, debouncedSave, autosize, withSaveIndicator } from "./_utils.js";
+import {
+  el, debouncedSave, autosize, withSaveIndicator,
+  formatRelativeTime, memberName,
+} from "./_utils.js";
 
 export function renderNotes(host, ctx) {
   const t = ctx.trip;
@@ -70,6 +73,16 @@ export function renderNotes(host, ctx) {
     setTimeout(() => autosize(bodyTa), 0);
     bodyTa.addEventListener("input", () => { autosize(bodyTa); save({ body: bodyTa.value }); });
 
+    // Attribution footer — rendered only when we can resolve the
+    // creator's display name from the trip roster. Mirrors the
+    // pattern used in the itinerary editor.
+    const author = memberName(ctx.membersById, n.created_by);
+    const when   = formatRelativeTime(n.created_at);
+    const attribution = author
+      ? el("p", { class: "note-attribution muted small",
+          text: when ? `Added by ${author} · ${when}` : `Added by ${author}` })
+      : null;
+
     wrap.append(
       el("header", { class: "note-header" },
         titleInput,
@@ -93,6 +106,7 @@ export function renderNotes(host, ctx) {
           : null,
       ),
       bodyTa,
+      attribution,
     );
     return wrap;
   }

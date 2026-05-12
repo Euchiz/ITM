@@ -137,6 +137,28 @@ export const auth = {
     return !!user?.is_anonymous;
   },
 
+  // Step 1 of the "claim my guest edits" handoff. Must be called
+  // while the anon session is still active; returns a short-lived
+  // token tied to the anon UID. The client signs out of anon and
+  // into the existing account before redeeming the token via
+  // claimAnonEdits(token).
+  async startAnonMerge() {
+    const c = await sb();
+    const { data, error } = await c.rpc("start_anon_merge");
+    if (error) throw error;
+    return data; // token
+  },
+
+  // Step 2 of the handoff. Caller must be authenticated as the
+  // registered account. Moves the anon UID's memberships and
+  // authored content under the caller's UID and deletes the anon.
+  async claimAnonEdits(token) {
+    const c = await sb();
+    const { data, error } = await c.rpc("claim_anon_edits", { p_token: token });
+    if (error) throw error;
+    return data; // number of memberships claimed
+  },
+
   async getSession() {
     const c = await ensureClient();
     if (!c) return null;
@@ -203,12 +225,12 @@ export const trips = {
       .select(`
         id, title, destination, start_date, end_date, summary,
         general_notes, travelers, created_by, created_at, updated_at,
-        days:days(id, date, title, city, notes, sort_order, created_by,
+        days:days(id, date, title, city, notes, sort_order, created_by, created_at,
           items:itinerary_items(id, title, type, start_time, end_time,
             location_name, map_url, notes, is_fixed, is_highlight, status, sort_order, created_by, created_at)
         ),
-        checklist_items(id, day_id, text, category, due_date, is_done, notes, sort_order, created_by),
-        notes(id, day_id, title, body, sort_order, created_by)
+        checklist_items(id, day_id, text, category, due_date, is_done, notes, sort_order, created_by, created_at),
+        notes(id, day_id, title, body, sort_order, created_by, created_at)
       `)
       .eq("id", id)
       .single();
@@ -455,12 +477,14 @@ export const share = {
   },
 
   /** Owner-only. Mints a new link. Pass label=null for the default
-   *  link (the one the header dialog reuses); pass a label string for
-   *  a named link visible only in the Members page. */
-  async mint(trip_id, role, label = null) {
+   *  link (which the auto-create-on-redeem path reuses); pass a label
+   *  string for a named link visible only in the Members page.
+   *  expiresAt is an optional ISO string or null (no expiry). */
+  async mint(trip_id, role, label = null, expiresAt = null) {
     const c = await sb();
     const { data, error } = await c.rpc("mint_share_link", {
       p_trip_id: trip_id, p_role: role, p_label: label,
+      p_expires_at: expiresAt,
     });
     if (error) throw error;
     return data; // new token

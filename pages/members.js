@@ -258,11 +258,27 @@ export async function renderMembers(host, ctx) {
   function shareLinkRow(row) {
     const tr = el("tr", { class: "share-link-row" });
 
+    // Meta line under the label combines the creation time and role,
+    // and tacks on an expiry phrase if the link has one. Already-expired
+    // links flag the row visibly so the owner notices to revoke or rotate.
+    const expiry = row.expires_at ? new Date(row.expires_at) : null;
+    const isExpired = expiry && expiry < new Date();
+    const metaBits = [
+      formatRelativeTime(row.created_at) || "just now",
+      ROLE_LABELS[row.role] || row.role,
+    ];
+    if (expiry) {
+      metaBits.push(isExpired
+        ? `expired ${formatRelativeTime(expiry)}`
+        : `expires ${expiry.toLocaleDateString()}`);
+    }
+    if (isExpired) tr.classList.add("share-link-row--expired");
+
     tr.appendChild(el("td", { class: "share-link-label" },
       el("div", { class: "share-link-name",
         text: row.label || "Default link" }),
       el("div", { class: "muted small share-link-meta",
-        text: `${formatRelativeTime(row.created_at) || "just now"} · ${ROLE_LABELS[row.role] || row.role}` }),
+        text: metaBits.join(" · ") }),
     ));
 
     const copyBtn = el("button", {
@@ -320,6 +336,13 @@ export async function renderMembers(host, ctx) {
     for (const r of ["editor", "viewer"]) {
       roleSelect.appendChild(el("option", { value: r, text: ROLE_LABELS[r] }));
     }
+    // Optional expiry. Empty input → no expiry (link lives until
+    // manually revoked). When set, server stores the value verbatim;
+    // peek/redeem RPCs refuse the token after that timestamp.
+    const expiryInput = el("input", {
+      type: "date", class: "share-link-expiry-input",
+      title: "Optional expiry date — leave blank for no expiry",
+    });
 
     const status = el("div", { class: "muted small" });
 
@@ -330,12 +353,26 @@ export async function renderMembers(host, ctx) {
         status.classList.add("error");
         return;
       }
+      let expiresAt = null;
+      if (expiryInput.value) {
+        // Treat the date input as end-of-day local time so a "good
+        // through May 20" link doesn't die at midnight UTC partway
+        // through May 19 for users west of UTC.
+        const d = new Date(expiryInput.value + "T23:59:59");
+        if (Number.isNaN(d.getTime())) {
+          status.textContent = "Invalid expiry date.";
+          status.classList.add("error");
+          return;
+        }
+        expiresAt = d.toISOString();
+      }
       status.textContent = "Creating…";
       status.classList.remove("error");
       ctx.onSaveStart?.();
       try {
-        await share.mint(trip.id, roleSelect.value, label);
+        await share.mint(trip.id, roleSelect.value, label, expiresAt);
         labelInput.value = "";
+        expiryInput.value = "";
         status.textContent = "";
         await refreshShareLinks();
       } catch (e) {
@@ -353,8 +390,10 @@ export async function renderMembers(host, ctx) {
 
     wrap.append(
       el("div", { class: "share-links-create-row" },
-        labelInput, roleSelect, addBtn,
+        labelInput, roleSelect, expiryInput, addBtn,
       ),
+      el("p", { class: "muted small share-links-create-hint",
+        text: "Expiry is optional. Leave the date blank for a link that lives until you revoke it." }),
       status,
     );
     return wrap;

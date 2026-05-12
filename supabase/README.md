@@ -80,6 +80,8 @@ the app is served.
 | 11 | `20260511020000_share_links_rpcs.sql` | Share-link RPCs: `peek_share_link` (public preview), `redeem_share_link`, `mint_share_link`, `rotate_share_link`, `revoke_share_link`, `list_share_links`, `default_share_link`. |
 | 12 | `20260511030000_anon_cleanup_cron.sql` | `pg_cron` daily sweep that reaps anonymous users idle >30 days (skips those who linked a non-anon identity). |
 | 13 | `20260512000000_fix_share_links_ambiguous_and_rename.sql` | Fix `list_share_links` ambiguous-column error; rename "Trip Studio" → "Hermes Daybook" in `add_trip_member_by_email`'s user-visible error message. |
+| 14 | `20260512010000_share_link_expiry.sql` | Per-link expiration: adds `share_links.expires_at`, updates `peek_share_link` to expose `expired`, `redeem_share_link` to refuse expired tokens, `mint_share_link` to accept an optional expires_at, `list_share_links` to return it. |
+| 15 | `20260512020000_claim_guest_edits.sql` | "Claim my guest edits" merge flow: adds `anon_merge_tokens` table, `start_anon_merge()` (called while anon), and `claim_anon_edits(token)` (called after signing into the existing account). Moves memberships with upgrade-only role precedence, reassigns `created_by` across all content tables, deletes the anon user. |
 
 ## Adding a new migration
 

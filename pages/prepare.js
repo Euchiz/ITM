@@ -6,7 +6,10 @@
 import { checklist } from "../supabase.js";
 import { CHECKLIST_CATEGORIES } from "../io/schema.js";
 import { TEMPLATES } from "../templates.js";
-import { el, debouncedSave, withSaveIndicator, groupBy } from "./_utils.js";
+import {
+  el, debouncedSave, withSaveIndicator, groupBy,
+  formatRelativeTime, memberName,
+} from "./_utils.js";
 
 const CATEGORY_LABELS = {
   booking: "Booking",
@@ -163,7 +166,15 @@ export function renderPrepare(host, ctx) {
       Object.assign(c, patch);
     }), 500);
 
-    const row = el("div", { class: "check-row" });
+    // Attribution as a row-level tooltip — visible on hover without
+    // adding inline clutter to the dense single-line layout.
+    const author = memberName(ctx.membersById, c.created_by);
+    const when = formatRelativeTime(c.created_at);
+    const rowAttrs = { class: "check-row" };
+    if (author) {
+      rowAttrs.title = when ? `Added by ${author} · ${when}` : `Added by ${author}`;
+    }
+    const row = el("div", rowAttrs);
 
     const cb = el("input", { type: "checkbox", class: "big-check",
       checked: c.is_done, disabled: readOnly });

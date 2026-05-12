@@ -61,39 +61,6 @@
     <button data-page="overview"  role="tab" data-mode="any">More</button>
   </nav>
 
-  <dialog id="shareDialog" class="share-dialog no-print">
-    <form method="dialog">
-      <div class="share-dialog-head">
-        <h3>Share trip</h3>
-        <button value="cancel" class="share-dialog-close" aria-label="Close">×</button>
-      </div>
-      <p class="muted small">Anyone with the link can open the trip.</p>
-
-      <div class="share-dialog-role">
-        <label class="share-dialog-role-opt">
-          <input type="radio" name="shareRole" value="editor" checked>
-          <span><strong>Editor</strong> · can edit everything</span>
-        </label>
-        <label class="share-dialog-role-opt">
-          <input type="radio" name="shareRole" value="viewer">
-          <span><strong>Viewer</strong> · read-only</span>
-        </label>
-      </div>
-
-      <div class="share-dialog-linkbox">
-        <input id="shareLinkInput" type="text" readonly placeholder="Generating link…">
-        <button id="shareCopyBtn" type="button" class="btn primary">Copy</button>
-      </div>
-
-      <div class="share-dialog-foot">
-        <button id="shareRotateBtn" type="button" class="auth-link">Rotate link</button>
-        <a id="shareManageLink" href="#" class="auth-link">Manage members →</a>
-      </div>
-
-      <p id="shareDialogStatus" class="auth-status muted small" hidden></p>
-    </form>
-  </dialog>
-
   <dialog id="convertDialog" class="settings-dialog no-print">
     <form method="dialog">
       <h3>Save trip to your account</h3>

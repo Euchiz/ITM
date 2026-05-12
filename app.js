@@ -413,93 +413,24 @@ function bindAppHeader() {
     if (state.trip) openPrintView(state.trip);
   });
   document.getElementById("shareTripBtn").addEventListener("click", () => {
-    if (state.trip) openShareDialog();
+    // Direct navigation to the Members page. Originally this opened
+    // a compact share-link dialog, but that dialog became redundant
+    // once the Members page got a full share-links section with
+    // labels, copy buttons, rotate, revoke, and create-labeled-link
+    // — and the dialog's single-token view was confusing when more
+    // than one link existed for the trip.
+    if (state.trip) navigate({ trip: state.trip.id, page: "members" });
   });
   document.getElementById("guestChipBtn").addEventListener("click", () => {
     openConvertDialog();
   });
-  bindShareDialog();
   bindConvertDialog();
-}
-
-// ===== Share dialog =====
-// Lives in the trip view's header. Visible to owners only. Lazily mints
-// the default (NULL-label) link on open if none exists; otherwise reuses
-// whatever the most recent default is.
-
-let _shareRole = "editor";
-let _shareToken = null;
-
-async function openShareDialog() {
-  if (!state.trip || state.trip.role !== "owner") return;
-  const dlg = document.getElementById("shareDialog");
-  const radios = dlg.querySelectorAll('input[name="shareRole"]');
-  for (const r of radios) r.checked = r.value === _shareRole;
-  document.getElementById("shareManageLink").href = buildUrl({ trip: state.trip.id, page: "members" });
-  dlg.showModal();
-  await refreshShareDialog();
-}
-
-async function refreshShareDialog() {
-  const input = document.getElementById("shareLinkInput");
-  const statusEl = document.getElementById("shareDialogStatus");
-  input.value = "";
-  setDialogStatus(statusEl, "Loading…");
-  try {
-    let token = await share.getDefault(state.trip.id, _shareRole);
-    if (!token) token = await share.mint(state.trip.id, _shareRole, null);
-    _shareToken = token;
-    input.value = share.buildUrl(state.trip.id, token);
-    setDialogStatus(statusEl, "");
-  } catch (e) {
-    setDialogStatus(statusEl, e.message || String(e), true);
-  }
 }
 
 function setDialogStatus(el, msg, isError = false) {
   el.textContent = msg || "";
   el.hidden = !msg;
   el.classList.toggle("error", !!isError);
-}
-
-function bindShareDialog() {
-  const dlg = document.getElementById("shareDialog");
-  dlg.querySelectorAll('input[name="shareRole"]').forEach((r) => {
-    r.addEventListener("change", async () => {
-      if (!r.checked) return;
-      _shareRole = r.value;
-      await refreshShareDialog();
-    });
-  });
-  document.getElementById("shareCopyBtn").addEventListener("click", async () => {
-    const input = document.getElementById("shareLinkInput");
-    if (!input.value) return;
-    try {
-      await navigator.clipboard.writeText(input.value);
-      const btn = document.getElementById("shareCopyBtn");
-      const orig = btn.textContent;
-      btn.textContent = "Copied";
-      setTimeout(() => { btn.textContent = orig; }, 1200);
-    } catch {
-      input.select();
-      document.execCommand?.("copy");
-    }
-  });
-  document.getElementById("shareRotateBtn").addEventListener("click", async (e) => {
-    e.preventDefault();
-    if (!state.trip) return;
-    const statusEl = document.getElementById("shareDialogStatus");
-    if (!confirm("Rotate this link? The current one will stop working.")) return;
-    setDialogStatus(statusEl, "Rotating…");
-    try {
-      const newToken = await share.rotate(state.trip.id, _shareRole);
-      _shareToken = newToken;
-      document.getElementById("shareLinkInput").value = share.buildUrl(state.trip.id, newToken);
-      setDialogStatus(statusEl, "New link ready.");
-    } catch (err) {
-      setDialogStatus(statusEl, err.message || String(err), true);
-    }
-  });
 }
 
 // ===== Convert (anon → registered) dialog =====
@@ -537,7 +468,8 @@ function bindConvertDialog() {
     } catch (err) {
       const msg = (err?.message || String(err));
       if (/already.*registered|already.*in use|already.*exists/i.test(msg)) {
-        setDialogStatus(statusEl, "That email already has an account. Sign in there instead — your current edits will stay attributed to this guest session.", true);
+        // Email collision — offer the claim-and-merge handoff.
+        await tryClaimMergeFlow(email, password, statusEl);
       } else {
         setDialogStatus(statusEl, msg, true);
       }
@@ -545,6 +477,59 @@ function bindConvertDialog() {
       submit.disabled = false;
     }
   });
+}
+
+// "Claim my guest edits" handoff. Called when convert hit an email
+// collision. We mint a merge token while we still have the anon
+// session, sign out, sign in to the existing account, then call the
+// claim RPC which moves memberships + reassigns authored content
+// from the anon UID to the registered UID and deletes the anon row.
+async function tryClaimMergeFlow(email, password, statusEl) {
+  if (!confirm(
+    "That email already has an account. Sign in there and import all your guest edits into it?\n\n" +
+    "Click OK to sign in and claim. Click Cancel if you'd rather sign in separately and leave the guest session as-is."
+  )) {
+    setDialogStatus(statusEl,
+      "Kept as a guest. Use a different email if you want to keep this trip in a new account.",
+      true);
+    return;
+  }
+
+  setDialogStatus(statusEl, "Preparing handoff…");
+  let mergeToken;
+  try {
+    mergeToken = await auth.startAnonMerge();
+  } catch (err) {
+    setDialogStatus(statusEl, "Could not start handoff: " + (err.message || err), true);
+    return;
+  }
+
+  setDialogStatus(statusEl, "Signing in…");
+  try {
+    await auth.signOut();
+    await auth.signIn(email, password);
+  } catch (err) {
+    setDialogStatus(statusEl, "Sign-in failed: " + (err.message || err), true);
+    return;
+  }
+
+  setDialogStatus(statusEl, "Importing your guest edits…");
+  try {
+    const claimed = await auth.claimAnonEdits(mergeToken);
+    setDialogStatus(statusEl,
+      `Done — ${claimed} trip${claimed === 1 ? "" : "s"} moved into this account.`);
+    setTimeout(() => {
+      document.getElementById("convertDialog").close("claimed");
+      // After claim, the dashboard should re-render to show the
+      // claimed trips. handleAuthChange already triggered routeFromUrl
+      // when signIn completed, but it may have raced; force a refresh.
+      routeFromUrl();
+    }, 800);
+  } catch (err) {
+    setDialogStatus(statusEl,
+      "Signed in, but couldn't import guest edits: " + (err.message || err),
+      true);
+  }
 }
 
 // Build a same-origin URL with the given query params. Used to construct
