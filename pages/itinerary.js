@@ -34,9 +34,11 @@ const TYPE_VISUALS = {
 };
 
 const VIEW_STORAGE_KEY = "voyage:itinerary-view";
-// Only two distinct visual modes — the previous "list" view was almost
-// identical to "timeline" and added no real affordance.
-const VIEW_OPTIONS = ["timeline", "cards"];
+// Timeline + cards are CSS variants of the same per-day DOM. Category
+// is a different shape: trip-wide, grouped by item type, day context
+// shown per row. Selected-day still matters in timeline/cards; category
+// ignores it.
+const VIEW_OPTIONS = ["timeline", "cards", "category"];
 
 // Module-scope reference to the current click-outside listener used by
 // the inline editor. Lives outside renderItinerary so a stale listener
@@ -86,23 +88,36 @@ export function renderItinerary(host, ctx) {
   const day = (t.days || [])[idx];
 
   // ── Page head — title, summary, tool buttons ───────────────────────
+  const headBlurb = (() => {
+    if (!dayCount) return "Add your first day to start planning.";
+    if (view === "category") {
+      return "Every item across the trip, grouped by type. " +
+             "Click a row to jump back to that day on the timeline.";
+    }
+    return `Editing day ${idx + 1} of ${dayCount}. Switch days with the strip above. ` +
+           "Click any event card to edit. Use the view toggle to switch between Timeline, Cards, and Category.";
+  })();
   host.appendChild(
     el("section", { class: "page-head vy-itin-head" },
       el("div", { class: "vy-itin-head-l" },
         el("h2", { text: "Itinerary" }),
-        el("p", { class: "muted",
-          text: dayCount
-            ? `Editing day ${idx + 1} of ${dayCount}. Switch days with the strip above. ` +
-              "Click any event card to edit. Use the view toggle to switch between Timeline, List and Cards."
-            : "Add your first day to start planning." }),
+        el("p", { class: "muted", text: headBlurb }),
       ),
       el("div", { class: "vy-itin-head-r" },
         viewToggle(),
-        !readOnly ? el("button", { class: "btn primary", onClick: () => addNewDay() }, "+ Add day") : null,
+        !readOnly && view !== "category"
+          ? el("button", { class: "btn primary", onClick: () => addNewDay() }, "+ Add day")
+          : null,
         toolMenu(),
       ),
     )
   );
+
+  if (view === "category") {
+    host.appendChild(renderCategoryView());
+    appendRouteStale();
+    return;
+  }
 
   if (!day) {
     host.appendChild(el("div", { class: "empty-state" },
@@ -118,6 +133,115 @@ export function renderItinerary(host, ctx) {
   host.appendChild(dayList);
 
   appendRouteStale();
+
+  // Trip-wide view grouped by item type. Read-only summary — click a
+  // row to drop back into timeline mode focused on that item's day.
+  function renderCategoryView() {
+    const wrap = el("div", { class: "vy-category", "data-view": "category" });
+
+    const flat = [];
+    (t.days || []).forEach((d, di) => {
+      (d.items || []).forEach((it) => flat.push({ item: it, day: d, dayIdx: di }));
+    });
+
+    if (flat.length === 0) {
+      wrap.appendChild(el("div", { class: "empty-state" },
+        el("h3", { text: "No items yet" }),
+        el("p", { text: "Add events on any day to see them grouped here." }),
+      ));
+      return wrap;
+    }
+
+    // Bucket items by type, preserving the ITEM_TYPES order so categories
+    // render in a predictable sequence (activity first, note last).
+    const buckets = new Map();
+    for (const t of ITEM_TYPES) buckets.set(t, []);
+    for (const entry of flat) {
+      const key = ITEM_TYPES.includes(entry.item.type) ? entry.item.type : "activity";
+      buckets.get(key).push(entry);
+    }
+
+    // Counts strip — quick at-a-glance summary at the top.
+    const summary = el("div", { class: "vy-category-summary" });
+    for (const type of ITEM_TYPES) {
+      const count = buckets.get(type).length;
+      if (count === 0) continue;
+      const visuals = TYPE_VISUALS[type];
+      summary.appendChild(el("span", { class: `vy-category-chip vy-chip vy-chip--${visuals.chipClass}` },
+        el("span", { class: "material-symbols-outlined", text: visuals.glyph }),
+        el("span", { class: "vy-category-chip-label", text: visuals.label }),
+        el("span", { class: "vy-category-chip-count", text: String(count) }),
+      ));
+    }
+    wrap.appendChild(summary);
+
+    for (const type of ITEM_TYPES) {
+      const entries = buckets.get(type);
+      if (entries.length === 0) continue;
+      const visuals = TYPE_VISUALS[type];
+
+      // Within a group: sort by day index (so earlier days come first),
+      // then by start time so a day's items stay in chronological order.
+      entries.sort((a, b) => {
+        if (a.dayIdx !== b.dayIdx) return a.dayIdx - b.dayIdx;
+        const at = a.item.start_time || "";
+        const bt = b.item.start_time || "";
+        return at.localeCompare(bt);
+      });
+
+      const section = el("section", { class: "vy-category-section card" });
+      section.appendChild(el("header", { class: "vy-category-section-head" },
+        el("span", { class: `vy-chip vy-chip--${visuals.chipClass}` },
+          el("span", { class: "material-symbols-outlined", text: visuals.glyph }),
+          el("span", { text: visuals.label }),
+        ),
+        el("span", { class: "vy-meta", text: `${entries.length} ${entries.length === 1 ? "ITEM" : "ITEMS"}` }),
+      ));
+
+      const list = el("div", { class: "vy-category-list" });
+      for (const entry of entries) list.appendChild(categoryRow(entry, visuals));
+      section.appendChild(list);
+
+      wrap.appendChild(section);
+    }
+    return wrap;
+  }
+
+  function categoryRow({ item: it, day: d, dayIdx }, visuals) {
+    const timeLabel = (it.start_time || it.end_time)
+      ? formatTimeRange(it.start_time, it.end_time)
+      : "";
+    const dayLabel = d.date
+      ? new Date(d.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
+      : `Day ${dayIdx + 1}`;
+    const cityLabel = d.city ? ` · ${d.city}` : "";
+
+    const row = el("button", {
+      class: "vy-category-row",
+      type: "button",
+      "data-item-id": it.id,
+      onClick: () => jumpToDay(dayIdx),
+    },
+      el("div", { class: "vy-category-row-main" },
+        el("span", { class: "vy-category-row-title", text: it.title || "(untitled)" }),
+        it.location_name
+          ? el("span", { class: "vy-category-row-loc",
+              text: it.location_name })
+          : null,
+      ),
+      el("div", { class: "vy-category-row-meta" },
+        timeLabel ? el("span", { class: "vy-category-row-time", text: timeLabel }) : null,
+        el("span", { class: "vy-category-row-day", text: `Day ${dayIdx + 1} · ${dayLabel}${cityLabel}` }),
+      ),
+    );
+    if (it.is_highlight) row.classList.add("is-highlight");
+    return row;
+  }
+
+  function jumpToDay(dayIdx) {
+    writeView("timeline");
+    ctx.setSelectedDayIdx?.(dayIdx);
+  }
 
   // ────────────────────────────────────────────────────────────────────
   // Builders

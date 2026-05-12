@@ -2421,6 +2421,113 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
   box-shadow: inset 0 0 0 1px var(--vbl-hairline);
 }
 
+/* ===== Itinerary · Category view =====
+ *
+ * Trip-wide summary, grouped by item type. Counts strip at the top,
+ * one .vy-category-section per non-empty type, each holding clickable
+ * .vy-category-row buttons that drop the user back into timeline mode
+ * focused on the relevant day. */
+
+.vy-category {
+  display: flex; flex-direction: column; gap: 16px;
+  margin-top: 14px;
+}
+.vy-category-summary {
+  display: flex; flex-wrap: wrap; gap: 8px;
+}
+.vy-category-chip {
+  height: 26px;
+  padding: 0 11px;
+  gap: 7px;
+}
+.vy-category-chip-count {
+  font-family: var(--vbl-font-mono);
+  font-size: 0.62rem;
+  font-weight: 500;
+  margin-left: 2px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.55);
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+.vy-category-section {
+  padding: 14px 16px 12px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.vy-category-section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px;
+}
+.vy-category-list {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.vy-category-row {
+  appearance: none;
+  border: 0;
+  background: rgba(255,255,255,0.45);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--vbl-ink);
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+  transition: background 120ms, transform 120ms, box-shadow 120ms;
+}
+.vy-category-row:hover {
+  background: rgba(255,255,255,0.75);
+  transform: translateY(-1px);
+  box-shadow: inset 0 0 0 1px rgba(40,103,95,0.22),
+              0 6px 16px -10px rgba(40,103,95,0.32);
+}
+.vy-category-row.is-highlight {
+  box-shadow: inset 0 0 0 1px rgba(216,127,42,0.42);
+}
+.vy-category-row-main {
+  display: flex; flex-direction: column; gap: 2px;
+  min-width: 0; flex: 1;
+}
+.vy-category-row-title {
+  font-family: var(--vbl-font-display);
+  font-size: 14px; font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--vbl-ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.vy-category-row-loc {
+  font-size: 12px;
+  color: var(--vbl-fg-3);
+  font-family: var(--vbl-font-body);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.vy-category-row-meta {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+  flex-shrink: 0;
+  font-family: var(--vbl-font-display);
+}
+.vy-category-row-time {
+  font-family: var(--vbl-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--vbl-ink);
+  letter-spacing: 0.02em;
+}
+.vy-category-row-day {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--vbl-fg-3);
+}
+
+@media (max-width: 560px) {
+  .vy-category-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .vy-category-row-meta { align-items: flex-start; flex-direction: row; gap: 10px; flex-wrap: wrap; }
+}
+
 /* Prepare-category chip palettes — one hue per category so a glance
  * across the filter row reflects relative importance. Ordered from
  * critical (document) through routine (other). */
