@@ -254,7 +254,17 @@ export function renderItinerary(host, ctx) {
         class: v === view ? "is-active" : "",
         role: "tab",
         onClick: () => {
+          if (v === view) return;
           writeView(v);
+          // Timeline ↔ Cards is a CSS-only swap of the same per-day DOM
+          // — fast, preserves any open inline editor. Category has a
+          // fundamentally different shape (trip-wide groups), so any
+          // transition into or out of it needs a full re-render.
+          const needsRebuild = v === "category" || view === "category";
+          if (needsRebuild) {
+            ctx.rerender?.();
+            return;
+          }
           if (dayList) dayList.dataset.view = v;
           wrap.querySelectorAll("button").forEach((b) => b.classList.toggle("is-active", b.dataset.v === v));
         },
