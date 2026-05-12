@@ -878,12 +878,12 @@ body[data-view="trip"] .app-header { display: none; }
   margin: 0 auto;
 }
 
-/* ─ topbar — live status · search · bell · members · share ───────── */
+/* ─ topbar — live status · members · share ───────────────────────── */
 
 .vy-topbar {
   position: sticky; top: 0; z-index: 20;
   display: grid;
-  grid-template-columns: auto 1fr auto auto auto;
+  grid-template-columns: 1fr auto auto;
   gap: 14px;
   align-items: center;
   padding: 14px 24px;
@@ -910,62 +910,6 @@ body[data-view="trip"] .app-header { display: none; }
     0 0 0 3px rgba(78,159,146,0.22),
     0 0 8px rgba(78,159,146,0.6);
   animation: vy-pulse 1.8s ease-in-out infinite;
-}
-
-.vy-search {
-  display: flex; align-items: center;
-  gap: 8px;
-  height: 34px;
-  min-width: 260px;
-  max-width: 520px;
-  padding: 0 12px;
-  border-radius: 10px;
-  background: rgba(255,255,255,0.6);
-  box-shadow: inset 0 0 0 1px var(--vbl-line);
-  color: var(--vbl-fg-3);
-  font-size: 0.8rem;
-  cursor: not-allowed;
-}
-.vy-search .material-symbols-outlined {
-  font-size: 16px;
-  line-height: 1;
-  color: var(--vbl-fg-3);
-}
-.vy-search-placeholder {
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  flex: 0 1 auto;
-}
-.vy-search-spacer { flex: 1; }
-.vy-search kbd {
-  font-family: var(--vbl-font-mono);
-  font-size: 0.62rem;
-  padding: 1px 6px;
-  border-radius: 4px;
-  color: var(--vbl-fg-3);
-  background: rgba(255,255,255,0.5);
-  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
-}
-
-.vy-topbar .vy-icon-btn {
-  appearance: none;
-  border: 0;
-  width: 34px; height: 34px;
-  border-radius: 10px;
-  display: grid; place-items: center;
-  background: rgba(255,255,255,0.55);
-  box-shadow: inset 0 0 0 1px var(--vbl-line);
-  color: var(--vbl-ink);
-  cursor: pointer;
-  transition: background 120ms, transform 120ms;
-}
-.vy-topbar .vy-icon-btn:hover { background: rgba(255,255,255,0.92); transform: translateY(-1px); }
-.vy-topbar .vy-icon-btn[aria-disabled="true"] {
-  cursor: not-allowed;
-  color: var(--vbl-fg-3);
-}
-.vy-topbar .vy-icon-btn[aria-disabled="true"]:hover { transform: none; }
-.vy-topbar .vy-icon-btn .material-symbols-outlined {
-  font-size: 18px; line-height: 1;
 }
 
 /* member avatar stack */
@@ -2133,10 +2077,9 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
   .vy-main-scroll { padding: 12px 10px 24px; gap: 10px; }
 
   /* Two sticky-top:0 bars (app-header + topbar) would stack and overlap
-   * on mobile. Drop the topbar's stickiness, hide its desktop-only
-   * widgets (search, live-collab telemetry, notifications), and keep
-   * the members avatar stack + Share button so the primary sharing
-   * affordance stays reachable on mobile too. */
+   * on mobile. Drop the topbar's stickiness and hide the live-collab
+   * telemetry; keep the avatar stack + Share button so the primary
+   * sharing affordance stays reachable on mobile too. */
   .vy-topbar {
     position: static;
     grid-template-columns: 1fr auto auto;
@@ -2147,9 +2090,7 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
-  .vy-topbar-live,
-  .vy-search,
-  #topbarNotifBtn { display: none; }
+  .vy-topbar-live { display: none; }
   .vy-share-stack { grid-column: 2; }
   .vy-topbar .vy-btn-primary { grid-column: 3; }
 

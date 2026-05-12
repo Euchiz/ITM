@@ -243,12 +243,15 @@ export async function openTrip(id, page) {
     const trip = await trips.getFull(id);
     state.trip = trip;
     // Fetch the roster so item editors can resolve created_by UIDs into
-    // display names ("added by Alice 2d ago"). Best-effort: if the call
-    // fails (transient RLS hiccup, etc.) we degrade to no attribution
-    // text rather than blocking the trip from opening.
+    // display names ("added by Alice 2d ago") AND the topbar avatar
+    // stack can render real avatars instead of a placeholder. Best-
+    // effort: if the call fails (transient RLS hiccup, etc.) we degrade
+    // to no attribution text rather than blocking the trip from opening.
+    state.trip.members = [];
     state.trip.membersById = {};
     try {
       const memberRows = await members.list(id);
+      state.trip.members = memberRows;
       for (const m of memberRows) state.trip.membersById[m.user_id] = m;
     } catch (e) {
       console.warn("Could not fetch members for attribution:", e);
@@ -884,10 +887,15 @@ function paintSidebar() {
 }
 
 // Voyage topbar — sits at the top of the main column on the trip view.
-// Mirrors desktop.jsx: live-collab telemetry · search · notifications ·
-// member avatars · Share trip. Search + notifications are stale this
-// version; the member stack navigates to the Members page; Share trip
-// copies the current URL to the clipboard.
+// Live-collab telemetry on the left, member avatar stack + Share button
+// on the right. The avatar stack reads from state.trip.members (which
+// openTrip populates via members.list()) so the avatars are real, not
+// placeholders. Clicking the stack navigates to the Members page.
+//
+// Previous versions also had a search bar and a notifications bell
+// here. Both were stubs ("coming soon") backed by no feature, so they
+// were stripped to keep the topbar honest. Add them back if/when the
+// underlying features exist.
 function paintTopbar() {
   const bar = document.getElementById("tripTopbar");
   if (!bar) return;
@@ -901,9 +909,8 @@ function paintTopbar() {
   const visibleMembers = members.slice(0, 4);
   const overflowCount = Math.max(0, members.length - visibleMembers.length);
 
-  // Editors count: members with a role of owner/editor. If the trip
-  // object doesn't carry members (e.g. solo trip), the count falls back
-  // to the current user (1).
+  // Editors count: members with role owner or editor. Reflects the
+  // actual roster — if it shows 1, that's because the trip is solo.
   const editors = members.filter((m) => {
     const r = (m.role || "").toLowerCase();
     return r === "owner" || r === "editor";
@@ -913,25 +920,16 @@ function paintTopbar() {
     <div class="vy-topbar-live">
       <span class="vy-meta">
         <i class="vy-livedot" aria-hidden></i>
-        LIVE COLLAB · <b id="topbarEditors">${editors}</b> EDITOR${editors === 1 ? "" : "S"} · LAST CHANGE
+        <b id="topbarEditors">${editors}</b> EDITOR${editors === 1 ? "" : "S"} · LAST CHANGE
         <b id="topbarLastChange">${formatLastChange(state.lastChangeAt)}</b>
       </span>
     </div>
-    <div class="vy-search" title="Search — coming soon" aria-disabled="true">
-      <span class="material-symbols-outlined" aria-hidden>search</span>
-      <span class="vy-search-placeholder">Search places, reservations, notes…</span>
-      <span class="vy-search-spacer"></span>
-      <kbd>⌘K</kbd>
-    </div>
-    <button class="vy-icon-btn" id="topbarNotifBtn" title="Notifications — coming soon" aria-disabled="true">
-      <span class="material-symbols-outlined" aria-hidden>notifications</span>
-    </button>
     <button class="vy-share-stack" id="topbarMembersBtn" title="Members &amp; roles">
       ${visibleMembers.map((m, i) => avatarHtml(m, i)).join("")}
       ${overflowCount ? `<span class="vy-avatar vy-avatar--more" title="${overflowCount} more"><span>+${overflowCount}</span></span>` : ""}
       ${!members.length ? `<span class="vy-avatar" style="background:linear-gradient(135deg,#dff1ec,#a8d6ca)"><span>···</span></span>` : ""}
     </button>
-    <button class="vy-btn-primary" id="topbarShareBtn" title="Copy trip link">
+    <button class="vy-btn-primary" id="topbarShareBtn" title="Share trip">
       <span class="material-symbols-outlined" aria-hidden>ios_share</span>
       Share trip
     </button>
@@ -948,16 +946,17 @@ function paintTopbar() {
       topbarShareBtn.addEventListener("click", () => toggleShareMenu());
     }
   }
-  // Notification button is intentionally inert until the feature lands.
 }
 
 function avatarHtml(member, idx) {
   // Hue rotates by index so each member's avatar gets a distinct pastel.
-  // 172 (viridian) and 42 (amber) match the design's MB/JW pair on first
-  // two slots, then we walk the color wheel for further members.
+  // 172 (viridian) and 42 (amber) match the design's first two slots,
+  // then we walk the color wheel for further members.
   const hues = [172, 42, 198, 312, 102];
   const hue = hues[idx % hues.length];
-  const name = member?.profile?.full_name || member?.email || "?";
+  // list_trip_members returns display_name + email; fall back through
+  // them so guests with no display_name still get sensible initials.
+  const name = member?.display_name || member?.email || "?";
   const initials = computeInitials(name);
   return `<span class="vy-avatar" style="background:radial-gradient(120% 100% at 50% 0%, hsl(${hue} 35% 92% / 0.9), hsl(${hue} 25% 78% / 0.4))" title="${escapeText(name)}"><span>${escapeText(initials)}</span></span>`;
 }
