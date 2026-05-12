@@ -2134,11 +2134,12 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
 
   /* Two sticky-top:0 bars (app-header + topbar) would stack and overlap
    * on mobile. Drop the topbar's stickiness, hide its desktop-only
-   * widgets (search, live-collab telemetry, share-trip button), and
-   * keep just the members avatar stack so collaborators stay reachable. */
+   * widgets (search, live-collab telemetry, notifications), and keep
+   * the members avatar stack + Share button so the primary sharing
+   * affordance stays reachable on mobile too. */
   .vy-topbar {
     position: static;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr auto auto;
     padding: 8px 12px;
     gap: 8px;
     box-shadow: none;
@@ -2148,9 +2149,9 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
   }
   .vy-topbar-live,
   .vy-search,
-  .vy-topbar .vy-btn-primary,
   #topbarNotifBtn { display: none; }
   .vy-share-stack { grid-column: 2; }
+  .vy-topbar .vy-btn-primary { grid-column: 3; }
 
   /* Hero collapses to a single column so the date/meta stack under the
    * title instead of fighting for horizontal room. */

@@ -413,9 +413,6 @@ function bindAppHeader() {
   document.getElementById("printTripBtn").addEventListener("click", () => {
     if (state.trip) openPrintView(state.trip);
   });
-  document.getElementById("shareTripBtn").addEventListener("click", () => {
-    if (state.trip) toggleShareMenu();
-  });
   document.getElementById("guestChipBtn").addEventListener("click", () => {
     openConvertDialog();
   });
@@ -574,10 +571,10 @@ function renderShareMenuRow(link) {
   return row;
 }
 
-// Position the popover under the Share button, right-edge-aligned to
-// the button, clamped to stay on-screen on narrow mobile viewports.
+// Position the popover under the topbar Share button, right-edge
+// aligned to the button, clamped to stay on-screen on narrow viewports.
 function positionShareMenu(menu) {
-  const btn = document.getElementById("shareTripBtn");
+  const btn = document.getElementById("topbarShareBtn");
   if (!btn) return;
   const r = btn.getBoundingClientRect();
   const menuWidth = menu.offsetWidth || 340;
@@ -941,16 +938,16 @@ function paintTopbar() {
   `;
 
   bar.querySelector("#topbarMembersBtn").addEventListener("click", () => navigate({ page: "members" }));
-  bar.querySelector("#topbarShareBtn").addEventListener("click", () => {
-    const url = location.href;
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(url)
-        .then(() => toast("Trip link copied"))
-        .catch(() => toast("Copy failed — try selecting the URL", true));
+  // Share button opens the share-link popover (anchored to this button).
+  // Owner-only; for non-owners we hide the trigger entirely below.
+  const topbarShareBtn = bar.querySelector("#topbarShareBtn");
+  if (topbarShareBtn) {
+    if (state.trip.role !== "owner") {
+      topbarShareBtn.hidden = true;
     } else {
-      toast("Trip link: " + url);
+      topbarShareBtn.addEventListener("click", () => toggleShareMenu());
     }
-  });
+  }
   // Notification button is intentionally inert until the feature lands.
 }
 
@@ -1376,10 +1373,9 @@ function paintHeader() {
 
   backBtn.hidden = !(state.view === "trip" && state.user);
   document.getElementById("printTripBtn").hidden = !(state.view === "trip" && state.trip);
-  // Share button is owner-only on the trip view.
-  document.getElementById("shareTripBtn").hidden = !(
-    state.view === "trip" && state.trip && state.trip.role === "owner"
-  );
+  // Share lives in the trip topbar now, not in the global app-header,
+  // so there's nothing to toggle here. The topbar Share button is
+  // rendered by paintTopbar() and wired to toggleShareMenu().
   // Guest chip is shown anywhere a signed-in anon user can be —
   // trip view, dashboard, etc. It's the only conversion surface.
   document.getElementById("guestChipBtn").hidden = !(state.user?.is_anonymous);
