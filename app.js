@@ -643,8 +643,8 @@ function paintSidebar() {
 
   aside.innerHTML = `
     <div class="vy-brand-side">
-      <strong>BON VOYAGE</strong>
-      <span>— ∞ — INTEGRATED TRIP MANAGER</span>
+      <strong>HERMES DAYBOOK</strong>
+      <span>— ∞ — BON VOYAGE</span>
     </div>
 
     <button class="vy-trip-switcher" id="sideBackBtn" title="Back to all trips">
