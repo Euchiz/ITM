@@ -33,6 +33,7 @@ import { renderMap } from "./pages/map.js";
 import { renderBudget } from "./pages/budget.js";
 import { renderCosts } from "./pages/costs.js";
 import { openPrintView } from "./pages/print-view.js";
+import { el, formatRelativeTime } from "./pages/_utils.js";
 
 const PAGES = {
   overview: renderOverview,
@@ -413,12 +414,11 @@ function bindAppHeader() {
     if (state.trip) openPrintView(state.trip);
   });
   document.getElementById("shareTripBtn").addEventListener("click", () => {
-    if (state.trip) openShareDialog();
+    if (state.trip) toggleShareMenu();
   });
   document.getElementById("guestChipBtn").addEventListener("click", () => {
     openConvertDialog();
   });
-  bindShareDialog();
   bindConvertDialog();
 }
 
@@ -428,96 +428,175 @@ function setDialogStatus(el, msg, isError = false) {
   el.classList.toggle("error", !!isError);
 }
 
-// ===== Share dialog =====
-// Quick-copy dialog for the trip header's Share button. Shows the
-// current default link for the selected role and a copy button — the
-// 80%-case path. Power-user actions (labeled links, expiry, revoke)
-// live on the Members page, reachable via the "Manage all share links"
-// button in the dialog footer.
+// ===== Share popover (drop-down menu) =====
+// Quick-copy menu for the trip header's Share button. Lists every
+// active share link as a row; click-anywhere on a row copies that
+// link's URL. Empty state lazily mints a default editor link so the
+// first click always produces something copyable. Power-user actions
+// (labeled mint, expiry, revoke) live on the Members page, one click
+// away via the pinned footer button.
+//
+// Uses the native popover="auto" element so click-outside dismissal,
+// Escape handling, and top-layer stacking are free.
 
-let _shareRole = "editor";
-
-async function openShareDialog() {
+function toggleShareMenu() {
   if (!state.trip || state.trip.role !== "owner") return;
-  const dlg = document.getElementById("shareDialog");
-  const radios = dlg.querySelectorAll('input[name="shareRole"]');
-  for (const r of radios) r.checked = r.value === _shareRole;
+  const menu = document.getElementById("shareMenu");
+  if (menu.matches(":popover-open")) {
+    menu.hidePopover();
+    return;
+  }
+  openShareMenu();
+}
+
+async function openShareMenu() {
+  const menu = document.getElementById("shareMenu");
+  const body = document.getElementById("shareMenuBody");
+  body.innerHTML = "";
+  body.appendChild(el("div", { class: "share-menu-loading muted small", text: "Loading…" }));
   document.getElementById("shareManageLink").href =
     buildUrl({ trip: state.trip.id, page: "members" });
-  paintShareDialogRoleBadge();
-  dlg.showModal();
-  await refreshShareDialog();
-}
 
-function paintShareDialogRoleBadge() {
-  const badge = document.getElementById("shareLinkRoleBadge");
-  badge.textContent = _shareRole === "viewer" ? "Viewer link" : "Editor link";
-  badge.dataset.role = _shareRole;
-}
+  positionShareMenu(menu);
+  menu.showPopover();
 
-async function refreshShareDialog() {
-  const input = document.getElementById("shareLinkInput");
-  const statusEl = document.getElementById("shareDialogStatus");
-  input.value = "";
-  setDialogStatus(statusEl, "Loading…");
+  let links;
   try {
-    let token = await share.getDefault(state.trip.id, _shareRole);
-    if (!token) token = await share.mint(state.trip.id, _shareRole, null);
-    input.value = share.buildUrl(state.trip.id, token);
-    setDialogStatus(statusEl, "");
-    // Pre-select so the user can ⌘C / Ctrl+C immediately without
-    // hunting for the Copy button.
-    input.focus();
-    input.select();
+    links = await share.list(state.trip.id);
   } catch (e) {
-    setDialogStatus(statusEl, e.message || String(e), true);
+    body.innerHTML = "";
+    body.appendChild(el("div", { class: "share-menu-error error small",
+      text: "Could not load links: " + (e.message || e) }));
+    return;
   }
+
+  // Filter expired client-side. The Members page intentionally still
+  // shows them (struck through) so owners can revoke; the popover
+  // hides them so the quick-copy surface stays focused on what works.
+  const now = Date.now();
+  let active = links.filter((l) => !l.expires_at || Date.parse(l.expires_at) >= now);
+
+  // Empty-state auto-mint: if the trip has no live links yet, create
+  // a default editor link before rendering. The 80% case is "I want
+  // to share this trip" — don't make them decide a role first.
+  if (active.length === 0) {
+    try {
+      await share.mint(state.trip.id, "editor", null);
+      const reloaded = await share.list(state.trip.id);
+      active = reloaded.filter((l) => !l.expires_at || Date.parse(l.expires_at) >= now);
+    } catch (e) {
+      body.innerHTML = "";
+      body.appendChild(el("div", { class: "share-menu-error error small",
+        text: "Could not create link: " + (e.message || e) }));
+      return;
+    }
+  }
+
+  // Sort: defaults first (editor then viewer), labeled by created_at desc.
+  active.sort((a, b) => {
+    const aDef = !a.label, bDef = !b.label;
+    if (aDef !== bDef) return aDef ? -1 : 1;
+    if (aDef && bDef) {
+      if (a.role !== b.role) return a.role === "editor" ? -1 : 1;
+      return 0;
+    }
+    return Date.parse(b.created_at) - Date.parse(a.created_at);
+  });
+
+  // Render. Insert a thin separator between the default block and the
+  // labeled block when both exist.
+  body.innerHTML = "";
+  let lastWasDefault = null;
+  for (const link of active) {
+    const isDefault = !link.label;
+    if (lastWasDefault === true && !isDefault) {
+      body.appendChild(el("div", { class: "share-menu-divider" }));
+    }
+    body.appendChild(renderShareMenuRow(link));
+    lastWasDefault = isDefault;
+  }
+
+  // Re-position after content size settles (height may have grown).
+  positionShareMenu(menu);
 }
 
-function bindShareDialog() {
-  const dlg = document.getElementById("shareDialog");
-  dlg.querySelectorAll('input[name="shareRole"]').forEach((r) => {
-    r.addEventListener("change", async () => {
-      if (!r.checked) return;
-      _shareRole = r.value;
-      paintShareDialogRoleBadge();
-      await refreshShareDialog();
-    });
-  });
-  document.getElementById("shareCopyBtn").addEventListener("click", async () => {
-    const input = document.getElementById("shareLinkInput");
-    if (!input.value) return;
+function renderShareMenuRow(link) {
+  const isDefault = !link.label;
+  const labelText = isDefault ? "Default link" : link.label;
+  const roleKind = link.role === "viewer" ? "viewer" : "editor";
+
+  const metaBits = [];
+  if (link.expires_at) {
+    const d = new Date(link.expires_at);
+    metaBits.push(`expires ${d.toLocaleDateString()}`);
+  }
+  const rel = link.created_at ? formatRelativeTime(link.created_at) : null;
+  if (rel) metaBits.push(`created ${rel}`);
+
+  const row = el("button", { class: "share-menu-row", type: "button" });
+  const content = el("div", { class: "share-menu-row-content" });
+  content.appendChild(el("div", { class: "share-menu-row-header" },
+    el("span", { class: "share-menu-row-label", text: labelText }),
+    el("span", {
+      class: `share-menu-row-role share-menu-row-role--${roleKind}`,
+      text: link.role.toUpperCase(),
+    }),
+  ));
+  if (metaBits.length) {
+    content.appendChild(el("div", {
+      class: "share-menu-row-meta muted small",
+      text: metaBits.join(" · "),
+    }));
+  }
+  const icon = el("span", { class: "share-menu-row-icon", "aria-hidden": "true", text: "📋" });
+  row.append(content, icon);
+
+  row.addEventListener("click", async () => {
+    const url = share.buildUrl(state.trip.id, link.token);
     try {
-      await navigator.clipboard.writeText(input.value);
-      const btn = document.getElementById("shareCopyBtn");
-      const orig = btn.textContent;
-      btn.textContent = "Copied";
-      setTimeout(() => { btn.textContent = orig; }, 1200);
+      await navigator.clipboard.writeText(url);
+      row.classList.add("share-menu-row--copied");
+      icon.textContent = "✓";
+      setTimeout(() => {
+        row.classList.remove("share-menu-row--copied");
+        icon.textContent = "📋";
+      }, 1000);
     } catch {
-      input.select();
-      document.execCommand?.("copy");
+      row.classList.add("share-menu-row--error");
+      icon.textContent = "!";
+      setTimeout(() => {
+        row.classList.remove("share-menu-row--error");
+        icon.textContent = "📋";
+      }, 1500);
     }
   });
-  document.getElementById("shareRotateBtn").addEventListener("click", async (e) => {
-    e.preventDefault();
-    if (!state.trip) return;
-    const statusEl = document.getElementById("shareDialogStatus");
-    if (!confirm("Rotate this link? The current one will stop working.")) return;
-    setDialogStatus(statusEl, "Rotating…");
-    try {
-      const newToken = await share.rotate(state.trip.id, _shareRole);
-      const input = document.getElementById("shareLinkInput");
-      input.value = share.buildUrl(state.trip.id, newToken);
-      setDialogStatus(statusEl, "New link ready.");
-      input.focus();
-      input.select();
-    } catch (err) {
-      setDialogStatus(statusEl, err.message || String(err), true);
-    }
-  });
-  // Let the "Manage all share links" anchor navigate as a normal link.
-  // No JS handler needed — its href is set in openShareDialog.
+
+  return row;
 }
+
+// Position the popover under the Share button, right-edge-aligned to
+// the button, clamped to stay on-screen on narrow mobile viewports.
+function positionShareMenu(menu) {
+  const btn = document.getElementById("shareTripBtn");
+  if (!btn) return;
+  const r = btn.getBoundingClientRect();
+  const menuWidth = menu.offsetWidth || 340;
+  let right = window.innerWidth - r.right;
+  const maxRight = window.innerWidth - menuWidth - 8;
+  right = Math.min(right, maxRight);
+  menu.style.right = `${Math.max(8, right)}px`;
+  menu.style.top   = `${r.bottom + 6}px`;
+  menu.style.left  = "auto";
+  menu.style.bottom = "auto";
+}
+
+// Re-clamp position on viewport resize so a window resize doesn't push
+// the menu offscreen. Keeps the dismissal-on-resize behavior of the
+// previous dialog by just hiding if the trigger button has moved away.
+window.addEventListener("resize", () => {
+  const menu = document.getElementById("shareMenu");
+  if (menu && menu.matches(":popover-open")) positionShareMenu(menu);
+});
 
 // ===== Convert (anon → registered) dialog =====
 
