@@ -111,6 +111,32 @@ export const auth = {
     await c.auth.signOut();
   },
 
+  // Anonymous sign-in. Used by the share-link landing screen when the
+  // visitor picks "Continue as guest". Mints a real auth.users row with
+  // is_anonymous=true; the SDK persists the session in localStorage so a
+  // returning guest on the same browser reuses the same UID.
+  async signInAnonymously() {
+    const c = await sb();
+    const { data, error } = await c.auth.signInAnonymously();
+    if (error) throw error;
+    return data?.user || null;
+  },
+
+  // Promotes the current anonymous user into a permanent account by
+  // attaching an email + password. Preserves the UID so all the guest's
+  // memberships and authored rows stay attributed to them.
+  async convertAnonymous(email, password) {
+    const c = await sb();
+    const { data, error } = await c.auth.updateUser({ email, password });
+    if (error) throw error;
+    return data?.user || null;
+  },
+
+  async isAnonymous() {
+    const user = await this.getUser();
+    return !!user?.is_anonymous;
+  },
+
   async getSession() {
     const c = await ensureClient();
     if (!c) return null;
@@ -177,12 +203,12 @@ export const trips = {
       .select(`
         id, title, destination, start_date, end_date, summary,
         general_notes, travelers, created_by, created_at, updated_at,
-        days:days(id, date, title, city, notes, sort_order,
+        days:days(id, date, title, city, notes, sort_order, created_by,
           items:itinerary_items(id, title, type, start_time, end_time,
-            location_name, map_url, notes, is_fixed, is_highlight, status, sort_order)
+            location_name, map_url, notes, is_fixed, is_highlight, status, sort_order, created_by, created_at)
         ),
-        checklist_items(id, day_id, text, category, due_date, is_done, notes, sort_order),
-        notes(id, day_id, title, body, sort_order)
+        checklist_items(id, day_id, text, category, due_date, is_done, notes, sort_order, created_by),
+        notes(id, day_id, title, body, sort_order, created_by)
       `)
       .eq("id", id)
       .single();
@@ -374,6 +400,121 @@ export const members = {
       p_trip_id: trip_id, p_user_id: user_id,
     });
     if (error) throw error;
+  },
+};
+
+// =============== Share links ===============
+//
+// All five share-link RPCs are SECURITY DEFINER (see
+// 20260511020000_share_links_rpcs.sql). The JS layer is a thin wrapper.
+//
+// peek is the only call that works without auth — the landing screen
+// uses it to render trip context before the visitor picks Sign in /
+// Sign up / Continue as guest.
+
+export const share = {
+  /** Unauthenticated. Returns {trip_title, destination, start_date,
+   *  end_date, owner_display_name, role, revoked} or null if unknown. */
+  async peek(token) {
+    const c = await sb();
+    const { data, error } = await c.rpc("peek_share_link", { p_token: token });
+    if (error) throw error;
+    return (data && data[0]) || null;
+  },
+
+  /** Authenticated (anon or registered). Adds the caller to the trip
+   *  via the link's role (upgrade-only). Returns the trip_id. */
+  async redeem(token, displayName = null) {
+    const c = await sb();
+    const { data, error } = await c.rpc("redeem_share_link", {
+      p_token: token,
+      p_display_name: displayName,
+    });
+    if (error) throw error;
+    return data; // uuid
+  },
+
+  /** Owner-only. Lists active (unrevoked) links for the trip. */
+  async list(trip_id) {
+    const c = await sb();
+    const { data, error } = await c.rpc("list_share_links", { p_trip_id: trip_id });
+    if (error) throw error;
+    return data || [];
+  },
+
+  /** Owner-only. Returns the most recent NULL-label unrevoked token
+   *  for the role, or null. Used by the header Share dialog to decide
+   *  whether to mint or reuse. */
+  async getDefault(trip_id, role) {
+    const c = await sb();
+    const { data, error } = await c.rpc("default_share_link", {
+      p_trip_id: trip_id, p_role: role,
+    });
+    if (error) throw error;
+    return data || null;
+  },
+
+  /** Owner-only. Mints a new link. Pass label=null for the default
+   *  link (the one the header dialog reuses); pass a label string for
+   *  a named link visible only in the Members page. */
+  async mint(trip_id, role, label = null) {
+    const c = await sb();
+    const { data, error } = await c.rpc("mint_share_link", {
+      p_trip_id: trip_id, p_role: role, p_label: label,
+    });
+    if (error) throw error;
+    return data; // new token
+  },
+
+  /** Owner-only. Convenience around revoke+mint for the NULL-label
+   *  link of the given role. */
+  async rotate(trip_id, role) {
+    const c = await sb();
+    const { data, error } = await c.rpc("rotate_share_link", {
+      p_trip_id: trip_id, p_role: role,
+    });
+    if (error) throw error;
+    return data; // new token
+  },
+
+  /** Owner-only. Mark revoked_at on the link. If cascade=true, also
+   *  removes every non-owner member who joined via this token. */
+  async revoke(token, cascade = false) {
+    const c = await sb();
+    const { error } = await c.rpc("revoke_share_link", {
+      p_token: token, p_cascade: cascade,
+    });
+    if (error) throw error;
+  },
+
+  /** Build the URL string a user should share. Token in the fragment
+   *  so it's not sent in Referer headers when the trip page links out
+   *  to third-party sites. */
+  buildUrl(trip_id, token) {
+    const u = new URL(window.location.href);
+    u.search = `?trip=${encodeURIComponent(trip_id)}`;
+    u.hash = `share=${encodeURIComponent(token)}`;
+    return u.toString();
+  },
+
+  /** Parse a `#share=<token>` fragment off the current URL. Returns
+   *  the token string or null. Does NOT strip the fragment — callers
+   *  do that after a successful redeem. */
+  readTokenFromUrl() {
+    const hash = window.location.hash || "";
+    const m = hash.match(/(?:^#|&)share=([^&]+)/);
+    return m ? decodeURIComponent(m[1]) : null;
+  },
+
+  /** Strip the share fragment from the address bar after redemption,
+   *  so the token isn't sitting visible in the URL. Keeps the trip
+   *  query param intact. */
+  stripTokenFromUrl() {
+    if (!window.location.hash.includes("share=")) return;
+    const cleanHash = window.location.hash.replace(/(?:^#|&)share=[^&]*/, "");
+    const newHash = cleanHash && cleanHash !== "#" ? cleanHash : "";
+    history.replaceState(null, "",
+      window.location.pathname + window.location.search + newHash);
   },
 };
 

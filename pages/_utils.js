@@ -113,6 +113,37 @@ export function partition(arr, pred) {
   return [yes, no];
 }
 
+/** Format a timestamp as a coarse "added X ago" label. Same bucket
+ *  granularity as the topbar's LAST CHANGE so the UI feels consistent
+ *  across surfaces. Returns null for missing/invalid input. */
+export function formatRelativeTime(ts) {
+  if (!ts) return null;
+  const t = typeof ts === "number" ? ts : Date.parse(ts);
+  if (Number.isNaN(t)) return null;
+  const delta = Math.max(0, Date.now() - t);
+  const s = Math.floor(delta / 1000);
+  if (s < 60)  return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60)  return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24)  return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30)  return `${d}d ago`;
+  const mo = Math.floor(d / 30);
+  if (mo < 12) return `${mo}mo ago`;
+  return `${Math.floor(mo / 12)}y ago`;
+}
+
+/** Resolve a user_id to a display name using the trip's membersById
+ *  map. Falls back to "Unknown" for missing UIDs (rows whose author
+ *  has been deleted or whose member row hasn't been fetched yet). */
+export function memberName(membersById, uid) {
+  if (!uid) return null;
+  const m = membersById && membersById[uid];
+  if (!m) return null;
+  return m.display_name || m.email || "Unknown";
+}
+
 export function groupBy(arr, key) {
   const map = new Map();
   for (const x of arr) {

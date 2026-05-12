@@ -16,10 +16,11 @@
 // trip-shaped app is backend-first, so guest mode no longer makes sense.)
 
 import {
-  initSupabase, isConfigured, configSource, auth, trips,
+  initSupabase, isConfigured, configSource, auth, trips, share, members,
   days as daysApi,
 } from "./supabase.js";
 import { renderAuthView } from "./auth.js";
+import { renderShareLanding } from "./pages/share-landing.js";
 import { renderDashboard } from "./pages/dashboard.js";
 import { renderOverview } from "./pages/overview.js";
 import { renderItinerary } from "./pages/itinerary.js";
@@ -138,11 +139,37 @@ function defaultLandingPage() {
 async function routeFromUrl() {
   paintHeader();
   if (state.recoveryMode) { setView("auth"); return; }
-  if (!state.user) { setView("auth"); return; }
 
   const url = new URL(location.href);
   const tripId = url.searchParams.get("trip");
   const page = url.searchParams.get("page") || defaultLandingPage();
+
+  // Share-link branch. A `#share=<token>` fragment overrides the
+  // normal routing — we either show the landing screen (no session)
+  // or silently redeem and route into the trip (any session).
+  const shareToken = share.readTokenFromUrl();
+  if (shareToken) {
+    if (state.user) {
+      try {
+        const redeemedTripId = await share.redeem(shareToken);
+        share.stripTokenFromUrl();
+        await openTrip(redeemedTripId, page);
+      } catch (e) {
+        share.stripTokenFromUrl();
+        toast("Could not open shared trip: " + e.message, true);
+        if (state.user) setView("trips"); else setView("auth");
+      }
+      return;
+    }
+    // No session: render the landing screen. The fragment stays in
+    // the URL — if the visitor picks Sign in / Sign up and authenticates,
+    // handleAuthChange will re-run routeFromUrl, see the fragment and
+    // a session, and fall into the silent-redeem branch above.
+    setView("share-landing");
+    return;
+  }
+
+  if (!state.user) { setView("auth"); return; }
 
   if (tripId) {
     await openTrip(tripId, page);
@@ -157,6 +184,7 @@ function setView(view) {
   state.view = view;
   document.body.dataset.view = view;
   document.getElementById("view-auth").hidden = view !== "auth";
+  document.getElementById("view-share-landing").hidden = view !== "share-landing";
   document.getElementById("view-trips").hidden = view !== "trips";
   document.getElementById("view-trip").hidden = view !== "trip";
   document.getElementById("mobileNav").hidden = view !== "trip";
@@ -166,16 +194,41 @@ function setView(view) {
 
   if (view === "auth") {
     renderAuthView(document.getElementById("view-auth"), {
-      initialMode: state.recoveryMode ? "reset" : "sign-in",
+      initialMode: state.pendingAuthMode || (state.recoveryMode ? "reset" : "sign-in"),
       onPasswordReset: () => {
         state.recoveryMode = false;
         history.replaceState(null, "", window.location.pathname + window.location.search);
         routeFromUrl();
       },
     });
+    state.pendingAuthMode = null;
+  } else if (view === "share-landing") {
+    const token = share.readTokenFromUrl();
+    renderShareLanding(document.getElementById("view-share-landing"), {
+      token,
+      onAuthRequest: (mode) => {
+        // Flip to the auth view; share fragment stays in URL, so a
+        // successful sign-in will fall through to silent redeem.
+        state.pendingAuthMode = mode;
+        setView("auth");
+      },
+      onRedeemed: (tripId) => {
+        // signInAnonymously fires onAuthStateChange asynchronously,
+        // which triggers routeFromUrl — but the share fragment has
+        // already been stripped by the landing screen, so the auto
+        // route would fall back to the dashboard. Call openTrip
+        // directly to get there immediately.
+        openTrip(tripId, defaultLandingPage());
+      },
+      onError: (err) => {
+        console.error("Share landing error:", err);
+      },
+    });
   } else if (view === "trips") {
     renderDashboard(document.getElementById("view-trips"), {
       onOpen: (id) => navigate({ trip: id, page: defaultLandingPage() }),
+      isAnonymous: !!state.user?.is_anonymous,
+      onCreateBlocked: () => openConvertDialog(),
     });
   }
   paintHeader();
@@ -188,6 +241,17 @@ export async function openTrip(id, page) {
   try {
     const trip = await trips.getFull(id);
     state.trip = trip;
+    // Fetch the roster so item editors can resolve created_by UIDs into
+    // display names ("added by Alice 2d ago"). Best-effort: if the call
+    // fails (transient RLS hiccup, etc.) we degrade to no attribution
+    // text rather than blocking the trip from opening.
+    state.trip.membersById = {};
+    try {
+      const memberRows = await members.list(id);
+      for (const m of memberRows) state.trip.membersById[m.user_id] = m;
+    } catch (e) {
+      console.warn("Could not fetch members for attribution:", e);
+    }
     state.page = PAGES[page] ? page : defaultLandingPage();
     state.selectedDayIdx = pickDefaultDayIdx(trip);
     // Seed the "LAST CHANGE" timestamp from the server-side updated_at
@@ -244,6 +308,8 @@ function renderTripPage() {
   fn(host, {
     trip: state.trip,
     role: state.trip?.role || "viewer",
+    isAnonymous: !!state.user?.is_anonymous,
+    membersById: state.trip?.membersById || {},
     selectedDayIdx: state.selectedDayIdx,
     setSelectedDayIdx: (idx) => {
       const max = Math.max(0, (state.trip?.days || []).length - 1);
@@ -346,6 +412,151 @@ function bindAppHeader() {
   document.getElementById("printTripBtn").addEventListener("click", () => {
     if (state.trip) openPrintView(state.trip);
   });
+  document.getElementById("shareTripBtn").addEventListener("click", () => {
+    if (state.trip) openShareDialog();
+  });
+  document.getElementById("guestChipBtn").addEventListener("click", () => {
+    openConvertDialog();
+  });
+  bindShareDialog();
+  bindConvertDialog();
+}
+
+// ===== Share dialog =====
+// Lives in the trip view's header. Visible to owners only. Lazily mints
+// the default (NULL-label) link on open if none exists; otherwise reuses
+// whatever the most recent default is.
+
+let _shareRole = "editor";
+let _shareToken = null;
+
+async function openShareDialog() {
+  if (!state.trip || state.trip.role !== "owner") return;
+  const dlg = document.getElementById("shareDialog");
+  const radios = dlg.querySelectorAll('input[name="shareRole"]');
+  for (const r of radios) r.checked = r.value === _shareRole;
+  document.getElementById("shareManageLink").href = buildUrl({ trip: state.trip.id, page: "members" });
+  dlg.showModal();
+  await refreshShareDialog();
+}
+
+async function refreshShareDialog() {
+  const input = document.getElementById("shareLinkInput");
+  const statusEl = document.getElementById("shareDialogStatus");
+  input.value = "";
+  setDialogStatus(statusEl, "Loading…");
+  try {
+    let token = await share.getDefault(state.trip.id, _shareRole);
+    if (!token) token = await share.mint(state.trip.id, _shareRole, null);
+    _shareToken = token;
+    input.value = share.buildUrl(state.trip.id, token);
+    setDialogStatus(statusEl, "");
+  } catch (e) {
+    setDialogStatus(statusEl, e.message || String(e), true);
+  }
+}
+
+function setDialogStatus(el, msg, isError = false) {
+  el.textContent = msg || "";
+  el.hidden = !msg;
+  el.classList.toggle("error", !!isError);
+}
+
+function bindShareDialog() {
+  const dlg = document.getElementById("shareDialog");
+  dlg.querySelectorAll('input[name="shareRole"]').forEach((r) => {
+    r.addEventListener("change", async () => {
+      if (!r.checked) return;
+      _shareRole = r.value;
+      await refreshShareDialog();
+    });
+  });
+  document.getElementById("shareCopyBtn").addEventListener("click", async () => {
+    const input = document.getElementById("shareLinkInput");
+    if (!input.value) return;
+    try {
+      await navigator.clipboard.writeText(input.value);
+      const btn = document.getElementById("shareCopyBtn");
+      const orig = btn.textContent;
+      btn.textContent = "Copied";
+      setTimeout(() => { btn.textContent = orig; }, 1200);
+    } catch {
+      input.select();
+      document.execCommand?.("copy");
+    }
+  });
+  document.getElementById("shareRotateBtn").addEventListener("click", async (e) => {
+    e.preventDefault();
+    if (!state.trip) return;
+    const statusEl = document.getElementById("shareDialogStatus");
+    if (!confirm("Rotate this link? The current one will stop working.")) return;
+    setDialogStatus(statusEl, "Rotating…");
+    try {
+      const newToken = await share.rotate(state.trip.id, _shareRole);
+      _shareToken = newToken;
+      document.getElementById("shareLinkInput").value = share.buildUrl(state.trip.id, newToken);
+      setDialogStatus(statusEl, "New link ready.");
+    } catch (err) {
+      setDialogStatus(statusEl, err.message || String(err), true);
+    }
+  });
+}
+
+// ===== Convert (anon → registered) dialog =====
+
+function openConvertDialog() {
+  const dlg = document.getElementById("convertDialog");
+  document.getElementById("convertEmail").value = "";
+  document.getElementById("convertPassword").value = "";
+  setDialogStatus(document.getElementById("convertDialogStatus"), "");
+  dlg.showModal();
+}
+
+function bindConvertDialog() {
+  const dlg = document.getElementById("convertDialog");
+  const submit = document.getElementById("convertSubmit");
+  const statusEl = document.getElementById("convertDialogStatus");
+  dlg.addEventListener("close", () => { /* nothing extra */ });
+  dlg.querySelector("form").addEventListener("submit", async (e) => {
+    if (dlg.returnValue === "cancel") return;
+    e.preventDefault();
+    const email = document.getElementById("convertEmail").value.trim();
+    const password = document.getElementById("convertPassword").value;
+    if (!email || password.length < 6) {
+      setDialogStatus(statusEl, "Enter an email and a password of at least 6 characters.", true);
+      return;
+    }
+    submit.disabled = true;
+    setDialogStatus(statusEl, "Creating account…");
+    try {
+      await auth.convertAnonymous(email, password);
+      setDialogStatus(statusEl, "Account created. Welcome!");
+      // updateUser fires onAuthStateChange — handleAuthChange will
+      // re-paint the header (chip hides) without us re-routing.
+      setTimeout(() => dlg.close("converted"), 600);
+    } catch (err) {
+      const msg = (err?.message || String(err));
+      if (/already.*registered|already.*in use|already.*exists/i.test(msg)) {
+        setDialogStatus(statusEl, "That email already has an account. Sign in there instead — your current edits will stay attributed to this guest session.", true);
+      } else {
+        setDialogStatus(statusEl, msg, true);
+      }
+    } finally {
+      submit.disabled = false;
+    }
+  });
+}
+
+// Build a same-origin URL with the given query params. Used to construct
+// hrefs inside the app without touching window.location directly.
+function buildUrl(params = {}) {
+  const u = new URL(location.href);
+  u.search = "";
+  u.hash = "";
+  for (const [k, v] of Object.entries(params)) {
+    if (v != null) u.searchParams.set(k, v);
+  }
+  return u.toString();
 }
 
 function bindTabs() {
@@ -1015,6 +1226,13 @@ function paintHeader() {
 
   backBtn.hidden = !(state.view === "trip" && state.user);
   document.getElementById("printTripBtn").hidden = !(state.view === "trip" && state.trip);
+  // Share button is owner-only on the trip view.
+  document.getElementById("shareTripBtn").hidden = !(
+    state.view === "trip" && state.trip && state.trip.role === "owner"
+  );
+  // Guest chip is shown anywhere a signed-in anon user can be —
+  // trip view, dashboard, etc. It's the only conversion surface.
+  document.getElementById("guestChipBtn").hidden = !(state.user?.is_anonymous);
   saveEl.hidden = state.view !== "trip";
   if (state.view === "trip") {
     if (state.saving > 0) {

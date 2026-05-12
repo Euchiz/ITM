@@ -16,6 +16,7 @@ import { days, items } from "../supabase.js";
 import { ITEM_TYPES, ITEM_STATUSES } from "../io/schema.js";
 import {
   el, debouncedSave, autosize, withSaveIndicator, formatTime, formatTimeRange,
+  formatRelativeTime, memberName,
 } from "./_utils.js";
 import { openPrintView } from "./print-view.js";
 
@@ -768,6 +769,17 @@ export function renderItinerary(host, ctx) {
           )
         : null;
 
+      // Attribution line — "added by <name> · <time>". Quiet at the
+      // bottom of the editor so it's discoverable without crowding the
+      // grid. Rendered only when we can resolve the creator's display
+      // name; rows pre-dating the attribution columns simply omit it.
+      const author = memberName(ctx.membersById, it.created_by);
+      const when   = formatRelativeTime(it.created_at);
+      const attribution = author
+        ? el("p", { class: "vy-edit-attribution muted small",
+            text: when ? `Added by ${author} · ${when}` : `Added by ${author}` })
+        : null;
+
       cell.append(
         header,
         el("div", { class: "vy-edit-title-wrap" }, titleInput),
@@ -776,6 +788,7 @@ export function renderItinerary(host, ctx) {
         whereSection,
         notesSection,
         foot,
+        attribution,
       );
       return cell;
     }

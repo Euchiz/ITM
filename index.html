@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Voyage · Trip Manager</title>
+  <title>Hermes Daybook</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
@@ -14,11 +14,15 @@
 <body data-view="auth">
   <header class="app-header no-print">
     <div class="app-header-left">
-      <strong class="brand">Voyage</strong>
+      <strong class="brand">Hermes Daybook</strong>
       <button id="backToTripsBtn" class="btn ghost" hidden>← All trips</button>
     </div>
     <div class="app-header-right">
       <span id="saveStatus" class="save-status" hidden>Saved</span>
+      <button id="guestChipBtn" class="btn guest-chip" hidden title="Save this trip to your account">
+        👤 Guest · Save trip
+      </button>
+      <button id="shareTripBtn" class="btn" hidden title="Share this trip">Share</button>
       <button id="printTripBtn" class="btn ghost" hidden title="Open print preview">🖨 Print PDF</button>
       <span id="userBadge" class="user-badge" hidden></span>
       <button id="signOutBtn" class="btn ghost" hidden>Sign out</button>
@@ -28,6 +32,7 @@
 
   <main id="app">
     <section id="view-auth" class="view view-auth" hidden></section>
+    <section id="view-share-landing" class="view view-share-landing" hidden></section>
     <section id="view-trips" class="view view-trips" hidden></section>
 
     <section id="view-trip" class="view view-trip" hidden>
@@ -55,6 +60,61 @@
     <button data-page="notes"     role="tab" data-mode="travel">Notes</button>
     <button data-page="overview"  role="tab" data-mode="any">More</button>
   </nav>
+
+  <dialog id="shareDialog" class="share-dialog no-print">
+    <form method="dialog">
+      <div class="share-dialog-head">
+        <h3>Share trip</h3>
+        <button value="cancel" class="share-dialog-close" aria-label="Close">×</button>
+      </div>
+      <p class="muted small">Anyone with the link can open the trip.</p>
+
+      <div class="share-dialog-role">
+        <label class="share-dialog-role-opt">
+          <input type="radio" name="shareRole" value="editor" checked>
+          <span><strong>Editor</strong> · can edit everything</span>
+        </label>
+        <label class="share-dialog-role-opt">
+          <input type="radio" name="shareRole" value="viewer">
+          <span><strong>Viewer</strong> · read-only</span>
+        </label>
+      </div>
+
+      <div class="share-dialog-linkbox">
+        <input id="shareLinkInput" type="text" readonly placeholder="Generating link…">
+        <button id="shareCopyBtn" type="button" class="btn primary">Copy</button>
+      </div>
+
+      <div class="share-dialog-foot">
+        <button id="shareRotateBtn" type="button" class="auth-link">Rotate link</button>
+        <a id="shareManageLink" href="#" class="auth-link">Manage members →</a>
+      </div>
+
+      <p id="shareDialogStatus" class="auth-status muted small" hidden></p>
+    </form>
+  </dialog>
+
+  <dialog id="convertDialog" class="settings-dialog no-print">
+    <form method="dialog">
+      <h3>Save trip to your account</h3>
+      <p class="muted small">
+        Right now you're editing as a guest. Add an email and password to
+        keep this trip in your personal list. Your edits stay attached to
+        you.
+      </p>
+      <label>Email
+        <input id="convertEmail" type="email" required autocomplete="email">
+      </label>
+      <label>Password
+        <input id="convertPassword" type="password" required minlength="6" autocomplete="new-password">
+      </label>
+      <p id="convertDialogStatus" class="auth-status muted small" hidden></p>
+      <menu>
+        <button value="cancel">Not now</button>
+        <button id="convertSubmit" value="convert" type="submit" class="primary">Create account</button>
+      </menu>
+    </form>
+  </dialog>
 
   <dialog id="settingsDialog" class="settings-dialog no-print">
     <form method="dialog">

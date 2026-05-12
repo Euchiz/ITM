@@ -3,20 +3,34 @@
 import { trips } from "../supabase.js";
 import { el, escapeHtml, fmtDateRange } from "./_utils.js";
 
-export async function renderDashboard(host, { onOpen }) {
+export async function renderDashboard(host, { onOpen, isAnonymous = false, onCreateBlocked }) {
+  // Anon guests can see the trips they've been granted access to, but
+  // they can't create new ones — those would orphan when the anon row
+  // is reaped. The "+ New trip" button shows the convert modal instead.
+  const newBtnLabel = isAnonymous ? "+ New trip · Sign up first" : "+ New trip";
   host.innerHTML = `
     <header class="trips-header">
       <h1>All trips</h1>
       <div class="trips-header-actions">
-        <button class="btn primary" id="newTripBtn">+ New trip</button>
+        <button class="btn primary" id="newTripBtn">${newBtnLabel}</button>
       </div>
     </header>
+    ${isAnonymous ? `
+      <p class="muted small dashboard-anon-note">
+        You're browsing as a guest. Trips you've been invited to appear below.
+        Create an account to start your own trips.
+      </p>
+    ` : ""}
     <div id="tripsList" class="trips-list" aria-live="polite">
       <p class="muted">Loading…</p>
     </div>
   `;
 
   host.querySelector("#newTripBtn").addEventListener("click", async () => {
+    if (isAnonymous) {
+      onCreateBlocked?.();
+      return;
+    }
     try {
       const id = await trips.createEmpty("Untitled trip");
       onOpen?.(id);
@@ -28,6 +42,10 @@ export async function renderDashboard(host, { onOpen }) {
   const list = host.querySelector("#tripsList");
 
   async function loadSample() {
+    if (isAnonymous) {
+      onCreateBlocked?.();
+      return;
+    }
     try {
       const res = await fetch("./sample.json");
       if (!res.ok) throw new Error("sample.json not found");
