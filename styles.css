@@ -434,6 +434,173 @@ html, body {
 
 .view-trips { max-width: 980px; margin: 0 auto; padding: 32px 24px 100px; }
 
+/* Profile card — the account "home" that sits at the top of the lobby.
+   Glass-card look matches .trip-card so the two stack visually as one
+   surface. Two-column on desktop (identity left, actions right),
+   stacks on narrow viewports. */
+.profile-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border-radius: 16px;
+  margin-bottom: 22px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.36) 100%);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.65),
+    inset 1px 1px 0 -0.5px rgba(40,103,95,0.15),
+    inset -1px -1px 0 -0.5px rgba(20,32,31,0.16),
+    0 10px 28px -14px rgba(40,103,95,0.24);
+}
+.profile-card-left {
+  display: flex; align-items: center; gap: 14px;
+  min-width: 0; flex: 1;
+}
+.profile-avatar {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(78,159,146,0.95) 0%, rgba(47,125,114,0.92) 100%);
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--vbl-font-display);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.35),
+              0 4px 10px -4px rgba(40,103,95,0.4);
+}
+.profile-meta { min-width: 0; }
+.profile-name-row {
+  display: flex; align-items: baseline; gap: 8px;
+  min-width: 0;
+}
+.profile-name {
+  font-family: var(--vbl-font-display);
+  font-size: 17px; font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--vbl-ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.profile-edit-btn {
+  border: 0;
+  background: transparent;
+  font-family: var(--vbl-font-display);
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--vbl-fg-3);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 999px;
+}
+.profile-edit-btn:hover { background: rgba(255,255,255,0.55); color: var(--vbl-ink); }
+.profile-sub {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--vbl-fg-3);
+  font-family: var(--vbl-font-body);
+}
+.profile-email { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.profile-type {
+  font-family: var(--vbl-font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--vbl-hairline);
+  background: rgba(255,255,255,0.5);
+  flex-shrink: 0;
+}
+.profile-type[data-type="guest"] {
+  background: rgba(255, 213, 130, 0.35);
+  border-color: rgba(180, 130, 30, 0.3);
+  color: #6b4a10;
+}
+.profile-card-right {
+  display: flex; align-items: center; gap: 8px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  .profile-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 14px 16px;
+  }
+  .profile-card-right { justify-content: flex-end; flex-wrap: wrap; }
+}
+
+/* ===== New-trip dialog (extends .settings-dialog) ===== */
+
+.new-trip-dialog { max-width: 540px; }
+.new-trip-dialog .new-trip-dates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.new-trip-dialog input[type="text"],
+.new-trip-dialog input[type="date"] {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--vbl-hairline);
+  background: rgba(255,255,255,0.7);
+  font: inherit;
+  font-family: var(--vbl-font-body);
+  font-size: 14px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--vbl-ink);
+}
+.new-trip-dialog .new-trip-template {
+  border: 0;
+  padding: 0;
+  margin: 4px 0 0;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.new-trip-dialog .new-trip-template legend {
+  font-family: var(--vbl-font-display);
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--vbl-fg-3);
+  padding: 0; margin-bottom: 4px;
+}
+.new-trip-dialog .new-trip-template-opt {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--vbl-hairline);
+  background: rgba(255,255,255,0.5);
+  cursor: pointer;
+  font-family: var(--vbl-font-body);
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--vbl-ink);
+  font-weight: 400;
+}
+.new-trip-dialog .new-trip-template-opt:hover { background: rgba(255,255,255,0.75); }
+.new-trip-dialog .new-trip-template-opt input[type="radio"] {
+  margin-top: 3px;
+  accent-color: rgba(47,125,114,1);
+}
+.new-trip-dialog .new-trip-template-opt b {
+  font-family: var(--vbl-font-display);
+  font-weight: 600;
+  font-size: 13px;
+}
+.new-trip-dialog .new-trip-template-opt .small { font-size: 12px; }
+
+@media (max-width: 480px) {
+  .new-trip-dialog .new-trip-dates { grid-template-columns: 1fr; }
+}
+
 .trips-header {
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 22px; gap: 12px;

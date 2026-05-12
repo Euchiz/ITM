@@ -179,6 +179,40 @@ export const auth = {
   },
 };
 
+// =============== Profile ===============
+//
+// Thin wrapper around the `profiles` table for the lobby's account
+// card. The `handle_new_user` trigger inserts the row on signup; we
+// only ever read it or patch display_name. RLS lets users update
+// only their own row.
+
+export const profile = {
+  async getMine() {
+    const c = await sb();
+    const user = await auth.getUser();
+    if (!user) return null;
+    const { data, error } = await c
+      .from("profiles")
+      .select("id, email, display_name, created_at")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  },
+
+  async updateDisplayName(name) {
+    const c = await sb();
+    const user = await auth.getUser();
+    if (!user) throw new Error("Not signed in");
+    const trimmed = (name || "").trim();
+    const { error } = await c
+      .from("profiles")
+      .update({ display_name: trimmed || null })
+      .eq("id", user.id);
+    if (error) throw error;
+  },
+};
+
 // =============== Trips ===============
 
 export const trips = {

@@ -69,6 +69,73 @@
     </div>
   </div>
 
+  <dialog id="newTripDialog" class="settings-dialog new-trip-dialog no-print">
+    <form method="dialog">
+      <h3>Start a new trip</h3>
+      <p class="muted small">
+        Set the basics now — you can refine everything later. Only the
+        title is required.
+      </p>
+      <label>Title
+        <input id="newTripTitle" type="text" required maxlength="120"
+               placeholder="Hokkaido winter, Lisbon weekend, …">
+      </label>
+      <label>Destination
+        <input id="newTripDestination" type="text" maxlength="120"
+               placeholder="Country, city, or region">
+      </label>
+      <div class="new-trip-dates">
+        <label>Start date
+          <input id="newTripStart" type="date">
+        </label>
+        <label>End date
+          <input id="newTripEnd" type="date">
+        </label>
+      </div>
+      <label>Travelers
+        <input id="newTripTravelers" type="text"
+               placeholder="Alex, Sam, Jamie (comma-separated)">
+      </label>
+      <fieldset class="new-trip-template">
+        <legend>Starting template</legend>
+        <label class="new-trip-template-opt">
+          <input type="radio" name="newTripTemplate" value="blank" checked>
+          <span><b>Blank trip</b><br><span class="muted small">Empty itinerary you fill in yourself.</span></span>
+        </label>
+        <label class="new-trip-template-opt">
+          <input type="radio" name="newTripTemplate" value="sample">
+          <span><b>From sample (Japan)</b><br><span class="muted small">Pre-filled days, items, and prep checklist — handy if it's your first trip.</span></span>
+        </label>
+      </fieldset>
+      <p id="newTripDialogStatus" class="auth-status muted small" hidden></p>
+      <menu>
+        <button value="cancel">Cancel</button>
+        <button id="newTripSubmit" value="create" type="submit" class="primary">Create trip</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <dialog id="passwordDialog" class="settings-dialog no-print">
+    <form method="dialog">
+      <h3>Change password</h3>
+      <p class="muted small">
+        You're already signed in, so we don't need your current password.
+        Pick a new one of at least 6 characters.
+      </p>
+      <label>New password
+        <input id="newPassword" type="password" required minlength="6" autocomplete="new-password">
+      </label>
+      <label>Confirm new password
+        <input id="newPasswordConfirm" type="password" required minlength="6" autocomplete="new-password">
+      </label>
+      <p id="passwordDialogStatus" class="auth-status muted small" hidden></p>
+      <menu>
+        <button value="cancel">Cancel</button>
+        <button id="passwordSubmit" value="update" type="submit" class="primary">Update password</button>
+      </menu>
+    </form>
+  </dialog>
+
   <dialog id="convertDialog" class="settings-dialog no-print">
     <form method="dialog">
       <h3>Save trip to your account</h3>

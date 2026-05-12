@@ -1,24 +1,60 @@
-// Trips dashboard. Lists every trip the user has access to.
+// Trips lobby. Profile card on top, trips list below.
+//
+// The profile card is the user's account home — display name + email +
+// account-type chip + sign-out, plus a "Save your trips" CTA for anon
+// guests. Clicking "+ New trip" opens a dialog wired up by app.js
+// (so we can route anon users through the convert dialog first).
 
 import { trips } from "../supabase.js";
 import { el, escapeHtml, fmtDateRange } from "./_utils.js";
 
-export async function renderDashboard(host, { onOpen, isAnonymous = false, onCreateBlocked }) {
-  // Anon guests can see the trips they've been granted access to, but
-  // they can't create new ones — those would orphan when the anon row
-  // is reaped. The "+ New trip" button shows the convert modal instead.
-  const newBtnLabel = isAnonymous ? "+ New trip · Sign up first" : "+ New trip";
+export async function renderDashboard(host, {
+  user,
+  profile,
+  isAnonymous = false,
+  onNewTrip,
+  onOpen,
+  onCreateBlocked,
+  onChangeDisplayName,
+  onChangePassword,
+  onSignOut,
+  onConvert,
+}) {
   host.innerHTML = `
+    <section class="profile-card" aria-label="Your account">
+      <div class="profile-card-left">
+        <div class="profile-avatar" id="profileAvatar"></div>
+        <div class="profile-meta">
+          <div class="profile-name-row">
+            <span class="profile-name" id="profileNameText"></span>
+            <button class="profile-edit-btn" id="profileEditNameBtn" title="Edit display name" type="button">Edit</button>
+          </div>
+          <div class="profile-sub">
+            <span class="profile-email" id="profileEmail"></span>
+            <span class="profile-type" id="profileType"></span>
+          </div>
+        </div>
+      </div>
+      <div class="profile-card-right">
+        ${isAnonymous ? `
+          <button id="profileConvertBtn" class="btn primary" type="button">Save your trips · Create account</button>
+        ` : `
+          <button id="profilePasswordBtn" class="btn ghost" type="button">Change password</button>
+        `}
+        <button id="profileSignOutBtn" class="btn ghost" type="button">Sign out</button>
+      </div>
+    </section>
+
     <header class="trips-header">
       <h1>All trips</h1>
       <div class="trips-header-actions">
-        <button class="btn primary" id="newTripBtn">${newBtnLabel}</button>
+        <button class="btn primary" id="newTripBtn">+ New trip</button>
       </div>
     </header>
     ${isAnonymous ? `
       <p class="muted small dashboard-anon-note">
         You're browsing as a guest. Trips you've been invited to appear below.
-        Create an account to start your own trips.
+        Create an account to start your own.
       </p>
     ` : ""}
     <div id="tripsList" class="trips-list" aria-live="polite">
@@ -26,18 +62,53 @@ export async function renderDashboard(host, { onOpen, isAnonymous = false, onCre
     </div>
   `;
 
-  host.querySelector("#newTripBtn").addEventListener("click", async () => {
+  paintProfile();
+
+  host.querySelector("#newTripBtn").addEventListener("click", () => {
     if (isAnonymous) {
       onCreateBlocked?.();
       return;
     }
+    onNewTrip?.();
+  });
+
+  host.querySelector("#profileEditNameBtn").addEventListener("click", async () => {
+    const current = profile?.display_name || "";
+    const next = window.prompt("Display name (shown on trips you share):", current);
+    if (next == null) return;
+    if (next.trim() === current.trim()) return;
     try {
-      const id = await trips.createEmpty("Untitled trip");
-      onOpen?.(id);
+      await onChangeDisplayName?.(next);
+      profile = { ...(profile || {}), display_name: next.trim() || null };
+      paintProfile();
     } catch (e) {
-      alert("Could not create trip: " + e.message);
+      alert("Could not save display name: " + e.message);
     }
   });
+
+  const pwdBtn = host.querySelector("#profilePasswordBtn");
+  if (pwdBtn) pwdBtn.addEventListener("click", () => onChangePassword?.());
+
+  const convertBtn = host.querySelector("#profileConvertBtn");
+  if (convertBtn) convertBtn.addEventListener("click", () => onConvert?.());
+
+  host.querySelector("#profileSignOutBtn").addEventListener("click", () => onSignOut?.());
+
+  function paintProfile() {
+    const name = (profile?.display_name || "").trim();
+    const email = user?.email || profile?.email || "";
+    const fallback = isAnonymous ? "Guest" : (email.split("@")[0] || "You");
+    const shown = name || fallback;
+
+    host.querySelector("#profileNameText").textContent = shown;
+    host.querySelector("#profileEmail").textContent = isAnonymous ? "No email on file" : email;
+    const typeEl = host.querySelector("#profileType");
+    typeEl.textContent = isAnonymous ? "Guest" : "Account";
+    typeEl.dataset.type = isAnonymous ? "guest" : "account";
+
+    const avatar = host.querySelector("#profileAvatar");
+    avatar.textContent = initialsFrom(shown);
+  }
 
   const list = host.querySelector("#tripsList");
 
@@ -128,4 +199,15 @@ export async function renderDashboard(host, { onOpen, isAnonymous = false, onCre
 
   await refresh();
   return { refresh };
+}
+
+// Two-letter initials from a display name or email. Stays readable
+// even when the user's display name is a single word or a long email.
+function initialsFrom(s) {
+  const str = String(s || "").trim();
+  if (!str) return "?";
+  const parts = str.split(/[\s@._-]+/).filter(Boolean);
+  if (parts.length === 0) return str[0].toUpperCase();
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
 }

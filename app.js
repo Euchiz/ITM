@@ -17,7 +17,7 @@
 
 import {
   initSupabase, isConfigured, configSource, auth, trips, share, members,
-  days as daysApi,
+  profile as profileApi, days as daysApi,
 } from "./supabase.js";
 import { renderAuthView } from "./auth.js";
 import { renderShareLanding } from "./pages/share-landing.js";
@@ -226,13 +226,38 @@ function setView(view) {
       },
     });
   } else if (view === "trips") {
-    renderDashboard(document.getElementById("view-trips"), {
-      onOpen: (id) => navigate({ trip: id, page: defaultLandingPage() }),
-      isAnonymous: !!state.user?.is_anonymous,
-      onCreateBlocked: () => openConvertDialog(),
-    });
+    renderTripsLobby();
   }
   paintHeader();
+}
+
+// ===== Trips lobby =====
+//
+// Renders the dashboard with a profile card on top. Profile is fetched
+// best-effort — if the read fails (transient RLS hiccup, etc.) we still
+// show the trips list with whatever we know from the session.
+
+async function renderTripsLobby() {
+  let userProfile = null;
+  try { userProfile = await profileApi.getMine(); }
+  catch (e) { console.warn("Could not load profile:", e); }
+
+  renderDashboard(document.getElementById("view-trips"), {
+    user: state.user,
+    profile: userProfile,
+    isAnonymous: !!state.user?.is_anonymous,
+    onOpen: (id) => navigate({ trip: id, page: defaultLandingPage() }),
+    onNewTrip: () => openNewTripDialog(),
+    onCreateBlocked: () => openConvertDialog(),
+    onChangeDisplayName: async (name) => {
+      await profileApi.updateDisplayName(name);
+    },
+    onChangePassword: () => openPasswordDialog(),
+    onSignOut: async () => {
+      try { await auth.signOut(); } catch (e) { toast(e.message, true); }
+    },
+    onConvert: () => openConvertDialog(),
+  });
 }
 
 // ===== Trip loading =====
@@ -420,6 +445,8 @@ function bindAppHeader() {
     openConvertDialog();
   });
   bindConvertDialog();
+  bindNewTripDialog();
+  bindPasswordDialog();
 }
 
 function setDialogStatus(el, msg, isError = false) {
@@ -597,6 +624,146 @@ window.addEventListener("resize", () => {
   const menu = document.getElementById("shareMenu");
   if (menu && menu.matches(":popover-open")) positionShareMenu(menu);
 });
+
+// ===== New trip dialog =====
+//
+// Captures title (required), destination, date range, travelers, and
+// a blank-vs-sample template choice up front so the user doesn't land
+// inside an "Untitled trip" with nothing to anchor on. Anon guests get
+// routed through openConvertDialog by the dashboard, so this only ever
+// opens for signed-in accounts.
+
+function openNewTripDialog() {
+  const dlg = document.getElementById("newTripDialog");
+  dlg.querySelector("#newTripTitle").value = "";
+  dlg.querySelector("#newTripDestination").value = "";
+  dlg.querySelector("#newTripStart").value = "";
+  dlg.querySelector("#newTripEnd").value = "";
+  dlg.querySelector("#newTripTravelers").value = "";
+  const blankRadio = dlg.querySelector('input[name="newTripTemplate"][value="blank"]');
+  if (blankRadio) blankRadio.checked = true;
+  setDialogStatus(dlg.querySelector("#newTripDialogStatus"), "");
+  dlg.querySelector("#newTripSubmit").disabled = false;
+  dlg.showModal();
+  // Focus the title field once the dialog is open.
+  setTimeout(() => dlg.querySelector("#newTripTitle")?.focus(), 30);
+}
+
+function bindNewTripDialog() {
+  const dlg = document.getElementById("newTripDialog");
+  if (!dlg) return;
+  const form = dlg.querySelector("form");
+  const submit = dlg.querySelector("#newTripSubmit");
+  const statusEl = dlg.querySelector("#newTripDialogStatus");
+
+  form.addEventListener("submit", async (e) => {
+    if (dlg.returnValue === "cancel") return;
+    e.preventDefault();
+
+    const title       = dlg.querySelector("#newTripTitle").value.trim();
+    const destination = dlg.querySelector("#newTripDestination").value.trim();
+    const startDate   = dlg.querySelector("#newTripStart").value || "";
+    const endDate     = dlg.querySelector("#newTripEnd").value   || "";
+    const travelers   = dlg.querySelector("#newTripTravelers").value
+      .split(",").map((s) => s.trim()).filter(Boolean);
+    const template    = dlg.querySelector('input[name="newTripTemplate"]:checked')?.value || "blank";
+
+    if (!title) {
+      setDialogStatus(statusEl, "Title is required.", true);
+      return;
+    }
+    if (startDate && endDate && startDate > endDate) {
+      setDialogStatus(statusEl, "End date must be on or after the start date.", true);
+      return;
+    }
+
+    submit.disabled = true;
+    setDialogStatus(statusEl, "Creating…");
+
+    try {
+      let newId;
+      if (template === "sample") {
+        const res = await fetch("./sample.json");
+        if (!res.ok) throw new Error("sample.json not found");
+        const payload = await res.json();
+        // Merge the user's metadata over the sample's so the dates,
+        // title, destination, and travelers reflect their trip — but
+        // keep all the sample's days/items/checklists/notes.
+        payload.trip = {
+          ...(payload.trip || {}),
+          title,
+          destination: destination || (payload.trip?.destination || ""),
+          start_date: startDate || payload.trip?.start_date || null,
+          end_date:   endDate   || payload.trip?.end_date   || null,
+          travelers:  travelers.length ? travelers : (payload.trip?.travelers || []),
+        };
+        newId = await trips.createFromJson(payload);
+      } else {
+        newId = await trips.createFromJson({
+          trip: {
+            title,
+            destination,
+            start_date: startDate || null,
+            end_date: endDate || null,
+            travelers,
+          },
+        });
+      }
+      dlg.close("created");
+      // Land on Itinerary so the next click is "add a day" — the
+      // place where the user actually starts building.
+      navigate({ trip: newId, page: "itinerary" });
+    } catch (err) {
+      setDialogStatus(statusEl, err?.message || String(err), true);
+      submit.disabled = false;
+    }
+  });
+}
+
+// ===== Change password dialog =====
+
+function openPasswordDialog() {
+  const dlg = document.getElementById("passwordDialog");
+  dlg.querySelector("#newPassword").value = "";
+  dlg.querySelector("#newPasswordConfirm").value = "";
+  setDialogStatus(dlg.querySelector("#passwordDialogStatus"), "");
+  dlg.querySelector("#passwordSubmit").disabled = false;
+  dlg.showModal();
+  setTimeout(() => dlg.querySelector("#newPassword")?.focus(), 30);
+}
+
+function bindPasswordDialog() {
+  const dlg = document.getElementById("passwordDialog");
+  if (!dlg) return;
+  const form = dlg.querySelector("form");
+  const submit = dlg.querySelector("#passwordSubmit");
+  const statusEl = dlg.querySelector("#passwordDialogStatus");
+
+  form.addEventListener("submit", async (e) => {
+    if (dlg.returnValue === "cancel") return;
+    e.preventDefault();
+    const pwd = dlg.querySelector("#newPassword").value;
+    const confirm = dlg.querySelector("#newPasswordConfirm").value;
+    if (pwd.length < 6) {
+      setDialogStatus(statusEl, "Password must be at least 6 characters.", true);
+      return;
+    }
+    if (pwd !== confirm) {
+      setDialogStatus(statusEl, "Passwords don't match.", true);
+      return;
+    }
+    submit.disabled = true;
+    setDialogStatus(statusEl, "Updating…");
+    try {
+      await auth.updatePassword(pwd);
+      setDialogStatus(statusEl, "Password updated.");
+      setTimeout(() => dlg.close("updated"), 600);
+    } catch (err) {
+      setDialogStatus(statusEl, err?.message || String(err), true);
+      submit.disabled = false;
+    }
+  });
+}
 
 // ===== Convert (anon → registered) dialog =====
 
@@ -1361,7 +1528,12 @@ function paintHeader() {
   const backBtn = document.getElementById("backToTripsBtn");
   const saveEl = document.getElementById("saveStatus");
 
-  if (state.user?.email) {
+  // On the trips lobby the profile card owns identity + sign-out + the
+  // "Save your trips" CTA, so we hide the header copies to avoid two
+  // sources of truth. The trip view still uses the header chrome on
+  // mobile (desktop hides the header itself via CSS).
+  const showHeaderIdentity = state.view !== "trips";
+  if (state.user?.email && showHeaderIdentity) {
     userBadge.hidden = false;
     userBadge.textContent = state.user.email;
     signOutBtn.hidden = false;
@@ -1375,9 +1547,11 @@ function paintHeader() {
   // Share lives in the trip topbar now, not in the global app-header,
   // so there's nothing to toggle here. The topbar Share button is
   // rendered by paintTopbar() and wired to toggleShareMenu().
-  // Guest chip is shown anywhere a signed-in anon user can be —
-  // trip view, dashboard, etc. It's the only conversion surface.
-  document.getElementById("guestChipBtn").hidden = !(state.user?.is_anonymous);
+  // Guest chip duplicates the profile card's convert CTA on the trips
+  // lobby — hide it there. On the trip view it's still the only
+  // conversion surface for anon guests.
+  document.getElementById("guestChipBtn").hidden =
+    !(state.user?.is_anonymous) || state.view === "trips";
   saveEl.hidden = state.view !== "trip";
   if (state.view === "trip") {
     if (state.saving > 0) {
