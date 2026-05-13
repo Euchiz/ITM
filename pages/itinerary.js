@@ -231,11 +231,21 @@ export function renderItinerary(host, ctx) {
           : null,
       ),
       el("div", { class: "vy-category-row-meta" },
+        // Unplanned items (logged via Costs page) get a small chip so
+        // they're distinguishable from planned events in the trip-wide
+        // summary. ✂ glyph signals an item with a custom split.
+        it.is_unplanned
+          ? el("span", { class: "vy-category-row-unplanned", text: "UNPLANNED" })
+          : null,
+        (it.shares || []).length > 0
+          ? el("span", { class: "vy-category-row-split", title: "Custom split", text: "✂" })
+          : null,
         timeLabel ? el("span", { class: "vy-category-row-time", text: timeLabel }) : null,
         el("span", { class: "vy-category-row-day", text: `Day ${dayIdx + 1} · ${dayLabel}${cityLabel}` }),
       ),
     );
     if (it.is_highlight) row.classList.add("is-highlight");
+    if (it.is_unplanned) row.classList.add("is-unplanned");
     return row;
   }
 
@@ -382,7 +392,12 @@ export function renderItinerary(host, ctx) {
     // ── Timeline ──────────────────────────────────────────────────
     const tl = el("div", { class: "vy-tl" });
     tl.appendChild(el("div", { class: "vy-tl-line", "aria-hidden": "true" }));
-    (day.items || []).forEach((it, ii) => tl.appendChild(timelineItem(day, it, ii)));
+    // is_unplanned items are travel-mode artefacts (added via the
+    // Costs page's "+ Add unplanned expense") — surface them on the
+    // Itinerary Category view and the Costs page, but keep them out
+    // of the day-focused Timeline/Cards so planning stays uncluttered.
+    const visibleItems = (day.items || []).filter((it) => !it.is_unplanned);
+    visibleItems.forEach((it, ii) => tl.appendChild(timelineItem(day, it, ii)));
     if (!readOnly) {
       tl.appendChild(el("div", { class: "vy-tl-add-row" },
         el("button", { class: "btn ghost inline-add",
@@ -749,6 +764,12 @@ export function renderItinerary(host, ctx) {
       );
       const flagRow = el("div", { class: "vy-tl-card-meta" });
       if (it.status && it.status !== "planned") flagRow.appendChild(el("span", { class: "vy-conf", text: it.status.toUpperCase() }));
+      // ✂ marker when this item has a custom split. Subtle — the Budget
+      // page is where the actual breakdown lives; this just signals
+      // "shared costs apply here."
+      if ((it.shares || []).length > 0) {
+        flagRow.appendChild(el("span", { class: "vy-tl-split-glyph", title: "Has custom split — see Budget", text: "✂" }));
+      }
       if (flagRow.children.length) lhs.appendChild(flagRow);
       card.appendChild(lhs);
 
@@ -943,6 +964,13 @@ export function renderItinerary(host, ctx) {
               onClick: () => deleteItem(it) },
               el("span", { class: "material-symbols-outlined", text: "delete" }),
               el("span", { text: "Delete event" }),
+            ),
+            // Cost editing intentionally lives on the Budget page so the
+            // Itinerary editor stays focused on what / when / where.
+            el("a", { class: "vy-edit-budget-link", href: "#",
+              onClick: (e) => { e.preventDefault(); ctx.navigate?.({ page: "budget" }); } },
+              el("span", { class: "material-symbols-outlined", text: "payments" }),
+              el("span", { text: "Costs and splits → Budget" }),
             ),
           )
         : null;
