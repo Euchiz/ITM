@@ -3902,6 +3902,268 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
 .day-list[data-view="cards"] .vy-tl-card-r { flex-direction: row; justify-content: flex-end; margin-top: 8px; }
 .day-list[data-view="cards"] .vy-tl-add-row { grid-column: 1 / -1; display: block; padding: 8px 0; }
 
+/* ─── Mobile redesign · shell ─────────────────────────────────────
+ *
+ * data-platform="mobile" is set on <body> by app.js at boot and on
+ * every matchMedia change. Everything in this section is gated on it
+ * so desktop browsers at any width never accidentally get the mobile
+ * chrome.
+ *
+ * The shell is rendered by pages/mobile/_shell.js into #tripPage
+ * (the existing scroll host). The desktop sidebar / topbar / hero /
+ * day-strip / mobile-nav are all hidden on mobile; the shell's own
+ * header strip + floating tab bar take over.
+ */
+
+body[data-platform="mobile"] .app-header,
+body[data-platform="mobile"] .vy-sidebar,
+body[data-platform="mobile"] #tripTopbar,
+body[data-platform="mobile"] #tripHero,
+body[data-platform="mobile"] #tripDayStrip,
+body[data-platform="mobile"] .vy-foot,
+body[data-platform="mobile"] #mobileNav {
+  display: none !important;
+}
+
+/* Trip-view becomes a full-bleed flex column owned by the shell. */
+body[data-platform="mobile"] .view-trip { padding: 0; }
+body[data-platform="mobile"] .vy-main { margin: 0; min-height: 100vh; }
+body[data-platform="mobile"] .vy-main-scroll {
+  padding: 0;
+  gap: 0;
+  min-height: 100vh;
+}
+body[data-platform="mobile"] .vy-timeline-card,
+body[data-platform="mobile"] .vy-page-shell {
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+body[data-platform="mobile"] #tripPage {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Header strip (two rows) ----------------------------------------- */
+
+.vy-mobile-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: linear-gradient(180deg, rgba(247,249,247,0.96) 0%, rgba(247,249,247,0.82) 100%);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  border-bottom: 1px solid var(--vbl-hairline);
+  padding: env(safe-area-inset-top, 0px) 16px 8px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.vy-mobile-headline {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding-top: 10px;
+}
+.vy-mobile-back-btn {
+  appearance: none; border: 0;
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 6px 8px 6px 4px;
+  background: transparent;
+  color: var(--vbl-viridian-deep);
+  font-family: var(--vbl-font-display);
+  font-size: 0.92rem; font-weight: 600;
+  letter-spacing: 0;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.vy-mobile-back-btn:hover { background: rgba(78,159,146,0.08); }
+.vy-mobile-back-btn .material-symbols-outlined { font-size: 22px; line-height: 1; }
+.vy-mobile-trip-title {
+  margin: 0;
+  font-family: var(--vbl-font-display);
+  font-size: 1.0rem; font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--vbl-ink);
+  text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.vy-mobile-more-btn {
+  appearance: none; border: 0;
+  background: transparent;
+  color: var(--vbl-fg-3);
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  display: inline-grid; place-items: center;
+  cursor: pointer;
+}
+.vy-mobile-more-btn:hover {
+  background: rgba(78,159,146,0.10); color: var(--vbl-viridian-deep);
+}
+.vy-mobile-more-btn .material-symbols-outlined { font-size: 22px; }
+
+.vy-mobile-headmeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Mode pill (segmented, primary nav within mobile) ---------------- */
+.vy-mobile-modepill {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgba(20,32,31,0.05);
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+}
+.vy-mobile-modepill button {
+  appearance: none; border: 0;
+  background: transparent;
+  padding: 5px 12px;
+  font-family: var(--vbl-font-display);
+  font-size: 0.7rem; font-weight: 700;
+  letter-spacing: 0.10em; text-transform: uppercase;
+  color: var(--vbl-fg-3);
+  cursor: pointer;
+  border-radius: 7px;
+  transition: background 140ms, color 140ms, box-shadow 140ms;
+}
+.vy-mobile-modepill button.is-active {
+  background: #fff;
+  color: var(--vbl-ink);
+  box-shadow: 0 1px 3px rgba(20,32,31,0.06), inset 0 0 0 1px var(--vbl-hairline);
+}
+
+.vy-mobile-headmeta-r {
+  display: flex; align-items: center; gap: 8px;
+  color: var(--vbl-fg-3);
+}
+
+/* Content slot — fills middle, padded above the floating tab bar -- */
+.vy-mobile-content {
+  flex: 1;
+  padding: 14px 14px calc(96px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; gap: 12px;
+}
+
+/* Floating glass tab bar ------------------------------------------ */
+
+.vy-mobile-tabbar {
+  position: fixed;
+  left: 12px; right: 12px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  z-index: 60;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+  padding: 6px;
+  border-radius: 22px;
+  background: rgba(255,255,255,0.78);
+  backdrop-filter: blur(22px) saturate(1.3);
+  -webkit-backdrop-filter: blur(22px) saturate(1.3);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.75),
+    0 12px 28px -10px rgba(40,103,95,0.30);
+}
+.vy-mobile-tabbar-btn {
+  appearance: none; border: 0; background: transparent;
+  position: relative;
+  display: grid; place-items: center; gap: 1px;
+  padding: 8px 4px;
+  border-radius: 16px;
+  font-family: var(--vbl-font-display);
+  font-size: 0.62rem; font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--vbl-fg-3);
+  cursor: pointer;
+  transition: background 140ms, color 140ms, box-shadow 140ms;
+}
+.vy-mobile-tabbar-btn .material-symbols-outlined {
+  font-size: 22px; line-height: 1;
+}
+.vy-mobile-tabbar-btn .vy-mobile-tabbar-label {
+  text-transform: uppercase;
+}
+.vy-mobile-tabbar-btn.is-active {
+  color: var(--vbl-viridian-deep);
+  background: rgba(255,255,255,0.95);
+  box-shadow: inset 0 0 0 1px rgba(78,159,146,0.30);
+}
+.vy-mobile-tabbar-soon {
+  position: absolute;
+  top: 4px; right: 4px;
+  font-size: 0.5rem; font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: rgba(216,127,42,0.18);
+  color: #8a4a14;
+}
+
+/* More sheet (half-modal) ----------------------------------------- */
+
+.vy-mobile-sheet-backdrop {
+  position: fixed; inset: 0;
+  z-index: 100;
+  background: rgba(20,32,31,0.32);
+  opacity: 0;
+  transition: opacity 180ms ease-out;
+  display: flex; flex-direction: column; justify-content: flex-end;
+}
+.vy-mobile-sheet-backdrop.is-open { opacity: 1; }
+
+.vy-mobile-sheet {
+  background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(247,249,247,0.92));
+  border-radius: 20px 20px 0 0;
+  padding: 10px 16px calc(28px + env(safe-area-inset-bottom, 0px));
+  transform: translateY(100%);
+  transition: transform 220ms cubic-bezier(0.2,0.7,0.2,1);
+  box-shadow: 0 -10px 32px -10px rgba(20,32,31,0.18);
+}
+.vy-mobile-sheet-backdrop.is-open .vy-mobile-sheet { transform: translateY(0); }
+.vy-mobile-sheet-handle {
+  width: 36px; height: 4px;
+  border-radius: 4px;
+  background: rgba(20,32,31,0.20);
+  margin: 0 auto 8px;
+}
+.vy-mobile-sheet-title {
+  margin: 0 0 8px 4px;
+  font-family: var(--vbl-font-display);
+  font-size: 0.7rem; font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--vbl-fg-3);
+}
+.vy-mobile-sheet-list {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.vy-mobile-sheet-list hr {
+  border: 0;
+  height: 1px;
+  margin: 6px 0;
+  background: var(--vbl-hairline);
+}
+.vy-mobile-sheet-item {
+  appearance: none; border: 0;
+  background: transparent;
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 12px;
+  border-radius: 12px;
+  font-family: var(--vbl-font-display);
+  font-size: 0.94rem; font-weight: 500;
+  color: var(--vbl-ink);
+  cursor: pointer;
+  text-align: left;
+}
+.vy-mobile-sheet-item:hover { background: rgba(78,159,146,0.10); }
+.vy-mobile-sheet-item.is-danger { color: #8a2a36; }
+.vy-mobile-sheet-item.is-danger:hover { background: rgba(196,56,72,0.10); }
+.vy-mobile-sheet-item .material-symbols-outlined {
+  font-size: 22px; color: var(--vbl-fg-3);
+}
+.vy-mobile-sheet-item.is-danger .material-symbols-outlined { color: #8a2a36; }
+
 /* ─── Mobile stub (renders until each mobile page slice replaces it) */
 
 .vy-mobile-stub {

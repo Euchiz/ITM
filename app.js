@@ -33,6 +33,7 @@ import { renderMap } from "./pages/map.js";
 import { renderBudget } from "./pages/budget.js";
 import { renderCosts } from "./pages/costs.js";
 import { renderMobileStub } from "./pages/mobile/_stub.js";
+import { renderMobileShell } from "./pages/mobile/_shell.js";
 import { openPrintView } from "./pages/print-view.js";
 import { el, formatRelativeTime } from "./pages/_utils.js";
 
@@ -136,6 +137,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       const next = e.matches ? "mobile" : "desktop";
       if (next === state.platform) return;
       state.platform = next;
+      document.body.dataset.platform = next;
       // Re-paint the current view through the platform-aware router.
       if (state.view === "trip") {
         renderTripPage();
@@ -237,6 +239,7 @@ async function routeFromUrl() {
 function setView(view) {
   state.view = view;
   document.body.dataset.view = view;
+  document.body.dataset.platform = state.platform;
   document.getElementById("view-auth").hidden = view !== "auth";
   document.getElementById("view-share-landing").hidden = view !== "share-landing";
   document.getElementById("view-trips").hidden = view !== "trips";
@@ -407,20 +410,8 @@ function renderTripPage() {
 
   const host = document.getElementById("tripPage");
   host.innerHTML = "";
-  // Mobile branches into the pages/mobile/* renderer table; desktop
-  // uses the existing PAGES table. Both share the same ctx shape so
-  // mobile pages can reuse helpers (refresh, rerender, toast, etc.).
-  // For mobile, if the current page isn't reachable from current mode
-  // (e.g. requested overview-mode tab while persisted as travel) we
-  // fall back to the mode's default tab. Mode mismatch handling
-  // proper ships in slice 11.
-  let fn;
-  if (state.platform === "mobile") {
-    fn = MOBILE_PAGES[state.page] || renderMobileStub;
-  } else {
-    fn = PAGES[state.page] || PAGES.overview;
-  }
-  fn(host, {
+
+  const ctx = {
     trip: state.trip,
     role: state.trip?.role || "viewer",
     isAnonymous: !!state.user?.is_anonymous,
@@ -443,7 +434,31 @@ function renderTripPage() {
     onTitleChange: handleTripTitleChange,
     openContextMenu,
     toast,
-  });
+    // Mobile-only context. Pages can ignore these on desktop.
+    page: state.page,
+    mobileMode: state.mobileMode,
+    setMobileMode: writeMobileMode,
+    lastNonDetailPage: state.lastNonDetailPage,
+    openShare: () => toggleShareMenu(),
+    openPrint: () => state.trip && openPrintView(state.trip),
+    signOut: async () => {
+      try { await auth.signOut(); } catch (e) { toast(e.message, true); }
+    },
+  };
+
+  // Mobile branches into the pages/mobile/* renderer table; desktop
+  // uses the existing PAGES table. Both share the same ctx shape so
+  // mobile pages can reuse helpers (refresh, rerender, toast, etc.).
+  // The mobile shell wraps the page renderer with header + tab bar.
+  if (state.platform === "mobile") {
+    const slot = renderMobileShell(host, ctx);
+    const fn = MOBILE_PAGES[state.page] || renderMobileStub;
+    fn(slot, ctx);
+  } else {
+    const fn = PAGES[state.page] || PAGES.overview;
+    fn(host, ctx);
+  }
+
   paintTabs();
   paintHeader();
 }
