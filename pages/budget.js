@@ -17,6 +17,7 @@ import {
 } from "./_utils.js";
 import { TYPE_VISUALS } from "./itinerary.js";
 import { renderFuelBar, renderFuelPill } from "./_components/fuel-bar.js";
+import { renderBreakdown } from "./_components/breakdown-view.js";
 
 const VIEW_KEY     = "voyage:budget-view";
 const FILTER_KEY   = "voyage:budget-unassigned-only";
@@ -74,7 +75,13 @@ export function renderBudget(host, ctx) {
 
   // ── Body ──────────────────────────────────────────────────────────
   if (view === "breakdown") {
-    main.appendChild(renderBreakdownStub());
+    const bdHost = el("div", { class: "vy-budget-breakdown" });
+    main.appendChild(bdHost);
+    renderBreakdown(bdHost, {
+      trip,
+      donutMode: "proposed",          // Plan-mode → proposed proportions
+      includeUnplanned: false,        // Unplanned items live in Costs mode
+    });
     return;
   }
   main.appendChild(renderEditMode());
@@ -299,20 +306,6 @@ export function renderBudget(host, ctx) {
     return row;
   }
 
-  function renderBreakdownStub() {
-    return el("section", { class: "card vy-stale-card" },
-      el("div", { class: "vy-stale-mark" },
-        el("span", { class: "material-symbols-outlined", text: "donut_small" }),
-      ),
-      el("div", { class: "vy-stale-body" },
-        el("strong", { class: "vy-stale-title", text: "Breakdown view" }),
-        el("span", { class: "vy-meta", text: "COMING SOON · ISSUE 06" }),
-        el("p", { class: "small",
-          text: "Donut at the head, bar list below, with proposed vs actual variance per bucket. " +
-                "Toggleable BY CATEGORY / BY DAY." }),
-      ),
-    );
-  }
 }
 
 // ───────────────────────────────────────────────────────────────────
