@@ -75,10 +75,14 @@ export function renderBudget(host, ctx) {
           "Custom-split is optional — by default events are split evenly across travelers at view time."
         : "Trip-wide breakdown of proposed vs actual spending. Donut and bar list ship soon." }),
     ),
+    // Render the edit-only controls FIRST and the view toggle LAST so
+    // the view toggle stays pinned to the right edge regardless of
+    // whether group/filter are visible. Otherwise the toggle would
+    // "jump" to fill the freed space when flipping into Breakdown.
     el("div", { class: "vy-budget-head-r" },
-      viewToggle(),
       view === "edit" ? groupToggle() : null,
       view === "edit" ? filterSelectEl() : null,
+      viewToggle(),
     ),
   );
   main.appendChild(head);
