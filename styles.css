@@ -3902,6 +3902,40 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
 .day-list[data-view="cards"] .vy-tl-card-r { flex-direction: row; justify-content: flex-end; margin-top: 8px; }
 .day-list[data-view="cards"] .vy-tl-add-row { grid-column: 1 / -1; display: block; padding: 8px 0; }
 
+/* ─── Mobile stub (renders until each mobile page slice replaces it) */
+
+.vy-mobile-stub {
+  margin: 40px auto;
+  max-width: 360px;
+  padding: 32px 20px;
+  text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+}
+.vy-mobile-stub-mark {
+  width: 64px; height: 64px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  background: rgba(78,159,146,0.12);
+  color: var(--vbl-viridian-deep);
+  margin-bottom: 4px;
+}
+.vy-mobile-stub-mark .material-symbols-outlined { font-size: 32px; line-height: 1; }
+.vy-mobile-stub h2 {
+  margin: 0;
+  font-family: var(--vbl-font-display);
+  font-size: 1.1rem; font-weight: 600;
+  letter-spacing: -0.005em;
+}
+.vy-mobile-stub p {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--vbl-fg-2);
+  line-height: 1.5;
+}
+.vy-mobile-stub-actions {
+  display: flex; gap: 8px; margin-top: 8px;
+}
+
 /* ─── Stale card pattern ────────────────────────────────────────── */
 
 .vy-stale-card {

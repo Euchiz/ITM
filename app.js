@@ -32,6 +32,7 @@ import { renderIO } from "./pages/io.js";
 import { renderMap } from "./pages/map.js";
 import { renderBudget } from "./pages/budget.js";
 import { renderCosts } from "./pages/costs.js";
+import { renderMobileStub } from "./pages/mobile/_stub.js";
 import { openPrintView } from "./pages/print-view.js";
 import { el, formatRelativeTime } from "./pages/_utils.js";
 
@@ -64,6 +65,31 @@ function modeForPage(page) {
   return "plan";
 }
 
+// ===== Platform detection (mobile vs desktop) =====
+//
+// Mobile is a fundamentally different view tree (pages/mobile/*),
+// not a narrowed desktop. We branch at the top via state.platform.
+// matchMedia gives us boot-time detection plus a live change listener
+// so devtools-resize testing and tablet orientation flips re-route.
+
+const MOBILE_MQ = "(max-width: 767px)";
+
+function detectPlatform() {
+  if (typeof window === "undefined" || !window.matchMedia) return "desktop";
+  return window.matchMedia(MOBILE_MQ).matches ? "mobile" : "desktop";
+}
+
+function readMobileMode() {
+  try {
+    return localStorage.getItem("voyage:mobile-mode") === "overview"
+      ? "overview" : "travel";
+  } catch { return "travel"; }
+}
+function writeMobileMode(m) {
+  state.mobileMode = m;
+  try { localStorage.setItem("voyage:mobile-mode", m); } catch {}
+}
+
 const state = {
   view: "auth",
   user: null,
@@ -76,6 +102,13 @@ const state = {
                         // the topbar's "LAST CHANGE <t>" telemetry. Seeded
                         // from trip.updated_at on openTrip; bumped on every
                         // noteSaveDone.
+
+  // Mobile-specific state. platform is set at boot and on matchMedia
+  // change; mobileMode persists in localStorage; lastNonDetailPage is
+  // tracked for the mobile Detail screen's back-arrow behaviour.
+  platform: detectPlatform(),
+  mobileMode: readMobileMode(),
+  lastNonDetailPage: null,
 };
 
 // ===== Boot =====
@@ -93,6 +126,26 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   await initSupabase();
   await auth.onChange(handleAuthChange);
+
+  // Re-route on viewport breakpoint crossing. Live listener so that
+  // resizing the window through 767px (devtools, orientation flip)
+  // swaps between desktop and mobile view trees without a refresh.
+  if (window.matchMedia) {
+    const mq = window.matchMedia(MOBILE_MQ);
+    const onPlatformChange = (e) => {
+      const next = e.matches ? "mobile" : "desktop";
+      if (next === state.platform) return;
+      state.platform = next;
+      // Re-paint the current view through the platform-aware router.
+      if (state.view === "trip") {
+        renderTripPage();
+      } else {
+        setView(state.view);
+      }
+    };
+    if (mq.addEventListener) mq.addEventListener("change", onPlatformChange);
+    else if (mq.addListener) mq.addListener(onPlatformChange);  // legacy Safari
+  }
 
   const session = await auth.getSession();
   state.user = session?.user || null;
@@ -325,6 +378,27 @@ export async function refreshTrip() {
   }
 }
 
+// Mobile page table. Each entry will be replaced by a real renderer
+// as the mobile redesign slices ship. For now everything maps to the
+// shared stub; the platform branch in renderTripPage picks the mobile
+// renderer when state.platform === 'mobile'. Pages that exist in
+// MOBILE_PAGES but not in PAGES (e.g. pack, detail) are mobile-only
+// and only reachable when state.platform is mobile.
+const MOBILE_PAGES = {
+  today:     renderMobileStub,
+  map:       renderMobileStub,
+  costs:     renderMobileStub,
+  notes:     renderMobileStub,
+  itinerary: renderMobileStub,
+  prepare:   renderMobileStub,
+  budget:    renderMobileStub,
+  pack:      renderMobileStub,
+  detail:    renderMobileStub,
+  overview:  renderMobileStub,
+  members:   renderMobileStub,
+  io:        renderMobileStub,
+};
+
 function renderTripPage() {
   // Clamp selectedDayIdx in case the trip lost days since it was set.
   const dayCount = (state.trip?.days || []).length;
@@ -333,7 +407,19 @@ function renderTripPage() {
 
   const host = document.getElementById("tripPage");
   host.innerHTML = "";
-  const fn = PAGES[state.page] || PAGES.overview;
+  // Mobile branches into the pages/mobile/* renderer table; desktop
+  // uses the existing PAGES table. Both share the same ctx shape so
+  // mobile pages can reuse helpers (refresh, rerender, toast, etc.).
+  // For mobile, if the current page isn't reachable from current mode
+  // (e.g. requested overview-mode tab while persisted as travel) we
+  // fall back to the mode's default tab. Mode mismatch handling
+  // proper ships in slice 11.
+  let fn;
+  if (state.platform === "mobile") {
+    fn = MOBILE_PAGES[state.page] || renderMobileStub;
+  } else {
+    fn = PAGES[state.page] || PAGES.overview;
+  }
   fn(host, {
     trip: state.trip,
     role: state.trip?.role || "viewer",
@@ -405,7 +491,8 @@ export function navigate(opts = {}) {
 
   // Same trip, different page: just swap pages without refetching.
   if (state.trip && state.trip.id === tripId) {
-    state.page = PAGES[page] ? page : stripDefault;
+    const table = state.platform === "mobile" ? MOBILE_PAGES : PAGES;
+    state.page = table[page] ? page : stripDefault;
     renderTripPage();
     return;
   }
