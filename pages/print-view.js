@@ -11,7 +11,18 @@
 //   3. Click "Print" → browser PDF dialog → "Save as PDF".
 //   4. Click "Close" → overlay removed, normal app restored.
 
-import { el, formatDate, formatTime } from "./_utils.js";
+import { el, formatDate, formatTime, formatMoney } from "./_utils.js";
+import { ITEM_TYPES } from "../io/schema.js";
+import { computeSettlement } from "./costs.js";
+
+// Map a cost_tag to an inline suffix shown after the amount. Plain
+// text so it survives B&W print. `n_a` and NULL are special-cased by
+// the caller (no amount rendered).
+const TAG_SUFFIX = {
+  guessing: " (?)",
+  approx:   " ~",
+  actual:   "",
+};
 
 const TYPE_LABELS = {
   activity: "Activity",
@@ -84,11 +95,12 @@ function buildDoc(t) {
   const doc = el("article", { class: "print-doc" },
     cover(t, totalDays, totalNights),
     glance(t, days),
-    dayByDay(days),
+    dayByDay(days, t.default_currency),
     lodging.length > 0 ? accommodationSection(lodging) : null,
     transport.length > 0 ? transportSection(transport) : null,
     prep.length > 0 ? prepSection(prep) : null,
     notes.length > 0 ? notesSection(notes) : null,
+    budgetSummary(t),
     footer(t),
   );
   return doc;
@@ -171,7 +183,7 @@ function fact(label, value) {
 
 // ----- Day by day -----
 
-function dayByDay(days) {
+function dayByDay(days, tripDefaultCurrency) {
   if (days.length === 0) {
     return el("section", { class: "print-section" },
       el("h2", { text: "Day-by-day itinerary" }),
@@ -184,13 +196,13 @@ function dayByDay(days) {
   );
 
   days.forEach((day, idx) => {
-    sec.appendChild(dayBlock(day, idx + 1));
+    sec.appendChild(dayBlock(day, idx + 1, tripDefaultCurrency));
   });
 
   return sec;
 }
 
-function dayBlock(day, num) {
+function dayBlock(day, num, tripDefaultCurrency) {
   const items = (day.items || []).slice().sort((a, b) => {
     const at = a.start_time || "99:99";
     const bt = b.start_time || "99:99";
@@ -216,7 +228,7 @@ function dayBlock(day, num) {
   }
 
   if (items.length > 0) {
-    block.appendChild(itemsTable(items));
+    block.appendChild(itemsTable(items, tripDefaultCurrency));
   } else {
     block.appendChild(el("p", { class: "muted small", text: "No items scheduled for this day." }));
   }
@@ -224,7 +236,7 @@ function dayBlock(day, num) {
   return block;
 }
 
-function itemsTable(items) {
+function itemsTable(items, tripDefaultCurrency) {
   const table = el("table", { class: "items-table" },
     el("thead", {},
       el("tr", {},
@@ -232,21 +244,23 @@ function itemsTable(items) {
         el("th", { class: "col-activity", text: "Activity" }),
         el("th", { class: "col-type", text: "Type" }),
         el("th", { class: "col-location", text: "Location" }),
+        el("th", { class: "col-cost", text: "Cost" }),
         el("th", { class: "col-status", text: "Status" }),
       ),
     ),
   );
   const tbody = el("tbody", {});
-  items.forEach((it) => tbody.appendChild(itemRow(it)));
+  items.forEach((it) => tbody.appendChild(itemRow(it, tripDefaultCurrency)));
   table.appendChild(tbody);
   return table;
 }
 
-function itemRow(it) {
+function itemRow(it, tripDefaultCurrency) {
   const time = formatTimeRange(it.start_time, it.end_time);
   const flags = [];
   if (it.is_fixed) flags.push("Fixed");
   if (it.is_highlight) flags.push("Highlight");
+  if (it.is_unplanned) flags.push("Unplanned");
   const titleCell = el("td", { class: "col-activity" },
     el("strong", { text: it.title || "(untitled)" }),
     it.notes ? el("div", { class: "item-row-notes", text: it.notes }) : null,
@@ -260,8 +274,25 @@ function itemRow(it) {
     titleCell,
     el("td", { class: "col-type", text: TYPE_LABELS[it.type] || it.type }),
     el("td", { class: "col-location", text: location || "—" }),
+    el("td", { class: "col-cost", text: itemCostString(it, tripDefaultCurrency) }),
     el("td", { class: "col-status", text: STATUS_LABELS[it.status] || it.status }),
   );
+}
+
+// Inline cost string for an item — actual if set, else proposed, with
+// a tag suffix and a ✂ glyph when shares exist. Returns "—" for n_a
+// items and "" (blank) when no cost has been assigned.
+function itemCostString(it, tripDefault) {
+  if (it.cost_tag === "n_a") return "—";
+  const cents = it.actual_cost_cents != null
+    ? it.actual_cost_cents
+    : it.proposed_cost_cents;
+  if (cents == null) return "";
+  const code = (it.currency || tripDefault || "USD").toUpperCase();
+  const tag = it.actual_cost_cents != null ? "actual" : (it.cost_tag || "");
+  const suffix = TAG_SUFFIX[tag] ?? "";
+  const split = (it.shares || []).length > 0 ? " ✂" : "";
+  return formatMoney(cents, code) + suffix + split;
 }
 
 // ----- Accommodation -----
@@ -374,6 +405,190 @@ function notesSection(notes) {
         n.title ? el("h4", { text: n.title }) : null,
         n.body ? el("p", { text: n.body }) : null,
       )
+    ),
+  );
+}
+
+// ----- Budget summary -----
+//
+// End-of-document block: per-currency totals, by-category, by-day,
+// and a settlement table when splits/paid_by exist. No charts — print
+// is monochrome, so plain text + thin rules carry the load.
+
+function budgetSummary(t) {
+  const defaultCurrency = (t.default_currency || "USD").toUpperCase();
+  const items = (t.days || []).flatMap((d, di) =>
+    (d.items || []).map((it) => ({ ...it, _dayIdx: di, _day: d })));
+
+  // Anything to summarize? Skip the section entirely if there's no
+  // cost data at all on the trip.
+  const anyCost = items.some((it) =>
+    it.cost_tag !== "n_a" &&
+    (it.proposed_cost_cents != null || it.actual_cost_cents != null));
+  if (!anyCost) return null;
+
+  // Per-currency totals — proposed / actual / variance.
+  const perCurrency = new Map(); // code → { proposed, actual }
+  for (const it of items) {
+    if (it.cost_tag === "n_a") continue;
+    const code = (it.currency || defaultCurrency).toUpperCase();
+    if (!perCurrency.has(code)) perCurrency.set(code, { proposed: 0, actual: 0 });
+    const cell = perCurrency.get(code);
+    cell.proposed += Number(it.proposed_cost_cents) || 0;
+    cell.actual   += Number(it.actual_cost_cents)   || 0;
+  }
+
+  // By category (default currency only) and by day (likewise).
+  const defaultItems = items.filter((it) =>
+    it.cost_tag !== "n_a"
+    && (!it.currency || it.currency.toUpperCase() === defaultCurrency));
+  const byCategory = bucketize(defaultItems, "type");
+  const byDay = bucketize(defaultItems, "_dayIdx");
+
+  // Settlement — derive via shared helper.
+  const settlement = computeSettlement(t);
+
+  return el("section", { class: "print-section budget-summary" },
+    el("h2", { text: "Budget summary" }),
+
+    // Per-currency block
+    el("div", { class: "print-summary-block" },
+      el("div", { class: "section-label small", text: "Per-currency totals" }),
+      el("table", { class: "list-table" },
+        el("thead", {},
+          el("tr", {},
+            el("th", { text: "Currency" }),
+            el("th", { class: "amount-col", text: "Proposed" }),
+            el("th", { class: "amount-col", text: "Actual" }),
+            el("th", { class: "amount-col", text: "Variance" }),
+          ),
+        ),
+        el("tbody", {},
+          ...[...perCurrency.entries()].map(([code, sums]) => {
+            const variance = sums.actual - sums.proposed;
+            const varText = sums.actual > 0 && variance !== 0
+              ? (variance > 0 ? `+${formatMoney(variance, code)} over`
+                              : `−${formatMoney(-variance, code)} under`)
+              : "—";
+            return el("tr", {},
+              el("td", { text: code }),
+              el("td", { class: "amount-col", text: formatMoney(sums.proposed, code) || "—" }),
+              el("td", { class: "amount-col", text: sums.actual ? formatMoney(sums.actual, code) : "—" }),
+              el("td", { class: "amount-col", text: varText }),
+            );
+          }),
+        ),
+      ),
+    ),
+
+    // By category (default currency only)
+    byCategory.size > 0 ? el("div", { class: "print-summary-block" },
+      el("div", { class: "section-label small", text: `By category (${defaultCurrency})` }),
+      summaryTable(byCategory, defaultCurrency, "category"),
+    ) : null,
+
+    // By day (default currency only)
+    byDay.size > 0 ? el("div", { class: "print-summary-block" },
+      el("div", { class: "section-label small", text: `By day (${defaultCurrency})` }),
+      summaryTable(byDay, defaultCurrency, "day", t.days),
+    ) : null,
+
+    // Settlement (per-currency, only when non-empty)
+    settlement.hasAny ? el("div", { class: "print-summary-block" },
+      el("div", { class: "section-label small", text: "Settlement" }),
+      ...[...settlement.perCurrency.entries()].map(([code, edges]) =>
+        settlementBlock(code, edges, t)),
+    ) : null,
+  );
+}
+
+function bucketize(items, axis) {
+  const m = new Map();
+  for (const it of items) {
+    const key = it[axis];
+    if (!m.has(key)) m.set(key, { proposed: 0, actual: 0 });
+    const b = m.get(key);
+    b.proposed += Number(it.proposed_cost_cents) || 0;
+    b.actual   += Number(it.actual_cost_cents)   || 0;
+  }
+  return m;
+}
+
+function summaryTable(buckets, currency, axis, days) {
+  // Stable order: ITEM_TYPES for category, sort_order for day.
+  let entries;
+  if (axis === "category") {
+    entries = ITEM_TYPES
+      .filter((t) => buckets.has(t))
+      .map((t) => [labelForCategory(t), buckets.get(t)]);
+  } else {
+    entries = [...buckets.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([di, sums]) => [labelForDay(di, days), sums]);
+  }
+  return el("table", { class: "list-table" },
+    el("thead", {},
+      el("tr", {},
+        el("th", { text: axis === "category" ? "Category" : "Day" }),
+        el("th", { class: "amount-col", text: "Proposed" }),
+        el("th", { class: "amount-col", text: "Actual" }),
+        el("th", { class: "amount-col", text: "Variance" }),
+      ),
+    ),
+    el("tbody", {},
+      ...entries.map(([label, sums]) => {
+        if (sums.proposed === 0 && sums.actual === 0) return null;
+        const variance = sums.actual - sums.proposed;
+        const varText = sums.actual > 0 && variance !== 0
+          ? (variance > 0 ? `+${formatMoney(variance, currency)} over`
+                          : `−${formatMoney(-variance, currency)} under`)
+          : "—";
+        return el("tr", {},
+          el("td", { text: label }),
+          el("td", { class: "amount-col", text: formatMoney(sums.proposed, currency) || "—" }),
+          el("td", { class: "amount-col", text: sums.actual ? formatMoney(sums.actual, currency) : "—" }),
+          el("td", { class: "amount-col", text: varText }),
+        );
+      }),
+    ),
+  );
+}
+
+function labelForCategory(type) {
+  return TYPE_LABELS[type] || type;
+}
+
+function labelForDay(dayIdx, days) {
+  const d = days?.[dayIdx];
+  if (!d) return `Day ${dayIdx + 1}`;
+  return `Day ${dayIdx + 1}${d.date ? " · " + formatDate(d.date) : ""}${d.city ? " · " + d.city : ""}`;
+}
+
+function settlementBlock(code, edges, trip) {
+  const membersById = Object.fromEntries((trip.members || []).map((m) => [m.user_id, m]));
+  const nameFor = (uid) => {
+    const m = membersById[uid];
+    return m?.display_name || m?.email || "Former member";
+  };
+  let total = 0;
+  return el("div", { class: "settlement-print-block" },
+    el("div", { class: "settlement-print-code", text: code }),
+    el("table", { class: "list-table settlement-print-table" },
+      el("tbody", {},
+        ...edges.map((e) => {
+          total += e.amount;
+          return el("tr", {},
+            el("td", { class: "from-col", text: nameFor(e.from) }),
+            el("td", { class: "arrow-col", text: "→" }),
+            el("td", { class: "to-col", text: nameFor(e.to) }),
+            el("td", { class: "amount-col", text: formatMoney(e.amount, code) }),
+          );
+        }),
+        el("tr", { class: "settlement-print-total" },
+          el("td", { colspan: "3", text: "Total to settle" }),
+          el("td", { class: "amount-col", text: formatMoney(total, code) }),
+        ),
+      ),
     ),
   );
 }

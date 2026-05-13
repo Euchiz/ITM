@@ -380,7 +380,7 @@ function openUnplannedDialog(day, dayIdx, ctx) {
 // Greedy reduction of "who owes who" into the minimum number of
 // payments. Runs per-currency since we don't do FX.
 
-function computeSettlement(trip) {
+export function computeSettlement(trip) {
   const members = trip.members || [];
   if (members.length === 0) return { hasAny: false, perCurrency: new Map() };
 
