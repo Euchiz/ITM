@@ -82,6 +82,7 @@ the app is served.
 | 13 | `20260512000000_fix_share_links_ambiguous_and_rename.sql` | Fix `list_share_links` ambiguous-column error; rename "Trip Studio" → "Hermes Daybook" in `add_trip_member_by_email`'s user-visible error message. |
 | 14 | `20260512010000_share_link_expiry.sql` | Per-link expiration: adds `share_links.expires_at`, updates `peek_share_link` to expose `expired`, `redeem_share_link` to refuse expired tokens, `mint_share_link` to accept an optional expires_at, `list_share_links` to return it. |
 | 15 | `20260512020000_claim_guest_edits.sql` | "Claim my guest edits" merge flow: adds `anon_merge_tokens` table, `start_anon_merge()` (called while anon), and `claim_anon_edits(token)` (called after signing into the existing account). Moves memberships with upgrade-only role precedence, reassigns `created_by` across all content tables, deletes the anon user. |
+| 16 | `20260513002123_cost_managing_schema.sql` | Cost-managing-system foundation: `itineraries` gains `default_currency` + `budget_target_cents`; `itinerary_items` gains six cost columns (proposed/actual cents, tag, currency override, paid_by, is_unplanned); new `item_cost_shares` table scaffolds custom splits for the upcoming Budget/Costs UI. RLS reaches the parent trip via `itinerary_items.trip_id`. |
 
 ## Adding a new migration
 

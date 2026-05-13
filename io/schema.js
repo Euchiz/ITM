@@ -8,14 +8,19 @@
 export const ITEM_TYPES = ["activity","food","transport","lodging","shopping","rest","note"];
 export const ITEM_STATUSES = ["idea","planned","needs_booking","booked","done","cancelled"];
 export const CHECKLIST_CATEGORIES = ["booking","document","packing","payment","transportation","health","other"];
+// Cost-tag enum. NULL is also valid (means "unassigned, not yet
+// considered") — distinct from "n_a" which means "explicitly free."
+export const COST_TAGS = ["n_a","guessing","approx","actual"];
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^\d{2}:\d{2}$/;
+const CURRENCY_RE = /^[A-Z]{3}$/;
 
 function isStr(v) { return typeof v === "string"; }
 function isBool(v) { return typeof v === "boolean"; }
 function isArr(v) { return Array.isArray(v); }
 function isObj(v) { return v && typeof v === "object" && !Array.isArray(v); }
+function isInt(v) { return Number.isInteger(v); }
 
 function validDate(s) {
   if (!isStr(s) || !DATE_RE.test(s)) return false;
@@ -48,6 +53,13 @@ export function validate(payload) {
       push(`trip.end_date must be YYYY-MM-DD (got ${JSON.stringify(trip.end_date)}).`);
     }
     if (trip.travelers != null && !isArr(trip.travelers)) push("trip.travelers must be an array.");
+    if (trip.default_currency != null && trip.default_currency !== ""
+        && !(isStr(trip.default_currency) && CURRENCY_RE.test(trip.default_currency))) {
+      push(`trip.default_currency must be a 3-letter ISO code (got ${JSON.stringify(trip.default_currency)}).`);
+    }
+    if (trip.budget_target_cents != null && !isInt(trip.budget_target_cents)) {
+      push(`trip.budget_target_cents must be an integer (got ${JSON.stringify(trip.budget_target_cents)}).`);
+    }
   }
 
   const days = payload.days;
@@ -80,6 +92,44 @@ export function validate(payload) {
         }
         if (it.is_fixed != null && !isBool(it.is_fixed)) push(`${w}.is_fixed must be true or false.`);
         if (it.is_highlight != null && !isBool(it.is_highlight)) push(`${w}.is_highlight must be true or false.`);
+
+        // Cost fields — all optional, all validated independently.
+        if (it.proposed_cost_cents != null && !isInt(it.proposed_cost_cents)) {
+          push(`${w}.proposed_cost_cents must be an integer (got ${JSON.stringify(it.proposed_cost_cents)}).`);
+        }
+        if (it.actual_cost_cents != null && !isInt(it.actual_cost_cents)) {
+          push(`${w}.actual_cost_cents must be an integer (got ${JSON.stringify(it.actual_cost_cents)}).`);
+        }
+        if (it.cost_tag != null && it.cost_tag !== "" && !COST_TAGS.includes(it.cost_tag)) {
+          push(`${w} has invalid cost_tag: ${JSON.stringify(it.cost_tag)}.\n  Allowed values: ${COST_TAGS.join(", ")} (or null).`);
+        }
+        if (it.currency != null && it.currency !== ""
+            && !(isStr(it.currency) && CURRENCY_RE.test(it.currency))) {
+          push(`${w}.currency must be a 3-letter ISO code (got ${JSON.stringify(it.currency)}).`);
+        }
+        if (it.paid_by_email != null && it.paid_by_email !== "" && !isStr(it.paid_by_email)) {
+          push(`${w}.paid_by_email must be a string (got ${JSON.stringify(it.paid_by_email)}).`);
+        }
+        if (it.is_unplanned != null && !isBool(it.is_unplanned)) {
+          push(`${w}.is_unplanned must be true or false.`);
+        }
+        if (it.shares != null && !isArr(it.shares)) {
+          push(`${w}.shares must be an array.`);
+        } else if (isArr(it.shares)) {
+          it.shares.forEach((s, si) => {
+            const sw = `${w} share #${si + 1}`;
+            if (!isObj(s)) { push(`${sw} must be an object.`); return; }
+            if (!isStr(s.user_email) || !s.user_email.trim()) {
+              push(`${sw}.user_email is required.`);
+            }
+            if (s.proposed_amount_cents != null && !isInt(s.proposed_amount_cents)) {
+              push(`${sw}.proposed_amount_cents must be an integer (got ${JSON.stringify(s.proposed_amount_cents)}).`);
+            }
+            if (s.actual_amount_cents != null && !isInt(s.actual_amount_cents)) {
+              push(`${sw}.actual_amount_cents must be an integer (got ${JSON.stringify(s.actual_amount_cents)}).`);
+            }
+          });
+        }
       });
 
       (d.todos || []).forEach((t, ti) => {
@@ -130,6 +180,9 @@ function normalize(p) {
       summary: trip.summary || "",
       general_notes: trip.general_notes || "",
       travelers: Array.isArray(trip.travelers) ? trip.travelers.slice() : [],
+      default_currency: (isStr(trip.default_currency) && CURRENCY_RE.test(trip.default_currency))
+        ? trip.default_currency : "USD",
+      budget_target_cents: isInt(trip.budget_target_cents) ? trip.budget_target_cents : null,
     },
     days: (p.days || []).map((d) => ({
       date: d.date || "",
@@ -147,6 +200,19 @@ function normalize(p) {
         is_fixed: !!it.is_fixed,
         is_highlight: !!it.is_highlight,
         status: ITEM_STATUSES.includes(it.status) ? it.status : "planned",
+        // Cost fields. Each is independently nullable so a planning-only
+        // export (proposed but no actual) round-trips cleanly.
+        proposed_cost_cents: isInt(it.proposed_cost_cents) ? it.proposed_cost_cents : null,
+        actual_cost_cents:   isInt(it.actual_cost_cents)   ? it.actual_cost_cents   : null,
+        cost_tag:            COST_TAGS.includes(it.cost_tag) ? it.cost_tag : null,
+        currency:            (isStr(it.currency) && CURRENCY_RE.test(it.currency)) ? it.currency : null,
+        paid_by_email:       (isStr(it.paid_by_email) && it.paid_by_email.trim()) ? it.paid_by_email.trim() : null,
+        is_unplanned:        !!it.is_unplanned,
+        shares: Array.isArray(it.shares) ? it.shares.map((s) => ({
+          user_email: String(s.user_email || "").trim(),
+          proposed_amount_cents: isInt(s.proposed_amount_cents) ? s.proposed_amount_cents : null,
+          actual_amount_cents:   isInt(s.actual_amount_cents)   ? s.actual_amount_cents   : null,
+        })).filter((s) => s.user_email) : [],
       })),
       todos: (d.todos || []).map((t) => ({
         text: t.text || "",

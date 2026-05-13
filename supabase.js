@@ -251,7 +251,7 @@ export const trips = {
     });
   },
 
-  /** Full trip object: trip + nested days+items + checklists + notes. */
+  /** Full trip object: trip + nested days+items + checklists + notes + cost shares. */
   async getFull(id) {
     const c = await sb();
     const { data, error } = await c
@@ -259,9 +259,11 @@ export const trips = {
       .select(`
         id, title, destination, start_date, end_date, summary,
         general_notes, travelers, created_by, created_at, updated_at,
+        default_currency, budget_target_cents,
         days:days(id, date, title, city, notes, sort_order, created_by, created_at,
           items:itinerary_items(id, title, type, start_time, end_time,
-            location_name, map_url, notes, is_fixed, is_highlight, status, sort_order, created_by, created_at)
+            location_name, map_url, notes, is_fixed, is_highlight, status, sort_order, created_by, created_at,
+            proposed_cost_cents, actual_cost_cents, cost_tag, currency, paid_by, is_unplanned)
         ),
         checklist_items(id, day_id, text, category, due_date, is_done, notes, sort_order, created_by, created_at),
         notes(id, day_id, title, body, sort_order, created_by, created_at)
@@ -278,6 +280,31 @@ export const trips = {
     }
     (data.checklist_items || []).sort((a, b) => a.sort_order - b.sort_order);
     (data.notes || []).sort((a, b) => a.sort_order - b.sort_order);
+
+    // Second query for cost-share rows. Issued in parallel with the
+    // big select would race against PostgREST's foreign-table embed;
+    // a clean follow-up is simpler. Attach as item.shares = [...] so
+    // the rest of the app can read them off the item directly.
+    const allItemIds = (data.days || []).flatMap((d) => (d.items || []).map((it) => it.id));
+    if (allItemIds.length > 0) {
+      const { data: shares, error: shareErr } = await c
+        .from("item_cost_shares")
+        .select("item_id, user_id, proposed_amount_cents, actual_amount_cents")
+        .in("item_id", allItemIds);
+      if (shareErr) throw shareErr;
+      const byItem = new Map();
+      for (const s of shares || []) {
+        if (!byItem.has(s.item_id)) byItem.set(s.item_id, []);
+        byItem.get(s.item_id).push(s);
+      }
+      for (const d of data.days || []) {
+        for (const it of d.items || []) it.shares = byItem.get(it.id) || [];
+      }
+    } else {
+      for (const d of data.days || []) {
+        for (const it of d.items || []) it.shares = [];
+      }
+    }
 
     const user = await auth.getUser();
     let role = "viewer";
@@ -320,9 +347,49 @@ export const trips = {
     if (error) throw error;
   },
 
+  /** Owner-only helper for the "Set budget target" CTA on Breakdown.
+   *  Pass currency=null to leave the existing default untouched. */
+  async setBudget(id, { currency = null, target = null } = {}) {
+    const c = await sb();
+    const { error } = await c.rpc("set_trip_budget", {
+      p_trip_id: id, p_currency: currency, p_target: target,
+    });
+    if (error) throw error;
+  },
+
   async remove(id) {
     const c = await sb();
     const { error } = await c.from("itineraries").delete().eq("id", id);
+    if (error) throw error;
+  },
+};
+
+// =============== Item costs + shares ===============
+//
+// Thin wrappers for the Budget/Costs editing surfaces. Cost columns
+// (proposed/actual/tag/currency/paid_by/is_unplanned) live on
+// itinerary_items; shares live in item_cost_shares. The shares
+// mutator routes through a SECURITY DEFINER RPC for atomicity (the
+// delete + reinsert must not produce a visible half-state).
+
+export const itemCosts = {
+  /** Patch the cost columns on an item. Pass any subset of
+   *  proposed_cost_cents, actual_cost_cents, cost_tag, currency,
+   *  paid_by, is_unplanned. */
+  async updateItem(id, patch) {
+    const c = await sb();
+    const { error } = await c.from("itinerary_items").update(patch).eq("id", id);
+    if (error) throw error;
+  },
+
+  /** Atomic replace of an item's share rows. Pass shares as an
+   *  array of { user_id, proposed_amount_cents, actual_amount_cents };
+   *  empty array clears the splits (back to default-even). */
+  async replaceShares(item_id, shares) {
+    const c = await sb();
+    const { error } = await c.rpc("replace_item_shares", {
+      p_item_id: item_id, p_shares: shares || [],
+    });
     if (error) throw error;
   },
 };

@@ -144,6 +144,31 @@ export function memberName(membersById, uid) {
   return m.display_name || m.email || "Unknown";
 }
 
+/** Format integer cents in the given ISO currency. Returns "" for null /
+ *  undefined / NaN cents so callers can chain without a null check. The
+ *  narrow-symbol style ("¥" instead of "JP¥") matches inline-cost real
+ *  estate budgets on tight rows. */
+export function formatMoney(cents, currency = "USD") {
+  if (cents == null || Number.isNaN(Number(cents))) return "";
+  const code = (currency || "USD").toUpperCase();
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency", currency: code, currencyDisplay: "narrowSymbol",
+    }).format(Number(cents) / 100);
+  } catch {
+    // Unknown currency code — fall back to plain digits + the code.
+    return `${(Number(cents) / 100).toFixed(2)} ${code}`;
+  }
+}
+
+/** Curated list of common currencies for the per-item override popover.
+ *  Order roughly by traveler-popularity; the trip default is added
+ *  separately at the top by the caller. */
+export const COMMON_CURRENCIES = [
+  "USD", "EUR", "JPY", "GBP", "CNY", "KRW", "AUD", "CAD",
+  "HKD", "SGD", "TWD", "THB", "MXN", "BRL", "CHF",
+];
+
 export function groupBy(arr, key) {
   const map = new Map();
   for (const x of arr) {
