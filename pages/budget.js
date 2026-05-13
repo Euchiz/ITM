@@ -16,15 +16,28 @@ import {
   parseAmountToCents, centsToAmountText, currencyMinorUnits,
 } from "./_utils.js";
 import { TYPE_VISUALS } from "./itinerary.js";
+import { ITEM_TYPES } from "../io/schema.js";
 import { renderFuelBar, renderFuelPill } from "./_components/fuel-bar.js";
 import { renderBreakdown } from "./_components/breakdown-view.js";
 
 const VIEW_KEY     = "voyage:budget-view";
-const FILTER_KEY   = "voyage:budget-unassigned-only";
-const VIEW_OPTIONS = ["edit", "breakdown"];
+const GROUP_KEY    = "voyage:budget-edit-group";
+const FILTER_KEY   = "voyage:budget-filter";
+const VIEW_OPTIONS  = ["edit", "breakdown"];
+const GROUP_OPTIONS = ["day", "category"];
+
+// Filter modes — used by the dropdown next to the group toggle.
+// "review" = unassigned + guessing (everything that still needs a
+// human decision on the cost). The other options narrow further.
+const FILTER_OPTIONS = [
+  { value: "all",        label: "All items" },
+  { value: "unassigned", label: "Unassigned only" },
+  { value: "guessing",   label: "Guessing only" },
+  { value: "review",     label: "Needs review · unassigned + guessing" },
+];
 
 // Tag picker entries. NULL = "unassigned" — the default for items that
-// haven't been considered yet; surfaced by the "unassigned only" filter.
+// haven't been considered yet; surfaced by the filter dropdown.
 const TAG_OPTIONS = [
   { value: "",         label: "Unassigned" },  // empty-string in <option>, mapped to null on save
   { value: "n_a",      label: "N/A · free"     },
@@ -37,7 +50,8 @@ export function renderBudget(host, ctx) {
   const trip = ctx.trip || {};
   const readOnly = ctx.role === "viewer";
   const view = readView();
-  let unassignedOnly = readFilter();
+  let filterMode = readFilter();
+  let groupBy = readGroup();
 
   // Two-column layout: main content + persistent fuel rail. The rail
   // hides on narrow viewports via CSS; a compact pill in the page-head
@@ -63,7 +77,8 @@ export function renderBudget(host, ctx) {
     ),
     el("div", { class: "vy-budget-head-r" },
       viewToggle(),
-      view === "edit" ? unassignedFilterEl() : null,
+      view === "edit" ? groupToggle() : null,
+      view === "edit" ? filterSelectEl() : null,
     ),
   );
   main.appendChild(head);
@@ -108,16 +123,39 @@ export function renderBudget(host, ctx) {
     return wrap;
   }
 
-  function unassignedFilterEl() {
+  function groupToggle() {
+    const wrap = el("div", { class: "vy-view-toggle vy-budget-group-toggle", role: "tablist" });
+    GROUP_OPTIONS.forEach((v) => {
+      const btn = el("button", {
+        class: v === groupBy ? "is-active" : "",
+        role: "tab",
+        onClick: () => {
+          if (v === groupBy) return;
+          writeGroup(v);
+          ctx.rerender?.();
+        },
+      }, "By " + v);
+      btn.dataset.v = v;
+      wrap.appendChild(btn);
+    });
+    return wrap;
+  }
+
+  function filterSelectEl() {
     const lbl = el("label", { class: "vy-budget-filter" });
-    const cb = el("input", { type: "checkbox" });
-    cb.checked = unassignedOnly;
-    cb.addEventListener("change", () => {
-      unassignedOnly = cb.checked;
-      writeFilter(unassignedOnly);
+    lbl.appendChild(el("span", { class: "vy-budget-filter-label", text: "Filter" }));
+    const sel = el("select", { class: "vy-budget-filter-select" });
+    FILTER_OPTIONS.forEach((opt) => {
+      const o = el("option", { value: opt.value, text: opt.label });
+      if (opt.value === filterMode) o.setAttribute("selected", "");
+      sel.appendChild(o);
+    });
+    sel.addEventListener("change", () => {
+      filterMode = sel.value;
+      writeFilter(filterMode);
       applyFilter(host);
     });
-    lbl.append(cb, el("span", { text: "Unassigned only" }));
+    lbl.appendChild(sel);
     return lbl;
   }
 
@@ -136,20 +174,45 @@ export function renderBudget(host, ctx) {
       return wrap;
     }
 
-    let anyItems = false;
+    // Flatten + bucket items per the active groupBy. is_unplanned items
+    // belong to Costs page; keep Budget Edit planning-focused.
+    const flat = [];
     trip.days.forEach((day, di) => {
-      const items = (day.items || []).filter((it) => !it.is_unplanned);
-      if (items.length === 0) return;
-      anyItems = true;
-      wrap.appendChild(dayGroup(day, di, items));
+      (day.items || []).forEach((it) => {
+        if (it.is_unplanned) return;
+        flat.push({ item: it, day, dayIdx: di });
+      });
     });
 
-    if (!anyItems) {
+    if (flat.length === 0) {
       wrap.appendChild(el("div", { class: "empty-state" },
         el("h3", { text: "No planned items" }),
         el("p", { text: "Once you add events on the Itinerary, they'll appear here for cost entry." }),
       ));
+      return wrap;
     }
+
+    if (groupBy === "category") {
+      // Bucket by item type, ITEM_TYPES order — predictable, stable.
+      const buckets = new Map();
+      for (const type of ITEM_TYPES) buckets.set(type, []);
+      for (const entry of flat) {
+        const key = ITEM_TYPES.includes(entry.item.type) ? entry.item.type : "activity";
+        buckets.get(key).push(entry);
+      }
+      ITEM_TYPES.forEach((type) => {
+        const entries = buckets.get(type);
+        if (entries.length === 0) return;
+        wrap.appendChild(categoryGroup(type, entries));
+      });
+    } else {
+      trip.days.forEach((day, di) => {
+        const items = (day.items || []).filter((it) => !it.is_unplanned);
+        if (items.length === 0) return;
+        wrap.appendChild(dayGroup(day, di, items));
+      });
+    }
+
     return wrap;
   }
 
@@ -167,6 +230,22 @@ export function renderBudget(host, ctx) {
     ));
     const list = el("div", { class: "vy-budget-day-list" });
     items.forEach((it) => list.appendChild(budgetRow(it, day, di)));
+    group.appendChild(list);
+    return group;
+  }
+
+  function categoryGroup(type, entries) {
+    const v = TYPE_VISUALS[type] || TYPE_VISUALS.activity;
+    const group = el("section", { class: "vy-budget-day card" });
+    group.appendChild(el("header", { class: "vy-budget-day-head" },
+      el("span", { class: `vy-chip vy-chip--${v.chipClass}` },
+        el("span", { class: "material-symbols-outlined", text: v.glyph }),
+        el("span", { text: v.label }),
+      ),
+      el("span", { class: "muted small", text: `${entries.length} item${entries.length === 1 ? "" : "s"}` }),
+    ));
+    const list = el("div", { class: "vy-budget-day-list" });
+    entries.forEach(({ item, day, dayIdx }) => list.appendChild(budgetRow(item, day, dayIdx)));
     group.appendChild(list);
     return group;
   }
@@ -301,7 +380,7 @@ export function renderBudget(host, ctx) {
     }
 
     // Apply filter visibility immediately
-    if (unassignedOnly && it.cost_tag) row.style.display = "none";
+    if (!rowMatchesFilter(filterMode, it.cost_tag)) row.style.display = "none";
 
     return row;
   }
@@ -313,17 +392,28 @@ export function renderBudget(host, ctx) {
 // ───────────────────────────────────────────────────────────────────
 
 function applyFilter(host) {
-  const unassignedOnly = readFilter();
+  const filterMode = readFilter();
   host.querySelectorAll(".vy-budget-row").forEach((row) => {
     const tag = row.dataset.tag || "";
-    row.style.display = (unassignedOnly && tag) ? "none" : "";
+    row.style.display = rowMatchesFilter(filterMode, tag) ? "" : "none";
   });
-  // Hide day groups whose rows are all hidden.
+  // Hide groups whose rows are all hidden.
   host.querySelectorAll(".vy-budget-day").forEach((group) => {
     const anyVisible = [...group.querySelectorAll(".vy-budget-row")].some(
       (r) => r.style.display !== "none");
     group.style.display = anyVisible ? "" : "none";
   });
+}
+
+/** Does a row pass the active filter mode? */
+function rowMatchesFilter(filterMode, tag) {
+  switch (filterMode) {
+    case "unassigned": return !tag;
+    case "guessing":   return tag === "guessing";
+    case "review":     return !tag || tag === "guessing";
+    case "all":
+    default:           return true;
+  }
 }
 
 // Returns true when the item has custom shares that don't sum to the
@@ -359,12 +449,28 @@ function readView() {
 function writeView(v) {
   try { localStorage.setItem(VIEW_KEY, v); } catch {}
 }
-function readFilter() {
-  try { return localStorage.getItem(FILTER_KEY) === "1"; }
-  catch { return false; }
+function readGroup() {
+  try {
+    const v = localStorage.getItem(GROUP_KEY);
+    return GROUP_OPTIONS.includes(v) ? v : "day";
+  } catch { return "day"; }
 }
-function writeFilter(on) {
-  try { localStorage.setItem(FILTER_KEY, on ? "1" : "0"); } catch {}
+function writeGroup(v) {
+  try { localStorage.setItem(GROUP_KEY, v); } catch {}
+}
+function readFilter() {
+  try {
+    const v = localStorage.getItem(FILTER_KEY);
+    const allowed = ["all", "unassigned", "guessing", "review"];
+    if (allowed.includes(v)) return v;
+    // Migrate the previous boolean flag (voyage:budget-unassigned-only).
+    const legacy = localStorage.getItem("voyage:budget-unassigned-only");
+    if (legacy === "1") return "unassigned";
+    return "all";
+  } catch { return "all"; }
+}
+function writeFilter(v) {
+  try { localStorage.setItem(FILTER_KEY, v); } catch {}
 }
 
 // ───────────────────────────────────────────────────────────────────

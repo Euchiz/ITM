@@ -909,12 +909,12 @@ const NAV_PLAN = [
   { page: "itinerary", glyph: "calendar_month", label: "Itinerary" },
   { page: "map",       glyph: "map",            label: "Map",    soon: true },
   { page: "prepare",   glyph: "fact_check",     label: "Prepare" },
-  { page: "budget",    glyph: "payments",       label: "Budget", soon: true },
+  { page: "budget",    glyph: "payments",       label: "Budget" },
 ];
 const NAV_TRAVEL = [
   { page: "today",     glyph: "today",          label: "Today" },
   { page: "notes",     glyph: "edit_note",      label: "Notes" },
-  { page: "costs",     glyph: "receipt_long",   label: "Costs", soon: true },
+  { page: "costs",     glyph: "receipt_long",   label: "Costs" },
 ];
 
 function paintSidebar() {

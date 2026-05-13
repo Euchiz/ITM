@@ -2592,18 +2592,33 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
 .vy-budget-head-r { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 
 .vy-budget-filter {
-  display: inline-flex; align-items: center; gap: 6px;
+  display: inline-flex; align-items: center; gap: 8px;
   font-family: var(--vbl-font-display);
   font-size: 11px; font-weight: 600;
   letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--vbl-fg-3);
-  cursor: pointer;
   user-select: none;
 }
-.vy-budget-filter input[type="checkbox"] {
-  accent-color: rgba(47,125,114,1);
-  width: 14px; height: 14px;
+.vy-budget-filter-label { letter-spacing: 0.10em; }
+.vy-budget-filter-select {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid var(--vbl-hairline);
+  background: rgba(255,255,255,0.85);
+  padding: 0 24px 0 11px;
+  font-family: var(--vbl-font-display);
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--vbl-fg-2);
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3e%3cpath d='M2.5 4.5L6 8l3.5-3.5' stroke='%2370807e' stroke-width='1.5' fill='none' stroke-linecap='round'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 7px center;
+  background-size: 10px;
 }
+.vy-budget-group-toggle { font-size: 10px; }
 
 .vy-budget-edit {
   display: flex; flex-direction: column; gap: 14px;
