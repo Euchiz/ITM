@@ -458,6 +458,112 @@ export const items = {
       if (error) throw error;
     }
   },
+  /** Cascade-shift this item and every later same-day non-fixed item by
+   *  N minutes. Returns the count of items that now overlap a fixed
+   *  event so the caller can toast a warning. */
+  async cascadeDefer(item_id, minutes) {
+    const c = await sb();
+    const { data, error } = await c.rpc("cascade_defer_items", {
+      p_from_item_id: item_id, p_minutes: minutes,
+    });
+    if (error) throw error;
+    return data; // number of collisions
+  },
+};
+
+// =============== Pack items (mobile redesign) ===============
+//
+// Trip-wide checklist of physical objects + optional event-tagging.
+// The link table (item_pack_items) is empty for most users — only
+// power users tag specific items to events, which powers the mobile
+// Today reminder.
+
+export const packItems = {
+  /** List pack items for a trip, each with its tagged item_ids[]. */
+  async list(trip_id) {
+    const c = await sb();
+    const { data, error } = await c
+      .from("trip_pack_items")
+      .select("id, trip_id, title, packed, sort_order, created_by, created_at, updated_at")
+      .eq("trip_id", trip_id)
+      .order("sort_order", { ascending: true });
+    if (error) throw error;
+    const rows = data || [];
+    if (rows.length === 0) return [];
+    const ids = rows.map((r) => r.id);
+    const { data: tags, error: tagErr } = await c
+      .from("item_pack_items")
+      .select("item_id, pack_item_id")
+      .in("pack_item_id", ids);
+    if (tagErr) throw tagErr;
+    const byPack = new Map();
+    for (const t of tags || []) {
+      if (!byPack.has(t.pack_item_id)) byPack.set(t.pack_item_id, []);
+      byPack.get(t.pack_item_id).push(t.item_id);
+    }
+    return rows.map((r) => ({ ...r, tagged_item_ids: byPack.get(r.id) || [] }));
+  },
+
+  async add(trip_id, patch = {}) {
+    const c = await sb();
+    const { data, error } = await c
+      .from("trip_pack_items")
+      .insert([{ trip_id, ...patch }])
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  /** Bulk-insert a list of titles. Used by preset picks. Skips
+   *  titles already present on the trip (case-insensitive) to avoid
+   *  duplicates when the user picks a preset twice. */
+  async addMany(trip_id, titles) {
+    const c = await sb();
+    const existing = await this.list(trip_id);
+    const seen = new Set(existing.map((r) => r.title.trim().toLowerCase()));
+    const fresh = titles
+      .map((t) => String(t || "").trim())
+      .filter((t) => t && !seen.has(t.toLowerCase()));
+    if (fresh.length === 0) return [];
+    const baseSort = existing.length;
+    const rows = fresh.map((title, i) => ({ trip_id, title, sort_order: baseSort + i }));
+    const { data, error } = await c.from("trip_pack_items").insert(rows).select();
+    if (error) throw error;
+    return data;
+  },
+
+  async update(id, patch) {
+    const c = await sb();
+    const { error } = await c.from("trip_pack_items").update(patch).eq("id", id);
+    if (error) throw error;
+  },
+
+  async remove(id) {
+    const c = await sb();
+    const { error } = await c.from("trip_pack_items").delete().eq("id", id);
+    if (error) throw error;
+  },
+
+  /** Sweep all items packed=true or packed=false in one round trip. */
+  async markAll(trip_id, packed = true) {
+    const c = await sb();
+    const { error } = await c.from("trip_pack_items").update({ packed }).eq("trip_id", trip_id);
+    if (error) throw error;
+  },
+
+  /** Replace the set of items tagged to one pack item. Wipes existing
+   *  link rows for this pack item then inserts new ones. RLS protects
+   *  the writes against non-editors. */
+  async setTaggedItems(pack_item_id, item_ids) {
+    const c = await sb();
+    const { error: delErr } = await c.from("item_pack_items").delete().eq("pack_item_id", pack_item_id);
+    if (delErr) throw delErr;
+    if (!item_ids || item_ids.length === 0) return;
+    const rows = item_ids.map((item_id) => ({ item_id, pack_item_id }));
+    const { error: insErr } = await c.from("item_pack_items").insert(rows);
+    if (insErr) throw insErr;
+  },
 };
 
 // =============== Checklist items (prep + daily todos) ===============
