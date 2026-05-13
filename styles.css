@@ -2767,6 +2767,158 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
   .vy-budget-amount-input { width: 64px; }
 }
 
+/* ===== Budget layout — main content + persistent fuel rail =====
+ *
+ * The rail is fixed-width on desktop and hides under 720px. The
+ * compact pill in the page-head fills in on mobile. */
+
+.vy-budget-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px;
+  gap: 18px;
+  align-items: start;
+}
+.vy-budget-main { min-width: 0; }
+.vy-budget-rail {
+  position: sticky;
+  top: 18px;
+  align-self: start;
+  display: flex; flex-direction: column;
+}
+.vy-budget-head-pill { display: none; }
+
+@media (max-width: 720px) {
+  .vy-budget-layout { grid-template-columns: 1fr; }
+  .vy-budget-rail { display: none; }
+  .vy-budget-head-pill { display: block; margin: 4px 0 10px; }
+}
+
+/* ===== Fuel bar widget ===== */
+
+.vy-fuel {
+  padding: 14px 12px 12px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.35) 100%);
+  backdrop-filter: blur(14px) saturate(1.15);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.65),
+    inset 1px 1px 0 -0.5px rgba(40,103,95,0.12),
+    inset -1px -1px 0 -0.5px rgba(20,32,31,0.14),
+    0 8px 22px -12px rgba(40,103,95,0.22);
+  display: flex; flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+.vy-fuel-empty {
+  padding: 12px;
+  display: flex; flex-direction: column; gap: 8px;
+  align-items: center;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.45);
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+}
+.vy-fuel-top {
+  text-align: center;
+  display: flex; flex-direction: column;
+  gap: 1px;
+}
+.vy-fuel-used {
+  font-family: var(--vbl-font-display);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.005em;
+  color: var(--vbl-ink);
+}
+.vy-fuel-target {
+  font-family: var(--vbl-font-body);
+  font-size: 11px;
+  color: var(--vbl-fg-3);
+}
+.vy-fuel-pct {
+  font-family: var(--vbl-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vbl-fg-2);
+  margin-top: 2px;
+  letter-spacing: 0.04em;
+}
+.vy-fuel-bar {
+  position: relative;
+  width: 32px; height: 180px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.5);
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+  overflow: hidden;
+}
+.vy-fuel-fill {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  border-radius: 999px;
+  transition: height 280ms cubic-bezier(0.2,0.7,0.2,1),
+              background 200ms;
+  background: linear-gradient(180deg, rgba(78,159,146,0.95) 0%, rgba(47,125,114,0.95) 100%);
+}
+.vy-fuel[data-tier="warn"] .vy-fuel-fill {
+  background: linear-gradient(180deg, rgba(216,160,42,0.92) 0%, rgba(176,118,12,0.92) 100%);
+}
+.vy-fuel[data-tier="over"] .vy-fuel-fill {
+  background: linear-gradient(180deg, rgba(196,74,72,0.92) 0%, rgba(150,40,40,0.92) 100%);
+}
+.vy-fuel-bot {
+  text-align: center;
+  font-family: var(--vbl-font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+}
+.vy-fuel-remaining { color: var(--vbl-viridian-deep); }
+.vy-fuel-over      { color: #8a2a36; }
+.vy-fuel-tail {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  justify-content: center;
+  margin-top: 4px;
+}
+.vy-fuel-tail-chip {
+  font-family: var(--vbl-font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.65);
+  color: var(--vbl-fg-3);
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+}
+
+/* Compact pill variant for mobile / page-head */
+.vy-fuel-pill {
+  appearance: none; border: 0;
+  background: rgba(255,255,255,0.7);
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+  padding: 6px 14px;
+  border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--vbl-font-display);
+  font-size: 12px; font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--vbl-ink);
+  cursor: default;
+}
+.vy-fuel-pill[data-tier="warn"] {
+  background: linear-gradient(180deg, rgba(216,160,42,0.18) 0%, rgba(216,160,42,0.10) 100%);
+  color: #6f4a10;
+}
+.vy-fuel-pill[data-tier="over"] {
+  background: linear-gradient(180deg, rgba(196,74,72,0.18) 0%, rgba(196,74,72,0.10) 100%);
+  color: #8a2a36;
+}
+.vy-fuel-pill-pct {
+  font-family: var(--vbl-font-mono);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
 /* Prepare-category chip palettes — one hue per category so a glance
  * across the filter row reflects relative importance. Ordered from
  * critical (document) through routine (other). */

@@ -16,6 +16,7 @@ import {
   parseAmountToCents, centsToAmountText, currencyMinorUnits,
 } from "./_utils.js";
 import { TYPE_VISUALS } from "./itinerary.js";
+import { renderFuelBar, renderFuelPill } from "./_components/fuel-bar.js";
 
 const VIEW_KEY     = "voyage:budget-view";
 const FILTER_KEY   = "voyage:budget-unassigned-only";
@@ -37,6 +38,19 @@ export function renderBudget(host, ctx) {
   const view = readView();
   let unassignedOnly = readFilter();
 
+  // Two-column layout: main content + persistent fuel rail. The rail
+  // hides on narrow viewports via CSS; a compact pill in the page-head
+  // takes its place so the gauge is still glanceable on mobile.
+  host.innerHTML = "";
+  const layout = el("div", { class: "vy-budget-layout" });
+  const main = el("div", { class: "vy-budget-main" });
+  const rail = el("aside", { class: "vy-budget-rail", "aria-label": "Budget gauge" });
+  layout.append(main, rail);
+  host.appendChild(layout);
+  renderFuelBar(rail, ctx);
+  // Re-renders the rail in-place after any cost change. Sub-frame fast.
+  const refreshFuelBar = () => renderFuelBar(rail, ctx);
+
   // ── Page head ─────────────────────────────────────────────────────
   const head = el("section", { class: "page-head vy-budget-head" },
     el("div", { class: "vy-budget-head-l" },
@@ -51,14 +65,19 @@ export function renderBudget(host, ctx) {
       view === "edit" ? unassignedFilterEl() : null,
     ),
   );
-  host.appendChild(head);
+  main.appendChild(head);
+
+  // Mobile pill — appears in the page-head when CSS hides the rail.
+  const pillSlot = el("div", { class: "vy-budget-head-pill" });
+  renderFuelPill(pillSlot, ctx);
+  main.appendChild(pillSlot);
 
   // ── Body ──────────────────────────────────────────────────────────
   if (view === "breakdown") {
-    host.appendChild(renderBreakdownStub());
+    main.appendChild(renderBreakdownStub());
     return;
   }
-  host.appendChild(renderEditMode());
+  main.appendChild(renderEditMode());
 
   // ────────────────────────────────────────────────────────────────────
   // Builders
@@ -218,30 +237,36 @@ export function renderBudget(host, ctx) {
     row.appendChild(inputs);
 
     // ── Wire saves ───────────────────────────────────────────────
-    const saveCost = debouncedSave(withSaveIndicator(ctx, async (patch) => {
-      Object.assign(it, patch);
+    // Mutate the in-memory item synchronously (drives the fuel-bar
+    // refresh + local computations) and debounce the DB write.
+    const persistCost = debouncedSave(withSaveIndicator(ctx, async (patch) => {
       await itemCosts.updateItem(it.id, patch);
-      warnEl.hidden = !splitMismatch(it);
     }), 700);
+    function applyCost(patch) {
+      Object.assign(it, patch);
+      warnEl.hidden = !splitMismatch(it);
+      refreshFuelBar();
+      persistCost(patch);
+    }
 
     amountInput.addEventListener("input", () => {
       const cents = parseAmountToCents(amountInput.value, currency);
-      // If user typed actuals with a tag still 'unassigned', flip to 'approx'
-      // so the unassigned filter doesn't keep an obviously-considered item.
+      // If user typed an amount with no tag yet, flip the tag to
+      // 'approx' so the row doesn't stay in "unassigned" once it
+      // visibly has a number.
       const patch = { proposed_cost_cents: cents };
       if (cents != null && !it.cost_tag) {
         patch.cost_tag = "approx";
-        it.cost_tag = "approx";
         tagSel.value = "approx";
         row.dataset.tag = "approx";
       }
-      saveCost(patch);
+      applyCost(patch);
     });
 
     tagSel.addEventListener("change", () => {
       const v = tagSel.value || null;
       row.dataset.tag = v || "";
-      saveCost({ cost_tag: v });
+      applyCost({ cost_tag: v });
     });
 
     // ── Split panel (lazy build) ─────────────────────────────────
