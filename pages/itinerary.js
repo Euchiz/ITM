@@ -12,11 +12,11 @@
 // (or click another card) to collapse back to the read-only card view.
 // All field changes save inline through the existing debounced save.
 
-import { days, items } from "../supabase.js";
+import { days, items, itemCosts } from "../supabase.js";
 import { ITEM_TYPES, ITEM_STATUSES } from "../io/schema.js";
 import {
   el, debouncedSave, autosize, withSaveIndicator, formatTime, formatTimeRange,
-  formatRelativeTime, memberName,
+  formatRelativeTime, memberName, COMMON_CURRENCIES,
 } from "./_utils.js";
 import { openPrintView } from "./print-view.js";
 
@@ -644,11 +644,54 @@ export function renderItinerary(host, ctx) {
           { label: it.is_highlight ? "Unhighlight" : "Highlight",
             glyph: "star",
             onClick: () => saveItemNow({ is_highlight: !it.is_highlight }) },
+          { label: "Set item currency...", glyph: "payments",
+            onClick: () => openCurrencyPickerForItem(it, e.clientX, e.clientY) },
           { type: "sep" },
           { label: "Delete event", glyph: "delete", danger: true,
             onClick: () => deleteItem(it) },
         ]);
       });
+    }
+
+    // Second-level menu spawned by "Set item currency...". Lists the
+    // trip default (with check if the item inherits it) plus the
+    // top-15 common currencies. Selecting writes itinerary_items.currency
+    // (NULL = inherit default) and refreshes the trip so the row chip
+    // reflects the new override.
+    function openCurrencyPickerForItem(it, x, y) {
+      if (!ctx.openContextMenu) return;
+      const tripDefault = (ctx.trip?.default_currency || "USD").toUpperCase();
+      const current = (it.currency || "").toUpperCase();
+      const isInherit = !current;
+      const rows = [
+        { label: `${tripDefault} · trip default`,
+          glyph: isInherit ? "check" : "currency_exchange",
+          onClick: () => setItemCurrency(it, null) },
+        { type: "sep" },
+      ];
+      // Dedupe trip default from the common list so it doesn't appear twice.
+      for (const code of COMMON_CURRENCIES) {
+        if (code === tripDefault) continue;
+        rows.push({
+          label: code,
+          glyph: current === code ? "check" : null,
+          onClick: () => setItemCurrency(it, code),
+        });
+      }
+      ctx.openContextMenu(x, y, rows);
+    }
+
+    async function setItemCurrency(it, code) {
+      it.currency = code; // optimistic
+      ctx.onSaveStart?.();
+      try {
+        await itemCosts.updateItem(it.id, { currency: code });
+      } catch (e) {
+        ctx.toast?.("Could not set currency: " + (e.message || e), true);
+      } finally {
+        ctx.onSaveDone?.();
+      }
+      ctx.rerender?.();
     }
 
     function timeCell(it) {
