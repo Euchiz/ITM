@@ -2618,7 +2618,46 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
   background-position: right 7px center;
   background-size: 10px;
 }
-.vy-budget-group-toggle { font-size: 10px; }
+
+/* Group toggle (BY DAY / BY CATEGORY) is a *secondary* control — it
+ * sub-divides the Edit view's content, while the EDIT|BREAKDOWN
+ * pill is the primary mode switch. Render the group toggle as thin
+ * underlined tabs without a container pill so the two controls don't
+ * visually compete sitting side-by-side.
+ *
+ * The .vy-view-toggle bg / border / button-padding rules from the
+ * itinerary view-toggle apply to this element too via the shared
+ * class, so we override them here. */
+.vy-budget-group-toggle.vy-view-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  align-self: center;
+}
+.vy-budget-group-toggle.vy-view-toggle button {
+  padding: 4px 8px 5px;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  font-size: 10px;
+  letter-spacing: 0.10em;
+  color: var(--vbl-fg-3);
+  background: transparent;
+  box-shadow: none;
+  text-transform: uppercase;
+  transition: color 120ms, border-color 120ms;
+}
+.vy-budget-group-toggle.vy-view-toggle button:hover {
+  color: var(--vbl-ink);
+}
+.vy-budget-group-toggle.vy-view-toggle button.is-active {
+  color: var(--vbl-viridian-deep);
+  background: transparent;
+  box-shadow: none;
+  border-bottom-color: var(--vbl-viridian-deep);
+}
 
 .vy-budget-edit {
   display: flex; flex-direction: column; gap: 14px;
