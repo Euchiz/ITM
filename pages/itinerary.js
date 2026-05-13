@@ -22,8 +22,9 @@ import { openPrintView } from "./print-view.js";
 
 // Visual mapping for item types. The chip's CSS class matches the
 // Voyage palette (transit/blue, stay/viridian, meal/amber, thing/viridian,
-// note/muted). Glyphs are Material Symbols Outlined names.
-const TYPE_VISUALS = {
+// note/muted). Glyphs are Material Symbols Outlined names. Exported so
+// Budget / Costs / Print can render the same chips without duplicating.
+export const TYPE_VISUALS = {
   activity:  { glyph: "explore",            label: "ACTIVITY", chipClass: "thing"   },
   food:      { glyph: "restaurant",         label: "DINING",   chipClass: "meal"    },
   transport: { glyph: "directions_railway", label: "TRANSIT",  chipClass: "transit" },

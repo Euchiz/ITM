@@ -1,56 +1,538 @@
-// Budget page (Plan mode) — proposed-costs summary.
-// Future: per-traveler share / split, planned vs spent, category breakdown.
+// Budget page (Plan mode) — the dedicated cost-entry surface.
+//
+// Two top-level modes: EDIT (per-item proposed amounts, tags, custom
+// splits) and BREAKDOWN (donut + bar list, ships in a later commit).
+// State persists in localStorage so users land back in their preferred
+// mode on next visit.
+//
+// EDIT mode is grouped by day with day headers. Each row exposes a
+// compact set of inputs (proposed amount, tag, custom-split disclosure)
+// that all save through the existing debouncedSave pattern — local
+// state.trip mutates instantly, the DB write fires 700ms behind.
 
-import { el } from "./_utils.js";
+import { itemCosts } from "../supabase.js";
+import {
+  el, debouncedSave, withSaveIndicator, formatMoney,
+  parseAmountToCents, centsToAmountText, currencyMinorUnits,
+} from "./_utils.js";
+import { TYPE_VISUALS } from "./itinerary.js";
+
+const VIEW_KEY     = "voyage:budget-view";
+const FILTER_KEY   = "voyage:budget-unassigned-only";
+const VIEW_OPTIONS = ["edit", "breakdown"];
+
+// Tag picker entries. NULL = "unassigned" — the default for items that
+// haven't been considered yet; surfaced by the "unassigned only" filter.
+const TAG_OPTIONS = [
+  { value: "",         label: "Unassigned" },  // empty-string in <option>, mapped to null on save
+  { value: "n_a",      label: "N/A · free"     },
+  { value: "guessing", label: "Guessing"       },
+  { value: "approx",   label: "Approx"         },
+  { value: "actual",   label: "Actual"         },
+];
 
 export function renderBudget(host, ctx) {
-  const trip = ctx.trip;
-  const itemCount = (trip.days || []).reduce((n, d) => n + (d.items || []).length, 0);
-  const memberCount = (trip.members || []).length || 1;
+  const trip = ctx.trip || {};
+  const readOnly = ctx.role === "viewer";
+  const view = readView();
+  let unassignedOnly = readFilter();
 
-  host.appendChild(
-    el("section", { class: "page-head" },
+  // ── Page head ─────────────────────────────────────────────────────
+  const head = el("section", { class: "page-head vy-budget-head" },
+    el("div", { class: "vy-budget-head-l" },
       el("h2", { text: "Budget" }),
-      el("p", { class: "muted",
-        text: "Plan-mode summary: proposed costs vs total budget. " +
-              "Coming soon: group cost split across travelers, category breakdown, and a live spend tracker." }),
-    )
+      el("p", { class: "muted", text: view === "edit"
+        ? "Enter the proposed cost for each event. Add a tag to track confidence. " +
+          "Custom-split is optional — by default events are split evenly across travelers at view time."
+        : "Trip-wide breakdown of proposed vs actual spending. Donut and bar list ship soon." }),
+    ),
+    el("div", { class: "vy-budget-head-r" },
+      viewToggle(),
+      view === "edit" ? unassignedFilterEl() : null,
+    ),
   );
+  host.appendChild(head);
 
-  // Summary tile (always shows trip-shape data, even when no cost is set)
-  host.appendChild(
-    el("section", { class: "card" },
-      el("h3", { text: "Trip shape" }),
-      el("div", { class: "stat-grid" },
-        statTile("Planned items",  String(itemCount), itemCount ? "across all days" : "no items yet"),
-        statTile("Travelers",      String(memberCount), memberCount === 1 ? "solo" : "group"),
-        statTile("Total budget",   "—", "set in trip settings"),
-        statTile("Proposed cost",  "—", "summed from items"),
+  // ── Body ──────────────────────────────────────────────────────────
+  if (view === "breakdown") {
+    host.appendChild(renderBreakdownStub());
+    return;
+  }
+  host.appendChild(renderEditMode());
+
+  // ────────────────────────────────────────────────────────────────────
+  // Builders
+  // ────────────────────────────────────────────────────────────────────
+
+  function viewToggle() {
+    const wrap = el("div", { class: "vy-view-toggle", role: "tablist" });
+    VIEW_OPTIONS.forEach((v) => {
+      const btn = el("button", {
+        class: v === view ? "is-active" : "",
+        role: "tab",
+        onClick: () => {
+          if (v === view) return;
+          writeView(v);
+          ctx.rerender?.();
+        },
+      }, v[0].toUpperCase() + v.slice(1));
+      btn.dataset.v = v;
+      wrap.appendChild(btn);
+    });
+    return wrap;
+  }
+
+  function unassignedFilterEl() {
+    const lbl = el("label", { class: "vy-budget-filter" });
+    const cb = el("input", { type: "checkbox" });
+    cb.checked = unassignedOnly;
+    cb.addEventListener("change", () => {
+      unassignedOnly = cb.checked;
+      writeFilter(unassignedOnly);
+      applyFilter(host);
+    });
+    lbl.append(cb, el("span", { text: "Unassigned only" }));
+    return lbl;
+  }
+
+  function renderEditMode() {
+    const wrap = el("div", { class: "vy-budget-edit" });
+
+    if (!trip.days?.length) {
+      wrap.appendChild(el("div", { class: "empty-state" },
+        el("h3", { text: "No items yet" }),
+        el("p", { text: "Add events on Itinerary first, then come back to assign costs." }),
+        el("div", { class: "actions" },
+          el("button", { class: "btn", onClick: () => ctx.navigate?.({ page: "itinerary" }) },
+            "Go to Itinerary →"),
+        ),
+      ));
+      return wrap;
+    }
+
+    let anyItems = false;
+    trip.days.forEach((day, di) => {
+      const items = (day.items || []).filter((it) => !it.is_unplanned);
+      if (items.length === 0) return;
+      anyItems = true;
+      wrap.appendChild(dayGroup(day, di, items));
+    });
+
+    if (!anyItems) {
+      wrap.appendChild(el("div", { class: "empty-state" },
+        el("h3", { text: "No planned items" }),
+        el("p", { text: "Once you add events on the Itinerary, they'll appear here for cost entry." }),
+      ));
+    }
+    return wrap;
+  }
+
+  function dayGroup(day, di, items) {
+    const dateLabel = day.date
+      ? new Date(day.date + "T00:00:00").toLocaleDateString(undefined,
+          { weekday: "short", month: "short", day: "numeric" })
+      : "Set date";
+    const heading = `Day ${di + 1} · ${dateLabel}${day.city ? " · " + day.city : ""}`;
+
+    const group = el("section", { class: "vy-budget-day card" });
+    group.appendChild(el("header", { class: "vy-budget-day-head" },
+      el("span", { class: "vy-meta", text: heading.toUpperCase() }),
+      el("span", { class: "muted small", text: `${items.length} item${items.length === 1 ? "" : "s"}` }),
+    ));
+    const list = el("div", { class: "vy-budget-day-list" });
+    items.forEach((it) => list.appendChild(budgetRow(it, day, di)));
+    group.appendChild(list);
+    return group;
+  }
+
+  function budgetRow(it, day, di) {
+    const v = TYPE_VISUALS[it.type] || TYPE_VISUALS.activity;
+    const currency = (it.currency || trip.default_currency || "USD").toUpperCase();
+    const isOverride = !!it.currency && it.currency.toUpperCase() !== (trip.default_currency || "USD").toUpperCase();
+    const hasShares = (it.shares || []).length > 0;
+    const memberCount = Math.max(1, (trip.members || []).length || 1);
+
+    const row = el("div", {
+      class: "vy-budget-row",
+      "data-item-id": it.id,
+      "data-tag": it.cost_tag || "",
+    });
+
+    // Chip + title block (read-only here; edit on Itinerary)
+    row.appendChild(el("div", { class: "vy-budget-row-main" },
+      el("span", { class: `vy-chip vy-chip--${v.chipClass}` },
+        el("span", { class: "material-symbols-outlined", text: v.glyph }),
+        el("span", { text: v.label }),
       ),
-    )
-  );
+      el("span", { class: "vy-budget-row-title", text: it.title || "(untitled)" }),
+    ));
 
-  // Stale block for the planned vs spent visual
-  host.appendChild(
-    el("section", { class: "card vy-stale-card" },
+    // Inputs cluster
+    const inputs = el("div", { class: "vy-budget-row-inputs" });
+
+    // Proposed amount input — debounced save to the items column.
+    const amountWrap = el("label", { class: "vy-budget-amount" });
+    const symbolEl = el("span", { class: "vy-budget-amount-sym", text: currencySymbol(currency) });
+    if (isOverride) symbolEl.classList.add("is-override");
+    amountWrap.appendChild(symbolEl);
+    const amountInput = el("input", {
+      type: "text",
+      inputmode: "decimal",
+      class: "vy-budget-amount-input",
+      placeholder: currencyMinorUnits(currency) === 0 ? "0" : "0.00",
+      disabled: readOnly,
+    });
+    amountInput.value = centsToAmountText(it.proposed_cost_cents, currency);
+    inputs.appendChild((amountWrap.appendChild(amountInput), amountWrap));
+
+    // Tag dropdown
+    const tagSel = el("select", { class: "vy-budget-tag", disabled: readOnly });
+    TAG_OPTIONS.forEach((opt) => {
+      const o = el("option", { value: opt.value, text: opt.label });
+      if ((it.cost_tag || "") === opt.value) o.setAttribute("selected", "");
+      tagSel.appendChild(o);
+    });
+    inputs.appendChild(tagSel);
+
+    // Custom split disclosure (only on multi-member trips)
+    let splitToggle = null;
+    let splitPanel = null;
+    if (memberCount > 1) {
+      splitToggle = el("button", {
+        class: "vy-budget-split-toggle",
+        type: "button",
+        title: "Custom split",
+        disabled: readOnly,
+      }, "Custom split ▾");
+      inputs.appendChild(splitToggle);
+    }
+
+    // Adornments: ✂ if shares exist, ⚠ if split-sum mismatch
+    const adorn = el("div", { class: "vy-budget-row-adorn" });
+    if (hasShares) adorn.appendChild(el("span", { class: "vy-budget-glyph", title: "Custom split", text: "✂" }));
+    const warnEl = el("span", { class: "vy-budget-glyph is-warn", title: "Split total doesn't match proposed", text: "⚠" });
+    warnEl.hidden = !splitMismatch(it);
+    adorn.appendChild(warnEl);
+    inputs.appendChild(adorn);
+
+    row.appendChild(inputs);
+
+    // ── Wire saves ───────────────────────────────────────────────
+    const saveCost = debouncedSave(withSaveIndicator(ctx, async (patch) => {
+      Object.assign(it, patch);
+      await itemCosts.updateItem(it.id, patch);
+      warnEl.hidden = !splitMismatch(it);
+    }), 700);
+
+    amountInput.addEventListener("input", () => {
+      const cents = parseAmountToCents(amountInput.value, currency);
+      // If user typed actuals with a tag still 'unassigned', flip to 'approx'
+      // so the unassigned filter doesn't keep an obviously-considered item.
+      const patch = { proposed_cost_cents: cents };
+      if (cents != null && !it.cost_tag) {
+        patch.cost_tag = "approx";
+        it.cost_tag = "approx";
+        tagSel.value = "approx";
+        row.dataset.tag = "approx";
+      }
+      saveCost(patch);
+    });
+
+    tagSel.addEventListener("change", () => {
+      const v = tagSel.value || null;
+      row.dataset.tag = v || "";
+      saveCost({ cost_tag: v });
+    });
+
+    // ── Split panel (lazy build) ─────────────────────────────────
+    if (splitToggle) {
+      splitPanel = el("div", { class: "vy-budget-split-panel", hidden: true });
+      row.appendChild(splitPanel);
+      let built = false;
+      splitToggle.addEventListener("click", () => {
+        if (!built) { buildSplitPanel(splitPanel, it, trip, currency, () => {
+          // Refresh the row's ✂ / ⚠ adornments after a save inside the panel.
+          adorn.querySelector(".vy-budget-glyph:not(.is-warn)") || (() => {})();
+          const stillHasShares = (it.shares || []).length > 0;
+          const adorned = adorn.querySelector("span:not(.is-warn)");
+          if (stillHasShares && !adorned) {
+            adorn.insertBefore(el("span", { class: "vy-budget-glyph", title: "Custom split", text: "✂" }), warnEl);
+          } else if (!stillHasShares && adorned) {
+            adorned.remove();
+          }
+          warnEl.hidden = !splitMismatch(it);
+        }, readOnly, ctx); built = true; }
+        const willShow = splitPanel.hidden;
+        splitPanel.hidden = !willShow;
+        splitToggle.textContent = willShow ? "Custom split ▴" : "Custom split ▾";
+      });
+    }
+
+    // Apply filter visibility immediately
+    if (unassignedOnly && it.cost_tag) row.style.display = "none";
+
+    return row;
+  }
+
+  function renderBreakdownStub() {
+    return el("section", { class: "card vy-stale-card" },
       el("div", { class: "vy-stale-mark" },
-        el("span", { class: "material-symbols-outlined", text: "payments" }),
+        el("span", { class: "material-symbols-outlined", text: "donut_small" }),
       ),
       el("div", { class: "vy-stale-body" },
-        el("strong", { class: "vy-stale-title", text: "Planned vs spent · split view" }),
-        el("span", { class: "vy-meta", text: "PROPOSED · NOT YET IMPLEMENTED" }),
+        el("strong", { class: "vy-stale-title", text: "Breakdown view" }),
+        el("span", { class: "vy-meta", text: "COMING SOON · ISSUE 06" }),
         el("p", { class: "small",
-          text: "When live: a stacked bar of proposed-cost per category, planned vs spent, " +
-                "and an even-split breakdown across travelers (with toggles for who paid what)." }),
+          text: "Donut at the head, bar list below, with proposed vs actual variance per bucket. " +
+                "Toggleable BY CATEGORY / BY DAY." }),
       ),
-    )
-  );
+    );
+  }
 }
 
-function statTile(label, value, foot) {
-  return el("div", { class: "stat" },
-    el("div", { class: "stat-label", text: label }),
-    el("div", { class: "stat-value", text: value }),
-    foot ? el("div", { class: "small muted", text: foot }) : null,
+// ───────────────────────────────────────────────────────────────────
+// Helpers
+// ───────────────────────────────────────────────────────────────────
+
+function applyFilter(host) {
+  const unassignedOnly = readFilter();
+  host.querySelectorAll(".vy-budget-row").forEach((row) => {
+    const tag = row.dataset.tag || "";
+    row.style.display = (unassignedOnly && tag) ? "none" : "";
+  });
+  // Hide day groups whose rows are all hidden.
+  host.querySelectorAll(".vy-budget-day").forEach((group) => {
+    const anyVisible = [...group.querySelectorAll(".vy-budget-row")].some(
+      (r) => r.style.display !== "none");
+    group.style.display = anyVisible ? "" : "none";
+  });
+}
+
+// Returns true when the item has custom shares that don't sum to the
+// item's proposed cost. Items in default-even mode (no shares) are
+// always "matched" by definition.
+function splitMismatch(it) {
+  const shares = it.shares || [];
+  if (shares.length === 0) return false;
+  if (it.proposed_cost_cents == null) return false;
+  const sum = shares.reduce((a, s) => a + (Number(s.proposed_amount_cents) || 0), 0);
+  return sum !== Number(it.proposed_cost_cents);
+}
+
+function currencySymbol(code) {
+  try {
+    const fmt = new Intl.NumberFormat(undefined, {
+      style: "currency", currency: (code || "USD").toUpperCase(),
+      currencyDisplay: "narrowSymbol",
+    });
+    // Format zero; the result is e.g. "¥0" or "$0.00" — strip the digits.
+    const parts = fmt.formatToParts(0);
+    const sym = parts.find((p) => p.type === "currency");
+    return sym?.value || code;
+  } catch { return code; }
+}
+
+function readView() {
+  try {
+    const v = localStorage.getItem(VIEW_KEY);
+    return VIEW_OPTIONS.includes(v) ? v : "edit";
+  } catch { return "edit"; }
+}
+function writeView(v) {
+  try { localStorage.setItem(VIEW_KEY, v); } catch {}
+}
+function readFilter() {
+  try { return localStorage.getItem(FILTER_KEY) === "1"; }
+  catch { return false; }
+}
+function writeFilter(on) {
+  try { localStorage.setItem(FILTER_KEY, on ? "1" : "0"); } catch {}
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Custom-split disclosure
+// ───────────────────────────────────────────────────────────────────
+//
+// One row per trip member. Empty / zero input = member is NOT part of
+// this split (no share row written). "Even split" auto-distributes the
+// proposed total across members with non-empty inputs (or all members
+// on first click). "Reset" clears every input + share row → falls back
+// to implicit-even at view time.
+//
+// "Paid by" picker writes the item-level paid_by column (not per-share).
+//
+// Saves are debounced through replaceShares (atomic delete+insert via
+// the SECURITY DEFINER RPC). The local it.shares mirror keeps the row's
+// ✂ / ⚠ adornments in sync without re-rendering.
+
+function buildSplitPanel(panel, it, trip, currency, onChanged, readOnly, ctx) {
+  panel.innerHTML = "";
+  const members = trip.members || [];
+  if (members.length < 2) {
+    panel.appendChild(el("p", { class: "muted small",
+      text: "Solo trip — splits aren't needed." }));
+    return;
+  }
+
+  // Snapshot of current shares for fast lookup. Local-mirror updates
+  // happen synchronously; replaceShares fires debounced.
+  const sharesByUser = new Map((it.shares || []).map((s) => [s.user_id, { ...s }]));
+
+  const head = el("header", { class: "vy-split-head" },
+    el("span", { class: "muted small", text: "Split among travelers" }),
+    el("div", { class: "vy-split-actions" },
+      el("button", { class: "btn ghost xs", type: "button",
+        disabled: readOnly,
+        onClick: () => evenSplit() }, "Even split"),
+      el("button", { class: "btn ghost xs", type: "button",
+        disabled: readOnly,
+        onClick: () => resetSplit() }, "Reset"),
+    ),
   );
+  panel.appendChild(head);
+
+  // Member rows
+  const rowsWrap = el("div", { class: "vy-split-rows" });
+  panel.appendChild(rowsWrap);
+
+  const inputs = new Map(); // user_id → input element
+  members.forEach((m) => {
+    const r = el("label", { class: "vy-split-row" });
+    r.appendChild(el("span", { class: "vy-split-name",
+      text: m.display_name || m.email || "Member" }));
+    const inp = el("input", {
+      type: "text",
+      inputmode: "decimal",
+      class: "vy-split-amount",
+      placeholder: implicitEvenText(it, members, currency),
+      disabled: readOnly,
+    });
+    const existing = sharesByUser.get(m.user_id);
+    if (existing && existing.proposed_amount_cents != null) {
+      inp.value = centsToAmountText(existing.proposed_amount_cents, currency);
+    }
+    inp.addEventListener("input", () => onAnyInput());
+    inputs.set(m.user_id, inp);
+    r.appendChild(inp);
+    rowsWrap.appendChild(r);
+  });
+
+  // Paid by picker
+  const paidBlock = el("div", { class: "vy-split-paidby" },
+    el("span", { class: "muted small", text: "Paid by" }),
+  );
+  const paidSel = el("select", { class: "vy-split-paid-select", disabled: readOnly });
+  paidSel.appendChild(el("option", { value: "", text: "— no one yet —" }));
+  members.forEach((m) => {
+    const o = el("option", {
+      value: m.user_id,
+      text: m.display_name || m.email || "Member",
+    });
+    if (it.paid_by === m.user_id) o.setAttribute("selected", "");
+    paidSel.appendChild(o);
+  });
+  paidSel.addEventListener("change", () => {
+    const v = paidSel.value || null;
+    it.paid_by = v;
+    ctx.onSaveStart?.();
+    itemCosts.updateItem(it.id, { paid_by: v })
+      .catch((e) => ctx.toast?.("Could not save paid-by: " + (e.message || e), true))
+      .finally(() => ctx.onSaveDone?.());
+  });
+  paidBlock.appendChild(paidSel);
+  panel.appendChild(paidBlock);
+
+  // Sum indicator
+  const sumEl = el("div", { class: "vy-split-sum" });
+  panel.appendChild(sumEl);
+  refreshSum();
+
+  // ── Behaviors ─────────────────────────────────────────────────
+
+  const saveShares = debouncedSave(withSaveIndicator(ctx, async () => {
+    const payload = currentSharesPayload();
+    it.shares = payload.map((s) => ({
+      user_id: s.user_id,
+      proposed_amount_cents: s.proposed_amount_cents,
+      actual_amount_cents: s.actual_amount_cents ?? null,
+      item_id: it.id,
+    }));
+    await itemCosts.replaceShares(it.id, payload);
+    onChanged?.();
+  }), 700);
+
+  function onAnyInput() {
+    refreshSum();
+    saveShares();
+  }
+
+  function currentSharesPayload() {
+    const out = [];
+    inputs.forEach((inp, uid) => {
+      const text = (inp.value || "").trim();
+      if (!text) return; // empty = not in this split
+      const cents = parseAmountToCents(text, currency);
+      if (cents == null) return;
+      // Preserve any existing actual_amount_cents from prior shares.
+      const prev = sharesByUser.get(uid);
+      out.push({
+        user_id: uid,
+        proposed_amount_cents: cents,
+        actual_amount_cents: prev?.actual_amount_cents ?? null,
+      });
+    });
+    return out;
+  }
+
+  function refreshSum() {
+    const payload = currentSharesPayload();
+    const sum = payload.reduce((a, s) => a + (Number(s.proposed_amount_cents) || 0), 0);
+    const target = Number(it.proposed_cost_cents) || 0;
+    const matches = payload.length === 0 || sum === target;
+    sumEl.innerHTML = "";
+    sumEl.append(
+      el("span", { class: "muted small",
+        text: payload.length === 0
+          ? `Default-even split: ${formatMoney(implicitEvenCents(it, members), currency)} each`
+          : `Sum: ${formatMoney(sum, currency)} / item proposed ${formatMoney(target, currency)}` }),
+      payload.length > 0
+        ? el("span", { class: matches ? "vy-split-ok" : "vy-split-warn",
+            text: matches ? "✓" : "⚠ mismatch" })
+        : null,
+    );
+  }
+
+  function evenSplit() {
+    if (readOnly) return;
+    const active = [...inputs.entries()].filter(([, inp]) => (inp.value || "").trim());
+    const targets = active.length > 0 ? active.map(([uid]) => uid) : members.map((m) => m.user_id);
+    const cents = Number(it.proposed_cost_cents) || 0;
+    if (!cents || targets.length === 0) return;
+    const each = Math.floor(cents / targets.length);
+    const remainder = cents - each * targets.length;
+    inputs.forEach((inp, uid) => {
+      const i = targets.indexOf(uid);
+      if (i < 0) { inp.value = ""; return; }
+      const extra = i < remainder ? 1 : 0;
+      inp.value = centsToAmountText(each + extra, currency);
+    });
+    onAnyInput();
+  }
+
+  function resetSplit() {
+    if (readOnly) return;
+    inputs.forEach((inp) => { inp.value = ""; });
+    onAnyInput();
+  }
+}
+
+function implicitEvenCents(it, members) {
+  const total = Number(it.proposed_cost_cents) || 0;
+  const n = Math.max(1, members.length);
+  return Math.floor(total / n);
+}
+
+function implicitEvenText(it, members, currency) {
+  const cents = implicitEvenCents(it, members);
+  return cents ? formatMoney(cents, currency) : "";
 }

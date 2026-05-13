@@ -144,20 +144,23 @@ export function memberName(membersById, uid) {
   return m.display_name || m.email || "Unknown";
 }
 
-/** Format integer cents in the given ISO currency. Returns "" for null /
- *  undefined / NaN cents so callers can chain without a null check. The
- *  narrow-symbol style ("¥" instead of "JP¥") matches inline-cost real
- *  estate budgets on tight rows. */
+/** Format integer minor-units (e.g. cents) in the given ISO currency.
+ *  The minor-unit count depends on the currency — USD has 2 (cents),
+ *  JPY has 0 (yen). Returns "" for null / undefined / NaN so callers
+ *  can chain without a null check. The narrow-symbol style ("¥" instead
+ *  of "JP¥") matches inline-cost real estate budgets on tight rows. */
 export function formatMoney(cents, currency = "USD") {
   if (cents == null || Number.isNaN(Number(cents))) return "";
   const code = (currency || "USD").toUpperCase();
+  const decimals = currencyMinorUnits(code);
+  const major = Number(cents) / Math.pow(10, decimals);
   try {
     return new Intl.NumberFormat(undefined, {
       style: "currency", currency: code, currencyDisplay: "narrowSymbol",
-    }).format(Number(cents) / 100);
+    }).format(major);
   } catch {
     // Unknown currency code — fall back to plain digits + the code.
-    return `${(Number(cents) / 100).toFixed(2)} ${code}`;
+    return `${major.toFixed(decimals)} ${code}`;
   }
 }
 
@@ -168,6 +171,38 @@ export const COMMON_CURRENCIES = [
   "USD", "EUR", "JPY", "GBP", "CNY", "KRW", "AUD", "CAD",
   "HKD", "SGD", "TWD", "THB", "MXN", "BRL", "CHF",
 ];
+
+/** Minor-unit count for an ISO currency. JPY/KRW use 0 decimals; USD/EUR
+ *  use 2. The Intl-resolved value is the canonical answer; fall back to
+ *  2 if the runtime doesn't know the code. */
+export function currencyMinorUnits(code) {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency", currency: (code || "USD").toUpperCase(),
+    }).resolvedOptions().maximumFractionDigits ?? 2;
+  } catch { return 2; }
+}
+
+/** Parse a free-form amount the user typed (e.g. "1,500" or "15.50")
+ *  into integer cents in the given currency. Returns null on empty /
+ *  unparseable input — caller decides whether to clear the column or
+ *  hold the previous value. */
+export function parseAmountToCents(text, currency) {
+  const cleaned = String(text ?? "").replace(/[^0-9.\-]/g, "");
+  if (!cleaned) return null;
+  const n = Number(cleaned);
+  if (Number.isNaN(n)) return null;
+  return Math.round(n * Math.pow(10, currencyMinorUnits(currency)));
+}
+
+/** Inverse of parseAmountToCents — display-suitable text for a number
+ *  input. JPY shows "1500", USD shows "15.00". Empty string for NULL. */
+export function centsToAmountText(cents, currency) {
+  if (cents == null) return "";
+  const decimals = currencyMinorUnits(currency);
+  const value = Number(cents) / Math.pow(10, decimals);
+  return decimals === 0 ? String(value) : value.toFixed(decimals);
+}
 
 export function groupBy(arr, key) {
   const map = new Map();

@@ -2528,6 +2528,245 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
   .vy-category-row-meta { align-items: flex-start; flex-direction: row; gap: 10px; flex-wrap: wrap; }
 }
 
+/* ===== Budget · Edit mode =====
+ *
+ * Per-day grouped list of items, each row holding a compact amount
+ * input + tag dropdown + custom-split disclosure. EDIT/BREAKDOWN
+ * toggle re-uses .vy-view-toggle from itinerary. Split disclosure
+ * expands inline beneath its row. */
+
+.vy-budget-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.vy-budget-head-l { min-width: 0; flex: 1; }
+.vy-budget-head-r { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+
+.vy-budget-filter {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--vbl-font-display);
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--vbl-fg-3);
+  cursor: pointer;
+  user-select: none;
+}
+.vy-budget-filter input[type="checkbox"] {
+  accent-color: rgba(47,125,114,1);
+  width: 14px; height: 14px;
+}
+
+.vy-budget-edit {
+  display: flex; flex-direction: column; gap: 14px;
+  margin-top: 14px;
+}
+.vy-budget-day {
+  padding: 12px 14px 10px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.vy-budget-day-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 0 2px;
+}
+.vy-budget-day-list { display: flex; flex-direction: column; gap: 6px; }
+
+.vy-budget-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.45);
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+  transition: background 100ms;
+}
+.vy-budget-row:hover { background: rgba(255,255,255,0.7); }
+.vy-budget-row-main {
+  display: flex; align-items: center; gap: 10px;
+  min-width: 0;
+}
+.vy-budget-row-title {
+  font-family: var(--vbl-font-display);
+  font-size: 14px; font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--vbl-ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0;
+}
+.vy-budget-row-inputs {
+  display: flex; align-items: center; gap: 8px;
+  flex-shrink: 0;
+}
+.vy-budget-amount {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 0 8px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--vbl-hairline);
+  background: rgba(255,255,255,0.85);
+  font-family: var(--vbl-font-mono);
+}
+.vy-budget-amount:focus-within {
+  border-color: rgba(47,125,114,0.6);
+  box-shadow: 0 0 0 2px rgba(78,159,146,0.18);
+}
+.vy-budget-amount-sym {
+  font-size: 12px;
+  color: var(--vbl-fg-3);
+  font-weight: 600;
+}
+.vy-budget-amount-sym.is-override {
+  color: var(--vbl-viridian-deep);
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--vbl-viridian-soft);
+}
+.vy-budget-amount-input {
+  border: 0; outline: 0;
+  background: transparent;
+  width: 88px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--vbl-ink);
+  text-align: right;
+}
+.vy-budget-tag {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid var(--vbl-hairline);
+  background: rgba(255,255,255,0.85);
+  padding: 0 22px 0 11px;
+  font-family: var(--vbl-font-display);
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--vbl-fg-2);
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3e%3cpath d='M2.5 4.5L6 8l3.5-3.5' stroke='%2370807e' stroke-width='1.5' fill='none' stroke-linecap='round'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 7px center;
+  background-size: 10px;
+}
+.vy-budget-row[data-tag="actual"]   .vy-budget-tag { color: var(--vbl-viridian-deep); }
+.vy-budget-row[data-tag="approx"]   .vy-budget-tag { color: #5b6f6c; }
+.vy-budget-row[data-tag="guessing"] .vy-budget-tag { color: #8b6a2c; }
+.vy-budget-row[data-tag="n_a"]      .vy-budget-tag { color: var(--vbl-fg-3); }
+.vy-budget-row[data-tag=""]         .vy-budget-tag { color: rgba(180,80,80,0.85); border-color: rgba(180,80,80,0.25); }
+
+.vy-budget-split-toggle {
+  appearance: none; border: 1px solid var(--vbl-hairline);
+  background: rgba(255,255,255,0.6);
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-family: var(--vbl-font-display);
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--vbl-fg-3);
+  cursor: pointer;
+  transition: background 100ms;
+}
+.vy-budget-split-toggle:hover { background: rgba(255,255,255,0.9); color: var(--vbl-ink); }
+
+.vy-budget-row-adorn { display: flex; align-items: center; gap: 4px; }
+.vy-budget-glyph {
+  font-size: 12px;
+  width: 20px; height: 20px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.6);
+  color: var(--vbl-fg-3);
+}
+.vy-budget-glyph.is-warn {
+  background: rgba(216, 127, 42, 0.18);
+  color: #8a4a14;
+}
+
+/* Custom-split disclosure (expanded inline beneath its row) */
+.vy-budget-row:has(.vy-budget-split-panel:not([hidden])) {
+  grid-template-columns: 1fr;
+}
+.vy-budget-split-panel {
+  grid-column: 1 / -1;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.5);
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.vy-split-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px;
+}
+.vy-split-actions { display: flex; gap: 6px; }
+.btn.xs {
+  padding: 4px 10px;
+  font-size: 11px;
+  border-radius: 999px;
+}
+.vy-split-rows { display: flex; flex-direction: column; gap: 6px; }
+.vy-split-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+.vy-split-name {
+  font-family: var(--vbl-font-body);
+  font-size: 13px;
+  color: var(--vbl-ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.vy-split-amount {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid var(--vbl-hairline);
+  background: rgba(255,255,255,0.85);
+  font: inherit;
+  font-family: var(--vbl-font-mono);
+  font-size: 13px;
+  width: 110px;
+  text-align: right;
+}
+.vy-split-amount:focus {
+  outline: 0;
+  border-color: rgba(47,125,114,0.6);
+  box-shadow: 0 0 0 2px rgba(78,159,146,0.18);
+}
+.vy-split-paidby {
+  display: flex; align-items: center; gap: 8px;
+}
+.vy-split-paid-select {
+  flex: 1;
+  height: 28px;
+  padding: 0 28px 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--vbl-hairline);
+  background: rgba(255,255,255,0.85);
+  font-family: var(--vbl-font-body);
+  font-size: 13px;
+  color: var(--vbl-ink);
+}
+.vy-split-sum {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--vbl-hairline);
+}
+.vy-split-ok   { color: var(--vbl-viridian-deep); font-weight: 700; }
+.vy-split-warn { color: #8a4a14; font-weight: 700; }
+
+@media (max-width: 720px) {
+  .vy-budget-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .vy-budget-row-inputs { flex-wrap: wrap; }
+  .vy-budget-amount-input { width: 64px; }
+}
+
 /* Prepare-category chip palettes — one hue per category so a glance
  * across the filter row reflects relative importance. Ordered from
  * critical (document) through routine (other). */
