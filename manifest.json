@@ -1,0 +1,26 @@
+{
+  "name": "Hermes Daybook",
+  "short_name": "Hermes",
+  "description": "Plan and travel together — trip designer + travel companion by Viridian Blue.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#2f7d72",
+  "background_color": "#f7f9f7",
+  "icons": [
+    {
+      "src": "icons/hermes-mark.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/hermes-mark-maskable.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["travel", "productivity", "lifestyle"]
+}

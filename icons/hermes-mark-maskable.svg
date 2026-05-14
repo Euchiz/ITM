@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Maskable variant: same mark but with the safe-zone padding
+       (~80% of the viewport) honored so OS-level circular / squircle
+       masks don't crop the design. -->
+  <defs>
+    <radialGradient id="bg" cx="0.5" cy="0.45" r="0.65">
+      <stop offset="0%" stop-color="#4e9f92"/>
+      <stop offset="60%" stop-color="#2f7d72"/>
+      <stop offset="100%" stop-color="#1d4a44"/>
+    </radialGradient>
+    <linearGradient id="dot" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#a4d7cb"/>
+      <stop offset="100%" stop-color="#4e9f92"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <!-- All visual elements stay within the inner ~80% safe area -->
+  <circle cx="256" cy="256" r="112" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="2"/>
+  <circle cx="256" cy="256" r="64" fill="url(#dot)" />
+  <circle cx="256" cy="256" r="26" fill="#1d4a44" opacity="0.45" />
+  <rect x="252" y="138" width="8" height="28" rx="4" fill="rgba(255,255,255,0.45)" />
+</svg>
