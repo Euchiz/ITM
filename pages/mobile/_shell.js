@@ -31,12 +31,25 @@ export const OVERVIEW_TABS = [
 
 const MODE_FIRST_TAB = { travel: "today", overview: "itinerary" };
 
+// Pages that drill in from elsewhere (Detail card, More sheet) rather
+// than living in a tab. They render with a "< Back" button + no tab
+// bar + no mode pill — the user came from a specific origin and the
+// back arrow takes them there.
+const DRILL_IN_PAGES = new Set(["detail", "overview", "members", "io"]);
+
+const DRILL_IN_LABELS = {
+  detail:   "Back",
+  overview: "Back",
+  members:  "Back",
+  io:       "Back",
+};
+
 export function renderMobileShell(host, ctx) {
   const trip = ctx.trip || {};
   const page = ctx.page || "today";
   const mode = ctx.mobileMode || "travel";
   const tabs = mode === "travel" ? TRAVEL_TABS : OVERVIEW_TABS;
-  const isDetail = page === "detail";
+  const isDrillIn = DRILL_IN_PAGES.has(page);
 
   host.innerHTML = "";
 
@@ -45,9 +58,9 @@ export function renderMobileShell(host, ctx) {
 
   // Row 1: back · title · ⋯
   const row1 = el("div", { class: "vy-mobile-headline" });
-  row1.appendChild(buildBackButton(ctx, isDetail));
+  row1.appendChild(buildBackButton(ctx, page, isDrillIn));
   row1.appendChild(el("h1", { class: "vy-mobile-trip-title",
-    text: trip.title || "Untitled trip" }));
+    text: isDrillIn ? drillInTitle(page, trip) : (trip.title || "Untitled trip") }));
   row1.appendChild(el("button", {
     class: "vy-mobile-more-btn",
     "aria-label": "More",
@@ -56,9 +69,10 @@ export function renderMobileShell(host, ctx) {
   }, el("span", { class: "material-symbols-outlined", text: "more_horiz" })));
   header.appendChild(row1);
 
-  // Row 2: mode pill · meta
-  // Hidden on detail screen (the back arrow already provides context).
-  if (!isDetail) {
+  // Row 2: mode pill · meta. Hidden on drill-in screens — the back
+  // arrow already provides context and the mode pill would just
+  // invite the user to leave the drill-in.
+  if (!isDrillIn) {
     const row2 = el("div", { class: "vy-mobile-headmeta" });
     row2.appendChild(buildModePill(ctx, mode));
     row2.appendChild(buildHeadMetaText(ctx, trip));
@@ -72,14 +86,24 @@ export function renderMobileShell(host, ctx) {
   const slot = el("section", { class: "vy-mobile-content" });
   host.appendChild(slot);
 
-  // Floating glass tab bar — only when not on detail.
-  if (!isDetail) host.appendChild(buildTabBar(ctx, tabs, page));
+  // Floating glass tab bar — only on regular tab pages, not drill-ins.
+  if (!isDrillIn) host.appendChild(buildTabBar(ctx, tabs, page));
 
   return slot;
 }
 
-function buildBackButton(ctx, isDetail) {
-  if (isDetail) {
+function drillInTitle(page, trip) {
+  switch (page) {
+    case "members":  return "Members";
+    case "overview": return "Trip overview";
+    case "io":       return "Import / Export";
+    case "detail":   return trip?.title || "Event";
+    default:         return trip?.title || "";
+  }
+}
+
+function buildBackButton(ctx, page, isDrillIn) {
+  if (isDrillIn) {
     return el("button", {
       class: "vy-mobile-back-btn",
       onClick: () => {
@@ -89,7 +113,7 @@ function buildBackButton(ctx, isDetail) {
       },
     },
       el("span", { class: "material-symbols-outlined", text: "chevron_left" }),
-      el("span", { text: "Back" }),
+      el("span", { text: DRILL_IN_LABELS[page] || "Back" }),
     );
   }
   return el("button", {

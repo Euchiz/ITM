@@ -2899,6 +2899,40 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
   .vy-budget-head-pill { display: block; margin: 4px 0 10px; }
 }
 
+/* Members table → stacked cards on mobile. The desktop layout is a
+ * 3-column table (identity / role / actions) that doesn't fit phone
+ * widths. Display: block on the table parts converts it to a flow,
+ * and each .member-row becomes a self-contained card. */
+body[data-platform="mobile"] .members-card { padding: 12px; }
+body[data-platform="mobile"] .members-card h3 { padding: 4px 4px 12px; font-size: 0.95rem; }
+body[data-platform="mobile"] .members-table,
+body[data-platform="mobile"] .members-table tbody,
+body[data-platform="mobile"] .members-table tr,
+body[data-platform="mobile"] .members-table td {
+  display: block;
+  width: 100% !important;
+  white-space: normal;
+}
+body[data-platform="mobile"] .member-row {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.55);
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+  margin-bottom: 8px;
+  border-top: 0 !important;
+}
+body[data-platform="mobile"] .member-row:last-child { margin-bottom: 0; }
+body[data-platform="mobile"] .member-identity { padding: 0 !important; }
+body[data-platform="mobile"] .member-role-cell {
+  padding: 10px 0 0 !important;
+  text-align: left;
+}
+body[data-platform="mobile"] .member-role-select { width: 100%; }
+body[data-platform="mobile"] .member-actions {
+  padding: 10px 0 0 !important;
+  text-align: right !important;
+}
+
 /* Mobile platform always collapses to single column, regardless of
  * viewport width — the rail / pill split is a desktop-only pattern. */
 body[data-platform="mobile"] .vy-budget-layout { grid-template-columns: 1fr; gap: 12px; }
