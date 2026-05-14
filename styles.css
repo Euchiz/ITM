@@ -5017,6 +5017,17 @@ body[data-platform="mobile"] #tripPage {
 .vy-mobile-pack-row-del:hover { background: rgba(196,56,72,0.10); color: #8a2a36; }
 .vy-mobile-pack-row-del .material-symbols-outlined { font-size: 18px; }
 
+/* ─── Mobile · unavailable empty-state ──────────────────────────── */
+
+.vy-mobile-unavailable.card {
+  margin-top: 20px;
+}
+.vy-mobile-unavailable-actions {
+  display: flex; gap: 10px; flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 12px;
+}
+
 /* ─── Mobile stub (renders until each mobile page slice replaces it) */
 
 .vy-mobile-stub {

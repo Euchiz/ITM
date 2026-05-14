@@ -38,6 +38,7 @@ import { renderMobileToday } from "./pages/mobile/today.js";
 import { renderMobileDetail } from "./pages/mobile/detail.js";
 import { renderMobileItinerary } from "./pages/mobile/itinerary.js";
 import { renderMobilePack } from "./pages/mobile/pack.js";
+import { renderMobileUnavailable } from "./pages/mobile/_unavailable.js";
 import { openPrintView } from "./pages/print-view.js";
 import { el, formatRelativeTime } from "./pages/_utils.js";
 
@@ -351,8 +352,21 @@ export async function openTrip(id, page) {
     } catch (e) {
       console.warn("Could not fetch pack items:", e);
     }
-    state.page = PAGES[page] ? page : defaultLandingPage();
+    // Resolve the requested page against the platform-correct page
+    // table; fall back to the platform's default landing page when the
+    // requested page isn't registered (or isn't a tab the current mode
+    // can reach — the unavailable renderer handles the rest).
+    const table = state.platform === "mobile" ? MOBILE_PAGES : PAGES;
+    state.page = table[page] ? page : defaultLandingPage();
+    // Auto-flip mobile mode if the resolved page lives in the other mode.
+    if (state.platform === "mobile") {
+      const targetMode = MOBILE_PAGE_MODE[state.page];
+      if (targetMode && targetMode !== state.mobileMode) {
+        writeMobileMode(targetMode);
+      }
+    }
     state.selectedDayIdx = pickDefaultDayIdx(trip);
+    state.selectedItemId = new URL(location.href).searchParams.get("item") || null;
     // Seed the "LAST CHANGE" timestamp from the server-side updated_at
     // if present; otherwise fall back to "now" so the topbar never shows
     // a missing value. Bumped on every save (noteSaveDone).
@@ -411,9 +425,24 @@ const MOBILE_PAGES = {
   budget:    renderBudget,
   pack:      renderMobilePack,
   detail:    renderMobileDetail,
-  overview:  renderMobileStub,
-  members:   renderMobileStub,
-  io:        renderMobileStub,
+  overview:  renderOverview,
+  members:   renderMembers,
+  io:        renderMobileUnavailable,
+};
+
+// Which mobile mode each tab belongs to. Used by the URL router to
+// auto-flip mode when a deep-link points at a tab from the other mode.
+// Pages not in this map (detail, overview, members, io) don't trigger
+// a mode flip.
+const MOBILE_PAGE_MODE = {
+  today:     "travel",
+  map:       "travel",
+  costs:     "travel",
+  notes:     "travel",
+  itinerary: "overview",
+  prepare:   "overview",
+  budget:    "overview",
+  pack:      "overview",
 };
 
 function renderTripPage() {
@@ -535,6 +564,15 @@ export function navigate(opts = {}) {
     // Track the previous non-detail page so the mobile detail screen's
     // back arrow knows where to return.
     if (state.page !== "detail") state.lastNonDetailPage = state.page;
+    // Mobile: auto-flip mode when the URL `page` lives in the other mode.
+    // URL is the source of truth — a desktop user sharing a link should
+    // resolve to the right tab regardless of persisted mode.
+    if (state.platform === "mobile") {
+      const targetMode = MOBILE_PAGE_MODE[resolved];
+      if (targetMode && targetMode !== state.mobileMode) {
+        writeMobileMode(targetMode);
+      }
+    }
     state.page = resolved;
     state.selectedItemId = url.searchParams.get("item") || null;
     renderTripPage();
