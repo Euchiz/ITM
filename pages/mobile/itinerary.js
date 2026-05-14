@@ -10,7 +10,7 @@
 // without ending up with out-of-sequence dates.
 
 import { days as daysApi, items as itemsApi } from "../../supabase.js";
-import { el, formatTime, formatTimeRange } from "../_utils.js";
+import { el, formatTime } from "../_utils.js";
 import { TYPE_VISUALS } from "../itinerary.js";
 
 export function renderMobileItinerary(host, ctx) {
@@ -32,13 +32,13 @@ export function renderMobileItinerary(host, ctx) {
     return;
   }
 
-  days.forEach((day, di) => host.appendChild(renderDayCard(ctx, day, di, days.length)));
+  days.forEach((day, di) => host.appendChild(renderDayCard(ctx, day, di)));
   host.appendChild(addDayBtn(ctx));
 }
 
 // ─── Day card ─────────────────────────────────────────────────────
 
-function renderDayCard(ctx, day, dayIdx, totalDays) {
+function renderDayCard(ctx, day, dayIdx) {
   const dateLabel = day.date
     ? new Date(day.date + "T00:00:00").toLocaleDateString(undefined,
         { weekday: "short", month: "short", day: "numeric" })
@@ -56,12 +56,6 @@ function renderDayCard(ctx, day, dayIdx, totalDays) {
         text: `${items.length} item${items.length === 1 ? "" : "s"}` }),
     ),
     el("div", { class: "vy-mobile-iti-day-actions" },
-      iconBtn("arrow_upward", "Move up",
-        dayIdx === 0 ? "is-disabled" : "",
-        () => moveDay(ctx, dayIdx, -1)),
-      iconBtn("arrow_downward", "Move down",
-        dayIdx === totalDays - 1 ? "is-disabled" : "",
-        () => moveDay(ctx, dayIdx, +1)),
       iconBtn("delete_outline", "Delete day", "is-danger",
         () => deleteDay(ctx, day)),
     ),
@@ -69,7 +63,7 @@ function renderDayCard(ctx, day, dayIdx, totalDays) {
 
   // Items
   const list = el("div", { class: "vy-mobile-iti-list" });
-  items.forEach((it, ii) => list.appendChild(renderItemRow(ctx, day, it, ii, items.length)));
+  items.forEach((it) => list.appendChild(renderItemRow(ctx, day, it)));
   card.appendChild(list);
 
   // + Add event
@@ -86,9 +80,11 @@ function renderDayCard(ctx, day, dayIdx, totalDays) {
 
 // ─── Item row ─────────────────────────────────────────────────────
 
-function renderItemRow(ctx, day, item, idx, total) {
+function renderItemRow(ctx, day, item) {
   const v = TYPE_VISUALS[item.type] || TYPE_VISUALS.activity;
-  const time = formatTimeRange(item.start_time, item.end_time) || formatTime(item.start_time);
+  // Show only the start time on mobile — full ranges ("10:30 → 12:00")
+  // crowd out the title on phone widths. Time-less items render "—".
+  const time = formatTime(item.start_time);
 
   const row = el("div", { class: "vy-mobile-iti-row" });
 
@@ -106,14 +102,9 @@ function renderItemRow(ctx, day, item, idx, total) {
       text: "star" }) : null,
   ));
 
-  // Reorder + delete cluster
+  // Delete only — drag-to-reorder ships later; the ↑/↓ buttons made
+  // the row too dense for phone widths.
   row.appendChild(el("div", { class: "vy-mobile-iti-row-actions" },
-    iconBtn("arrow_upward", "Move up",
-      idx === 0 ? "is-disabled" : "",
-      () => moveItem(ctx, day, idx, -1)),
-    iconBtn("arrow_downward", "Move down",
-      idx === total - 1 ? "is-disabled" : "",
-      () => moveItem(ctx, day, idx, +1)),
     iconBtn("delete_outline", "Delete", "is-danger",
       () => deleteItem(ctx, item)),
   ));
@@ -122,72 +113,11 @@ function renderItemRow(ctx, day, item, idx, total) {
 }
 
 // ─── Mutators ─────────────────────────────────────────────────────
-
-async function moveDay(ctx, dayIdx, delta) {
-  const days = ctx.trip?.days || [];
-  const targetIdx = dayIdx + delta;
-  if (targetIdx < 0 || targetIdx >= days.length) return;
-
-  // Swap in local state for instant feedback
-  const next = [...days];
-  [next[dayIdx], next[targetIdx]] = [next[targetIdx], next[dayIdx]];
-  ctx.trip.days = next;
-
-  // Re-date if both swapping days have explicit dates
-  let dateReassigned = false;
-  const dated = next.filter((d) => d.date);
-  if (dated.length === next.length) {
-    // All days dated — sort dates ascending and reassign so order is consecutive
-    const sortedDates = next.map((d) => d.date).sort();
-    next.forEach((d, i) => { d.date = sortedDates[i]; });
-    dateReassigned = true;
-  }
-
-  ctx.rerender?.();
-  ctx.onSaveStart?.();
-  try {
-    await daysApi.reorder(next.map((d) => d.id));
-    if (dateReassigned) {
-      // Best-effort: persist date changes one by one
-      for (const d of next) {
-        await daysApi.update(d.id, { date: d.date || null });
-      }
-      ctx.toast?.("Day order updated · dates re-aligned");
-    } else {
-      ctx.toast?.("Day order updated");
-    }
-  } catch (e) {
-    ctx.toast?.("Couldn't reorder: " + (e.message || e), true);
-    await ctx.refresh?.();
-  } finally {
-    ctx.onSaveDone?.();
-  }
-}
-
-async function moveItem(ctx, day, idx, delta) {
-  const items = (day.items || []).filter((it) => !it.is_unplanned);
-  const targetIdx = idx + delta;
-  if (targetIdx < 0 || targetIdx >= items.length) return;
-
-  const next = [...items];
-  [next[idx], next[targetIdx]] = [next[targetIdx], next[idx]];
-
-  // Map back to day.items preserving any unplanned items
-  const unplanned = (day.items || []).filter((it) => it.is_unplanned);
-  day.items = [...next, ...unplanned];
-  next.forEach((it, i) => { it.sort_order = i; });
-
-  ctx.rerender?.();
-  ctx.onSaveStart?.();
-  try {
-    await itemsApi.reorder(next.map((it) => it.id));
-  } catch (e) {
-    ctx.toast?.("Couldn't reorder: " + (e.message || e), true);
-    await ctx.refresh?.();
-  } finally {
-    ctx.onSaveDone?.();
-  }
-}
+//
+// Reordering events and days lands in a polish slice — phone-width
+// rows can't host ↑/↓ buttons cleanly, and proper touch drag-and-drop
+// (long-press, scroll lock, drop indicator) is its own piece of work.
+// Mobile users reorder on desktop for now.
 
 async function deleteDay(ctx, day) {
   if (!confirm(`Delete this day? All its events will be deleted too.`)) return;

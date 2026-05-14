@@ -2899,6 +2899,19 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
   .vy-budget-head-pill { display: block; margin: 4px 0 10px; }
 }
 
+/* Mobile platform always collapses to single column, regardless of
+ * viewport width — the rail / pill split is a desktop-only pattern. */
+body[data-platform="mobile"] .vy-budget-layout { grid-template-columns: 1fr; gap: 12px; }
+body[data-platform="mobile"] .vy-budget-rail { display: none; }
+body[data-platform="mobile"] .vy-budget-head-pill { display: block; margin: 4px 0 10px; }
+body[data-platform="mobile"] .vy-budget-head { padding: 0; }
+body[data-platform="mobile"] .vy-budget-head h2 { font-size: 1.0rem; }
+body[data-platform="mobile"] .vy-budget-head-r { gap: 6px; flex-wrap: wrap; }
+body[data-platform="mobile"] .vy-budget-head-l p {
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
 /* ===== Breakdown view (Budget + Costs) =====
  *
  * Donut at head, per-bucket bar list, optional multi-currency sub-block.
