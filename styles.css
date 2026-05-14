@@ -4484,6 +4484,248 @@ body[data-platform="mobile"] #tripPage {
   color: var(--vbl-fg-3);
 }
 
+/* ─── Mobile · Detail screen ─────────────────────────────────────
+ *
+ * Drill-in for a single item. Hero gradient with countdown pill,
+ * detail rows (WHEN/WHERE/NOTES/PACK), action row, status + highlight
+ * toggles, read-only-on-mobile footer hint. */
+
+.vy-mobile-detail-hero {
+  position: relative;
+  border-radius: 18px;
+  padding: 14px;
+  min-height: 180px;
+  display: flex; flex-direction: column; justify-content: space-between;
+  color: #fff;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 30% 40%, rgba(255,255,255,0.18), transparent 65%),
+    linear-gradient(160deg, var(--vbl-viridian, #2f7d72), #1d4a44);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18),
+              0 12px 28px -12px rgba(40,103,95,0.42);
+}
+.vy-mobile-detail-hero.vy-mobile-hero--transit {
+  background:
+    radial-gradient(circle at 30% 40%, rgba(255,255,255,0.18), transparent 65%),
+    linear-gradient(160deg, #335983, #1f3a5c);
+}
+.vy-mobile-detail-hero.vy-mobile-hero--meal {
+  background:
+    radial-gradient(circle at 30% 40%, rgba(255,255,255,0.18), transparent 65%),
+    linear-gradient(160deg, #a05a18, #6e3b0d);
+}
+.vy-mobile-detail-hero.vy-mobile-hero--stay,
+.vy-mobile-detail-hero.vy-mobile-hero--thing {
+  background:
+    radial-gradient(circle at 30% 40%, rgba(255,255,255,0.18), transparent 65%),
+    linear-gradient(160deg, #2f7d72, #1d4a44);
+}
+.vy-mobile-detail-hero.vy-mobile-hero--note {
+  background:
+    radial-gradient(circle at 30% 40%, rgba(255,255,255,0.18), transparent 65%),
+    linear-gradient(160deg, #6a7572, #4a534f);
+}
+.vy-mobile-detail-hero-top {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 8px;
+}
+.vy-mobile-detail-countdown {
+  font-family: var(--vbl-font-display);
+  font-size: 0.62rem; font-weight: 700;
+  letter-spacing: 0.10em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.88);
+  color: var(--vbl-ink);
+}
+.vy-mobile-detail-hero-bottom {
+  display: flex; flex-direction: column; gap: 4px;
+}
+.vy-mobile-detail-hero-caption {
+  font-family: var(--vbl-font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  opacity: 0.85;
+}
+.vy-mobile-detail-hero-title {
+  margin: 0;
+  font-family: var(--vbl-font-display);
+  font-size: 1.4rem; font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1.15;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+/* Detail rows. */
+.vy-mobile-detail-row {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.55);
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+}
+.vy-mobile-detail-row.is-multiline .vy-mobile-detail-row-value {
+  white-space: pre-wrap;
+}
+.vy-mobile-detail-row-icon {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  display: grid; place-items: center;
+  background: rgba(255,255,255,0.7);
+  color: var(--vbl-viridian);
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+}
+.vy-mobile-detail-row-icon .material-symbols-outlined { font-size: 18px; }
+.vy-mobile-detail-row-body { min-width: 0; }
+.vy-mobile-detail-row-label {
+  font-family: var(--vbl-font-display);
+  font-size: 0.6rem; font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--vbl-fg-3);
+}
+.vy-mobile-detail-row-value {
+  font-family: var(--vbl-font-display);
+  font-size: 0.95rem; font-weight: 600;
+  margin-top: 2px;
+  color: var(--vbl-ink);
+  word-wrap: break-word;
+}
+.vy-mobile-detail-row-sub {
+  font-size: 0.75rem;
+  color: var(--vbl-fg-3);
+  margin-top: 2px;
+}
+
+/* Pack pills inside the PACK detail row. */
+.vy-mobile-detail-pack-list {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-top: 8px;
+}
+.vy-mobile-detail-pack-pill {
+  appearance: none; border: 0;
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.7);
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+  font-family: var(--vbl-font-display);
+  font-size: 0.78rem; font-weight: 600;
+  color: var(--vbl-ink);
+  cursor: pointer;
+  transition: background 140ms, color 140ms, box-shadow 140ms;
+}
+.vy-mobile-detail-pack-pill .material-symbols-outlined {
+  font-size: 16px; color: var(--vbl-fg-3);
+}
+.vy-mobile-detail-pack-pill.is-packed {
+  background: rgba(78,159,146,0.18);
+  color: var(--vbl-viridian-deep);
+  box-shadow: inset 0 0 0 1px rgba(47,125,114,0.30);
+}
+.vy-mobile-detail-pack-pill.is-packed .material-symbols-outlined {
+  color: var(--vbl-viridian-deep);
+}
+
+/* Action row on detail re-uses the same .vy-mobile-action-row styles
+ * as Today — just a wrapper class for spacing override if needed. */
+.vy-mobile-detail-actions { margin-top: 4px; }
+
+/* Status + highlight bar. */
+.vy-mobile-detail-statusbar {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 4px;
+}
+.vy-mobile-detail-status-chip {
+  appearance: none; border: 0;
+  flex: 1;
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.7);
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+  cursor: pointer;
+  text-align: left;
+}
+.vy-mobile-detail-status-label {
+  font-family: var(--vbl-font-display);
+  font-size: 0.6rem; font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--vbl-fg-3);
+}
+.vy-mobile-detail-status-value {
+  flex: 1;
+  font-family: var(--vbl-font-display);
+  font-size: 0.92rem; font-weight: 600;
+  color: var(--vbl-ink);
+}
+.vy-mobile-detail-status-chip .material-symbols-outlined {
+  font-size: 18px;
+  color: var(--vbl-fg-3);
+}
+.vy-mobile-detail-status-chip.is-done .vy-mobile-detail-status-value      { color: var(--vbl-viridian-deep); }
+.vy-mobile-detail-status-chip.is-cancelled .vy-mobile-detail-status-value { color: #8a2a36; }
+.vy-mobile-detail-status-chip.is-booked .vy-mobile-detail-status-value    { color: var(--vbl-amber); }
+.vy-mobile-detail-star {
+  appearance: none; border: 0;
+  width: 44px; height: 44px;
+  display: grid; place-items: center;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.7);
+  box-shadow: inset 0 0 0 1px var(--vbl-hairline);
+  color: var(--vbl-fg-3);
+  cursor: pointer;
+}
+.vy-mobile-detail-star .material-symbols-outlined { font-size: 22px; }
+.vy-mobile-detail-star.is-on {
+  background: rgba(216,127,42,0.18);
+  color: var(--vbl-amber);
+  box-shadow: inset 0 0 0 1px rgba(216,127,42,0.34);
+}
+.vy-mobile-detail-status-picker {
+  position: fixed;
+  z-index: 80;
+  display: flex; flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow:
+    inset 0 0 0 1px var(--vbl-hairline),
+    0 12px 30px -10px rgba(40,103,95,0.30);
+  max-width: 220px;
+}
+.vy-mobile-detail-status-pick {
+  appearance: none; border: 0;
+  background: transparent;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: var(--vbl-font-display);
+  font-size: 0.86rem; font-weight: 500;
+  color: var(--vbl-ink);
+  text-align: left;
+}
+.vy-mobile-detail-status-pick:hover { background: rgba(78,159,146,0.10); }
+.vy-mobile-detail-status-pick .material-symbols-outlined {
+  font-size: 16px; color: var(--vbl-fg-4);
+}
+.vy-mobile-detail-status-pick.is-current { background: rgba(78,159,146,0.10); }
+.vy-mobile-detail-status-pick.is-current .material-symbols-outlined {
+  color: var(--vbl-viridian);
+}
+
+.vy-mobile-detail-footer {
+  text-align: center;
+  margin-top: 6px;
+  padding: 6px 0;
+}
+
 /* ─── Mobile stub (renders until each mobile page slice replaces it) */
 
 .vy-mobile-stub {
