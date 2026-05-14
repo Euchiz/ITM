@@ -25,6 +25,17 @@ body.print-mode > *:not(.print-overlay) { display: none !important; }
    * its full computed height. */
 }
 
+/* Stage wraps the print doc and absorbs any scale transform we apply
+ * on narrow viewports. The doc keeps its natural 8.5in width (so
+ * window.print() sees the right size); the stage tracks the scaled
+ * height so the overlay scrolls cleanly without a blank gap. */
+.print-stage {
+  display: block;
+  margin: 0 auto;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
 .print-toolbar {
   position: sticky;
   top: 0;

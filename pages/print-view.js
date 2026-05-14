@@ -59,9 +59,45 @@ export function openPrintView(trip) {
   );
 
   const doc = buildDoc(trip);
-  overlay.append(toolbar, doc);
+  // Wrapper around the doc so we can scale it on narrow viewports
+  // without changing the doc's own dimensions (which would break the
+  // 8.5in print width).
+  const stage = el("div", { class: "print-stage" }, doc);
+  overlay.append(toolbar, stage);
   document.body.appendChild(overlay);
   document.body.classList.add("print-mode");
+
+  // The doc is fixed at 8.5in (~816px); on phone widths it overflows
+  // horizontally and the preview becomes useless. Scale it to fit the
+  // viewport while keeping the doc's natural width for print. The
+  // stage wraps the doc and tracks its scaled height so the overlay
+  // doesn't show giant whitespace under the scaled doc.
+  const SIDE_PAD = 16;  // matches CSS .print-stage padding
+  function fitDocToViewport() {
+    const natural = doc.getBoundingClientRect().width
+                 || doc.offsetWidth
+                 || 816;
+    const available = window.innerWidth - SIDE_PAD * 2;
+    const scale = Math.min(1, available / natural);
+    if (scale < 1) {
+      doc.style.transform = `scale(${scale})`;
+      doc.style.transformOrigin = "top left";
+      // After scaling, the doc's effective width shrinks. Set the
+      // stage's min-height to scaled doc height so the user can
+      // scroll exactly the preview, no blank gap.
+      const scaledHeight = doc.offsetHeight * scale;
+      stage.style.height = `${scaledHeight}px`;
+      stage.style.width = `${natural * scale}px`;
+    } else {
+      doc.style.transform = "";
+      stage.style.height = "";
+      stage.style.width = "";
+    }
+  }
+  // Run after layout settles. requestAnimationFrame gives the browser
+  // a beat to paint the doc + compute its natural width.
+  requestAnimationFrame(fitDocToViewport);
+  window.addEventListener("resize", fitDocToViewport);
 
   // ESC closes the preview.
   function onKey(e) { if (e.key === "Escape") close(); }
@@ -71,9 +107,23 @@ export function openPrintView(trip) {
     overlay.remove();
     document.body.classList.remove("print-mode");
     document.removeEventListener("keydown", onKey);
+    window.removeEventListener("resize", fitDocToViewport);
   }
 
   function doPrint() {
+    // Un-scale before printing so the browser sees the natural-width
+    // doc. The transform is reset back by fitDocToViewport on the
+    // next afterprint cycle.
+    const restore = doc.style.transform;
+    doc.style.transform = "";
+    stage.style.height = "";
+    stage.style.width = "";
+    const afterPrint = () => {
+      doc.style.transform = restore;
+      fitDocToViewport();
+      window.removeEventListener("afterprint", afterPrint);
+    };
+    window.addEventListener("afterprint", afterPrint);
     window.print();
   }
 }
