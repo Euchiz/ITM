@@ -36,6 +36,7 @@ import { renderMobileStub } from "./pages/mobile/_stub.js";
 import { renderMobileShell } from "./pages/mobile/_shell.js";
 import { renderMobileToday } from "./pages/mobile/today.js";
 import { renderMobileDetail } from "./pages/mobile/detail.js";
+import { renderMobileItinerary } from "./pages/mobile/itinerary.js";
 import { openPrintView } from "./pages/print-view.js";
 import { el, formatRelativeTime } from "./pages/_utils.js";
 
@@ -404,7 +405,7 @@ const MOBILE_PAGES = {
   map:       renderMobileStub,
   costs:     renderMobileStub,
   notes:     renderMobileStub,
-  itinerary: renderMobileStub,
+  itinerary: renderMobileItinerary,
   prepare:   renderMobileStub,
   budget:    renderMobileStub,
   pack:      renderMobileStub,
