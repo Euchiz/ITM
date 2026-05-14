@@ -17,7 +17,7 @@
 
 import {
   initSupabase, isConfigured, configSource, auth, trips, share, members,
-  profile as profileApi, days as daysApi,
+  profile as profileApi, days as daysApi, packItems,
 } from "./supabase.js";
 import { renderAuthView } from "./auth.js";
 import { renderShareLanding } from "./pages/share-landing.js";
@@ -34,6 +34,7 @@ import { renderBudget } from "./pages/budget.js";
 import { renderCosts } from "./pages/costs.js";
 import { renderMobileStub } from "./pages/mobile/_stub.js";
 import { renderMobileShell } from "./pages/mobile/_shell.js";
+import { renderMobileToday } from "./pages/mobile/today.js";
 import { openPrintView } from "./pages/print-view.js";
 import { el, formatRelativeTime } from "./pages/_utils.js";
 
@@ -110,6 +111,7 @@ const state = {
   platform: detectPlatform(),
   mobileMode: readMobileMode(),
   lastNonDetailPage: null,
+  selectedItemId: null,
 };
 
 // ===== Boot =====
@@ -330,12 +332,21 @@ export async function openTrip(id, page) {
     // to no attribution text rather than blocking the trip from opening.
     state.trip.members = [];
     state.trip.membersById = {};
+    state.trip.pack_items = [];
     try {
       const memberRows = await members.list(id);
       state.trip.members = memberRows;
       for (const m of memberRows) state.trip.membersById[m.user_id] = m;
     } catch (e) {
       console.warn("Could not fetch members for attribution:", e);
+    }
+    // Pack items power the mobile Today reminder box and the Overview
+    // Pack tab. Same best-effort pattern as members — degrade silently
+    // if the call fails rather than blocking the trip from opening.
+    try {
+      state.trip.pack_items = await packItems.list(id);
+    } catch (e) {
+      console.warn("Could not fetch pack items:", e);
     }
     state.page = PAGES[page] ? page : defaultLandingPage();
     state.selectedDayIdx = pickDefaultDayIdx(trip);
@@ -388,7 +399,7 @@ export async function refreshTrip() {
 // MOBILE_PAGES but not in PAGES (e.g. pack, detail) are mobile-only
 // and only reachable when state.platform is mobile.
 const MOBILE_PAGES = {
-  today:     renderMobileStub,
+  today:     renderMobileToday,
   map:       renderMobileStub,
   costs:     renderMobileStub,
   notes:     renderMobileStub,
@@ -439,6 +450,7 @@ function renderTripPage() {
     mobileMode: state.mobileMode,
     setMobileMode: writeMobileMode,
     lastNonDetailPage: state.lastNonDetailPage,
+    selectedItemId: state.selectedItemId,
     openShare: () => toggleShareMenu(),
     openPrint: () => state.trip && openPrintView(state.trip),
     signOut: async () => {
@@ -493,6 +505,15 @@ export function navigate(opts = {}) {
     if (opts.page && opts.page !== stripDefault) url.searchParams.set("page", opts.page);
     else url.searchParams.delete("page");
   }
+  // `item` is used by the mobile Detail drill-in to point at a specific
+  // itinerary_items row. Cleared whenever we navigate away from a page
+  // that uses it (everything except `detail`).
+  if ("item" in opts) {
+    if (opts.item) url.searchParams.set("item", opts.item);
+    else url.searchParams.delete("item");
+  } else if ("page" in opts && opts.page !== "detail") {
+    url.searchParams.delete("item");
+  }
   history.replaceState(null, "", url);
 
   const tripId = url.searchParams.get("trip");
@@ -507,7 +528,12 @@ export function navigate(opts = {}) {
   // Same trip, different page: just swap pages without refetching.
   if (state.trip && state.trip.id === tripId) {
     const table = state.platform === "mobile" ? MOBILE_PAGES : PAGES;
-    state.page = table[page] ? page : stripDefault;
+    const resolved = table[page] ? page : stripDefault;
+    // Track the previous non-detail page so the mobile detail screen's
+    // back arrow knows where to return.
+    if (state.page !== "detail") state.lastNonDetailPage = state.page;
+    state.page = resolved;
+    state.selectedItemId = url.searchParams.get("item") || null;
     renderTripPage();
     return;
   }
