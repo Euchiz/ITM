@@ -49,7 +49,10 @@ const TAG_OPTIONS = [
 export function renderBudget(host, ctx) {
   const trip = ctx.trip || {};
   const readOnly = ctx.role === "viewer";
-  const view = readView();
+  // On mobile, Budget is the Overview-mode "Budget track" tab — read-only
+  // Breakdown only, with no view toggle. Edit happens on desktop.
+  const isMobile = ctx.platform === "mobile";
+  const view = isMobile ? "breakdown" : readView();
   let filterMode = readFilter();
   let groupBy = readGroup();
 
@@ -82,7 +85,7 @@ export function renderBudget(host, ctx) {
     el("div", { class: "vy-budget-head-r" },
       view === "edit" ? groupToggle() : null,
       view === "edit" ? filterSelectEl() : null,
-      viewToggle(),
+      isMobile ? null : viewToggle(),
     ),
   );
   main.appendChild(head);

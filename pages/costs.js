@@ -35,7 +35,10 @@ const TAG_LABELS = {
 export function renderCosts(host, ctx) {
   const trip = ctx.trip || {};
   const readOnly = ctx.role === "viewer";
-  const view = readView();
+  // On mobile, Costs is the Travel-mode actuals tab — update only.
+  // Breakdown / settlement live in the Overview-mode Budget track tab.
+  const isMobile = ctx.platform === "mobile";
+  const view = isMobile ? "update" : readView();
 
   host.innerHTML = "";
   const layout = el("div", { class: "vy-budget-layout" });
@@ -55,7 +58,7 @@ export function renderCosts(host, ctx) {
         : "Trip-wide breakdown of actuals against the plan, with settlement at the bottom when shared." }),
     ),
     el("div", { class: "vy-budget-head-r" },
-      viewToggle(),
+      isMobile ? null : viewToggle(),
     ),
   ));
 
