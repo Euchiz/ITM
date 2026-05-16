@@ -638,6 +638,11 @@ function bindAppHeader() {
   document.getElementById("userBadge").addEventListener("click", () => {
     openPreferencesDialog();
   });
+  // Dedicated language button — always visible, including on the auth
+  // view and the unconfigured-Supabase setup screen.
+  document.getElementById("languageBtn").addEventListener("click", () => {
+    openPreferencesDialog();
+  });
   bindConvertDialog();
   bindNewTripDialog();
   bindPasswordDialog();
