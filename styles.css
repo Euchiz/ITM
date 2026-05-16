@@ -2108,6 +2108,11 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
   z-index: 100; max-width: 80vw;
 }
 .toast.error {
+  /* Explicitly hold the white text colour: the global `.error { color:
+     var(--vbl-red) }` rule lower in the file has the same specificity
+     as `.toast` and was winning the cascade, leaving error toasts as
+     red text on a red gradient (only readable when selected). */
+  color: #fff;
   background: linear-gradient(180deg, rgba(180,35,24,0.95), rgba(143,23,15,0.92));
 }
 

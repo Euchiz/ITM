@@ -887,27 +887,46 @@ export function renderItinerary(host, ctx) {
       function tryCommitTime(field, raw) {
         const value = raw || "";
         // Dedupe: ignore commits that don't change the field. Avoids
-        // duplicate toasts and saves when input/change/blur all fire
-        // for the same value during keyboard entry.
+        // duplicate toasts and saves when change/blur both fire for
+        // the same value.
         if (field === "start" && value === lastGoodStart) return;
         if (field === "end"   && value === lastGoodEnd)   return;
+        if (field === "start") lastGoodStart = value;
+        else                   lastGoodEnd   = value;
+
         const newStart = field === "start" ? value : lastGoodStart;
         const newEnd   = field === "end"   ? value : lastGoodEnd;
-        const conflict = findOverlap(day, it, newStart, newEnd);
+
+        // Conflict check. Two subtleties:
+        //
+        //   (a) If only one field has been changed and the resulting
+        //       (start, end) pair would wrap overnight (end < start),
+        //       the OTHER field is almost certainly stale — the user is
+        //       mid-edit. Validating the full wrap interval flags false
+        //       positives against unrelated daytime events. In that
+        //       case, validate only the just-changed value as a
+        //       zero-duration point.
+        //
+        //   (b) We do NOT revert the input on conflict. Reverting blocks
+        //       legitimate parallel events (e.g. lunch during a museum
+        //       visit) and creates a "constantly shows" loop when the
+        //       user is trying to escape an existing overlap. The toast
+        //       is informational; the save still goes through.
+        const sM = parseHM(newStart);
+        const eM = parseHM(newEnd);
+        const midEditWrap = sM != null && eM != null && eM < sM;
+        const conflict = midEditWrap
+          ? findOverlap(day, it, value, "")
+          : findOverlap(day, it, newStart, newEnd);
         if (conflict) {
           const ot = formatTimeRange(conflict.start_time, conflict.end_time) ||
                      formatTime(conflict.start_time) || "untimed";
           const overnight = endsNextDay(conflict.start_time, conflict.end_time) ? " +1d" : "";
           (ctx.toast || alert)(
-            `Time conflicts with "${conflict.title || "untitled"}" (${ot}${overnight})`,
+            `Time overlaps "${conflict.title || "untitled"}" (${ot}${overnight})`,
             true
           );
-          if (field === "start") startInput.value = lastGoodStart;
-          else                   endInput.value   = lastGoodEnd;
-          return;
         }
-        if (field === "start") lastGoodStart = value;
-        else                   lastGoodEnd   = value;
         durChip.textContent = computeDuration(newStart, newEnd) || "—";
         nextDayBadge.hidden = !endsNextDay(newStart, newEnd);
         saveItem({ [field === "start" ? "start_time" : "end_time"]: value || null });
