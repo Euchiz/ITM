@@ -3,15 +3,14 @@
 // to add a stop directly to the trip, and edit the route geometry.
 
 import { el } from "./_utils.js";
+import { t } from "../i18n/locale.js";
 
 export function renderMap(host, ctx) {
   const cities = uniqueCities(ctx.trip);
   host.appendChild(
     el("section", { class: "page-head" },
-      el("h2", { text: "Map" }),
-      el("p", { class: "muted",
-        text: "Route preview — coming soon. We'll surface a visualised map of your trip here, " +
-              "and you'll be able to add stops or edit the route directly from the canvas." }),
+      el("h2", { text: t("map.title") }),
+      el("p", { class: "muted", text: t("map.preview.subtitle") }),
     )
   );
 
@@ -21,12 +20,12 @@ export function renderMap(host, ctx) {
         el("span", { class: "material-symbols-outlined", text: "map" }),
       ),
       el("div", { class: "vy-stale-body" },
-        el("strong", { class: "vy-stale-title", text: "Route preview" }),
-        el("span", { class: "vy-meta", text: "PROPOSED · NOT YET IMPLEMENTED" }),
+        el("strong", { class: "vy-stale-title", text: t("map.preview.title") }),
+        el("span", { class: "vy-meta", text: t("map.preview.statusBadge") }),
         cities.length
           ? el("p", { class: "small",
-              text: `When live, it would render the ${cities.length}-stop route: ${cities.join(" → ")}.` })
-          : el("p", { class: "small", text: "Add cities to your day cards to seed the route preview." }),
+              text: t("map.preview.willRender", { n: cities.length, cities: cities.join(" → ") }) })
+          : el("p", { class: "small", text: t("map.preview.addCities") }),
       ),
     )
   );

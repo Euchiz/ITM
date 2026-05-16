@@ -10,35 +10,35 @@ import { tripToExportJson, aiEditPrompt, tripToMarkdown } from "../io/export.js"
 import { parseImportText } from "../io/parser.js";
 import { validate } from "../io/schema.js";
 import { el, escapeHtml, fmtDateRange } from "./_utils.js";
+import { t } from "../i18n/locale.js";
 
 export function renderIO(host, ctx) {
-  const t = ctx.trip;
+  const trip = ctx.trip;
   const isOwner = ctx.role === "owner";
-  const payload = tripToExportJson(t);
+  const payload = tripToExportJson(trip);
   const json = JSON.stringify(payload, null, 2);
 
   host.appendChild(
     el("section", { class: "page-head" },
-      el("h2", { text: "Import / Export" }),
-      el("p", { class: "muted",
-        text: "Export your trip as JSON to share or feed into an AI assistant. Edit the JSON elsewhere, then paste it back to import." }),
+      el("h2", { text: t("io.title") }),
+      el("p", { class: "muted", text: t("io.subtitleAlt") }),
     )
   );
 
   // ===== Export section =====
   const exportSec = el("section", { class: "card" },
-    el("h3", { text: "Export" }),
+    el("h3", { text: t("io.export") }),
     el("div", { class: "io-actions" },
-      el("button", { class: "btn", onClick: () => copyToClipboard(json, "JSON copied") }, "Copy JSON"),
-      el("button", { class: "btn", onClick: () => download(filename(t, "trip.json"), json, "application/json") }, "Download .trip.json"),
+      el("button", { class: "btn", onClick: () => copyToClipboard(json, t("io.copyJsonOk")) }, t("io.copyJson")),
+      el("button", { class: "btn", onClick: () => download(filename(trip, "trip.json"), json, "application/json") }, t("io.downloadJson")),
       el("button", {
         class: "btn",
-        onClick: () => copyToClipboard(aiEditPrompt(json), "AI editing prompt copied"),
-      }, "Copy AI prompt + JSON"),
+        onClick: () => copyToClipboard(aiEditPrompt(json), t("io.copyAiOk")),
+      }, t("io.copyAi")),
       el("button", {
         class: "btn",
-        onClick: () => download(filename(t, "md"), tripToMarkdown(payload), "text/markdown"),
-      }, "Download Markdown"),
+        onClick: () => download(filename(trip, "md"), tripToMarkdown(payload), "text/markdown"),
+      }, t("io.downloadMd")),
     ),
     el("textarea", {
       class: "io-export-area", readonly: "readonly", rows: 16,
@@ -49,27 +49,26 @@ export function renderIO(host, ctx) {
 
   // ===== Import section =====
   const importSec = el("section", { class: "card" },
-    el("h3", { text: "Import" }),
-    el("p", { class: "muted small",
-      text: "Paste a trip JSON object, a Markdown export with an embedded ```trip-json``` block, or any text containing one." }),
+    el("h3", { text: t("io.import") }),
+    el("p", { class: "muted small", text: t("io.importHint") }),
   );
 
   const ta = el("textarea", { class: "io-import-area", rows: 8,
-    placeholder: "Paste trip JSON or Markdown here…" });
+    placeholder: t("io.importPlaceholderAlt") });
 
   const previewHost = el("div", { class: "io-preview" });
 
   const validateBtn = el("button", { class: "btn primary",
-    onClick: () => doValidate() }, "Validate");
+    onClick: () => doValidate() }, t("io.validate"));
 
   const actions = el("div", { class: "io-actions io-import-actions", hidden: true });
   const createBtn = el("button", { class: "btn primary",
-    onClick: () => doImport("create") }, "Create as new trip");
+    onClick: () => doImport("create") }, t("io.createNew"));
   const replaceBtn = el("button", { class: "btn",
-    onClick: () => doImport("replace") }, "Replace current trip");
+    onClick: () => doImport("replace") }, t("io.replace"));
   if (!isOwner) {
     replaceBtn.disabled = true;
-    replaceBtn.title = "Only the trip owner can replace it";
+    replaceBtn.title = t("io.replaceOnlyOwner");
   }
   actions.append(createBtn, replaceBtn);
 
@@ -85,12 +84,12 @@ export function renderIO(host, ctx) {
 
     const parsed = parseImportText(ta.value);
     if (!parsed.ok) {
-      previewHost.appendChild(errorBlock("Could not parse", [parsed.error]));
+      previewHost.appendChild(errorBlock(t("io.couldNotParse"), [parsed.error]));
       return;
     }
     const result = validate(parsed.data);
     if (!result.ok) {
-      previewHost.appendChild(errorBlock("Import failed", result.errors));
+      previewHost.appendChild(errorBlock(t("io.importFailedHead"), result.errors));
       return;
     }
     validatedPayload = result.data;
@@ -100,11 +99,8 @@ export function renderIO(host, ctx) {
 
   async function doImport(mode) {
     if (!validatedPayload) return;
-    const tripData = validatedPayload.trip;
     if (mode === "replace") {
-      const ok = confirm(
-        `Replace "${t.title}" with imported data? This deletes the current days, items, checklist, and notes.`
-      );
+      const ok = confirm(t("io.confirmReplaceWithTitle", { title: trip.title }));
       if (!ok) return;
     }
     ctx.onSaveStart?.();
@@ -113,15 +109,15 @@ export function renderIO(host, ctx) {
         const newId = await trips.createFromJson(validatedPayload);
         ctx.navigate?.({ trip: newId, page: "overview" });
       } else {
-        await trips.replaceFromJson(t.id, validatedPayload);
+        await trips.replaceFromJson(trip.id, validatedPayload);
         await ctx.refresh();
-        ctx.navigate?.({ trip: t.id, page: "overview" });
+        ctx.navigate?.({ trip: trip.id, page: "overview" });
       }
       previewHost.innerHTML = "";
       ta.value = "";
       actions.hidden = true;
     } catch (e) {
-      previewHost.appendChild(errorBlock("Server rejected the import", [e.message]));
+      previewHost.appendChild(errorBlock(t("io.serverRejected"), [e.message]));
     } finally {
       ctx.onSaveDone?.();
     }
@@ -129,7 +125,7 @@ export function renderIO(host, ctx) {
 }
 
 function previewBlock(p) {
-  const t = p.trip;
+  const trip = p.trip;
   const dayCount = (p.days || []).length;
   const itemCount = (p.days || []).reduce((s, d) => s + (d.items || []).length, 0);
   const todoCount = (p.days || []).reduce((s, d) => s + (d.todos || []).length, 0);
@@ -137,17 +133,17 @@ function previewBlock(p) {
   const noteCount = (p.notes || []).length;
 
   return el("div", { class: "io-preview-ok" },
-    el("h4", { text: "Looks good — preview" }),
+    el("h4", { text: t("io.previewOk") }),
     el("ul", { class: "plain-list" },
-      el("li", { html: `<strong>${escapeHtml(t.title || "Untitled")}</strong>` }),
-      t.destination ? el("li", { text: t.destination }) : null,
-      (t.start_date || t.end_date)
-        ? el("li", { text: fmtDateRange(t.start_date, t.end_date) })
+      el("li", { html: `<strong>${escapeHtml(trip.title || t("io.previewUntitled"))}</strong>` }),
+      trip.destination ? el("li", { text: trip.destination }) : null,
+      (trip.start_date || trip.end_date)
+        ? el("li", { text: fmtDateRange(trip.start_date, trip.end_date) })
         : null,
-      el("li", { text: `${dayCount} days · ${itemCount} items · ${todoCount} daily todos` }),
-      el("li", { text: `${prepCount} preparation checklist items · ${noteCount} notes` }),
+      el("li", { text: t("io.previewStats1", { days: dayCount, items: itemCount, todos: todoCount }) }),
+      el("li", { text: t("io.previewStats2", { prep: prepCount, notes: noteCount }) }),
     ),
-    el("p", { class: "muted small", text: "Choose how to import:" }),
+    el("p", { class: "muted small", text: t("io.previewChoose") }),
   );
 }
 

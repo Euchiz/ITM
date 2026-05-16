@@ -5,17 +5,20 @@
 
 import { members, auth, share } from "../supabase.js";
 import { el, formatRelativeTime } from "./_utils.js";
+import { t, getLocale } from "../i18n/locale.js";
 
-const ROLE_LABELS = {
-  owner:  "Owner",
-  editor: "Editor",
-  viewer: "Viewer",
+// Role labels resolve via t() at render time so a locale switch
+// retranslates without mutating the canonical role token.
+const ROLE_LABEL_KEY = {
+  owner:  "members.role.owner",
+  editor: "members.role.editor",
+  viewer: "members.role.viewer",
 };
 
-const ROLE_BLURB = {
-  owner:  "Can do anything, including managing membership and deleting the trip.",
-  editor: "Can edit every page. Cannot delete the trip or change membership.",
-  viewer: "Read-only access.",
+const ROLE_BLURB_KEY = {
+  owner:  "members.role.ownerBlurb",
+  editor: "members.role.editorBlurb",
+  viewer: "members.role.viewerBlurb",
 };
 
 export async function renderMembers(host, ctx) {
@@ -24,11 +27,9 @@ export async function renderMembers(host, ctx) {
 
   host.appendChild(
     el("section", { class: "page-head" },
-      el("h2", { text: "Members" }),
-      el("p", { class: "muted",
-        text: isOwner
-          ? "Add collaborators directly by email (they must have an account) or share a link from the header — link clicks let anyone in, even before they sign up."
-          : "Roster for this trip. Only the owner can change roles." }),
+      el("h2", { text: t("members.title") }),
+      el("p", { class: "muted", text: isOwner
+        ? t("members.subtitleOwner") : t("members.subtitleNonOwner") }),
     )
   );
 
@@ -52,13 +53,13 @@ export async function renderMembers(host, ctx) {
   function inviteCard() {
     const card = el("section", { class: "card members-invite-card" });
     const emailInput = el("input", {
-      type: "email", placeholder: "name@example.com",
+      type: "email", placeholder: t("members.invitePlaceholderAlt"),
       class: "member-email-input",
       autocomplete: "off",
     });
     const roleSelect = el("select", { class: "member-role-select" });
     for (const r of ["editor", "viewer", "owner"]) {
-      const opt = el("option", { value: r, text: ROLE_LABELS[r] });
+      const opt = el("option", { value: r, text: t(ROLE_LABEL_KEY[r]) });
       roleSelect.appendChild(opt);
     }
 
@@ -69,12 +70,12 @@ export async function renderMembers(host, ctx) {
       if (pending) return;
       const email = emailInput.value.trim();
       if (!email) {
-        status.textContent = "Enter an email first.";
+        status.textContent = t("members.enterEmailFirst");
         status.classList.remove("error");
         return;
       }
       pending = true;
-      status.textContent = "Adding…";
+      status.textContent = t("members.adding");
       status.classList.remove("error");
       ctx.onSaveStart?.();
       try {
@@ -91,20 +92,20 @@ export async function renderMembers(host, ctx) {
       }
     }
 
-    const addBtn = el("button", { class: "btn primary", onClick: submit }, "Add member");
+    const addBtn = el("button", { class: "btn primary", onClick: submit }, t("members.addBtn"));
     emailInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") { e.preventDefault(); submit(); }
     });
 
     card.append(
-      el("h3", { text: "Add a collaborator" }),
+      el("h3", { text: t("members.addCollaborator") }),
       el("div", { class: "member-invite-row" },
         emailInput, roleSelect, addBtn,
       ),
       status,
       el("ul", { class: "role-blurbs muted small" },
         ...["editor", "viewer", "owner"].map((r) =>
-          el("li", { text: `${ROLE_LABELS[r]} — ${ROLE_BLURB[r]}` })
+          el("li", { text: `${t(ROLE_LABEL_KEY[r])} — ${t(ROLE_BLURB_KEY[r])}` })
         ),
       ),
     );
@@ -113,12 +114,12 @@ export async function renderMembers(host, ctx) {
 
   async function refresh() {
     listHost.innerHTML = "";
-    listHost.appendChild(el("p", { class: "muted small", text: "Loading members…" }));
+    listHost.appendChild(el("p", { class: "muted small", text: t("members.loadingMembers") }));
     try {
       const rows = await members.list(trip.id);
       listHost.innerHTML = "";
       const grid = el("section", { class: "card members-card" });
-      grid.appendChild(el("h3", { text: "Current members" }));
+      grid.appendChild(el("h3", { text: t("members.currentMembers") }));
       const table = el("table", { class: "members-table" });
       const tbody = el("tbody", {});
       rows.forEach((m) => tbody.appendChild(memberRow(m)));
@@ -127,7 +128,8 @@ export async function renderMembers(host, ctx) {
       listHost.appendChild(grid);
     } catch (e) {
       listHost.innerHTML = "";
-      listHost.appendChild(el("p", { class: "error", text: "Could not load members: " + e.message }));
+      listHost.appendChild(el("p", { class: "error",
+        text: t("members.loadFailed", { error: e.message }) }));
     }
   }
 
@@ -136,17 +138,17 @@ export async function renderMembers(host, ctx) {
     const tr = el("tr", { class: "member-row" });
 
     tr.appendChild(el("td", { class: "member-identity" },
-      el("div", { class: "member-name", text: m.display_name || m.email || "(unknown)" }),
+      el("div", { class: "member-name", text: m.display_name || m.email || t("members.unknown") }),
       m.display_name && m.email
         ? el("div", { class: "muted small", text: m.email })
         : null,
-      isMe ? el("span", { class: "you-badge", text: "you" }) : null,
+      isMe ? el("span", { class: "you-badge", text: t("members.youBadge") }) : null,
     ));
 
     if (isOwner && !isMe) {
       const sel = el("select", { class: "member-role-select" });
       for (const r of ["owner", "editor", "viewer"]) {
-        const opt = el("option", { value: r, text: ROLE_LABELS[r] });
+        const opt = el("option", { value: r, text: t(ROLE_LABEL_KEY[r]) });
         if (r === m.role) opt.selected = true;
         sel.appendChild(opt);
       }
@@ -156,7 +158,7 @@ export async function renderMembers(host, ctx) {
           await members.updateRole(trip.id, m.user_id, sel.value);
           await refresh();
         } catch (e) {
-          alert("Could not change role: " + e.message);
+          alert(t("members.changeRoleFailed", { error: e.message }));
           await refresh();
         } finally {
           ctx.onSaveDone?.();
@@ -165,42 +167,40 @@ export async function renderMembers(host, ctx) {
       tr.appendChild(el("td", { class: "member-role-cell" }, sel));
     } else {
       tr.appendChild(el("td", { class: "member-role-cell" },
-        el("span", { class: `role role-${m.role}`, text: ROLE_LABELS[m.role] || m.role })
+        el("span", { class: `role role-${m.role}`, text: t(ROLE_LABEL_KEY[m.role]) || m.role })
       ));
     }
 
     const actionCell = el("td", { class: "member-actions" });
     if (isMe) {
-      // Anyone may leave their own trip (owner can leave only if there's
-      // another owner — the RPC enforces it).
       actionCell.appendChild(el("button", {
         class: "btn ghost danger",
         onClick: async () => {
-          if (!confirm("Leave this trip? You'll lose access until someone re-adds you.")) return;
+          if (!confirm(t("members.confirmLeave"))) return;
           ctx.onSaveStart?.();
           try {
             await members.remove(trip.id, m.user_id);
-            // Bounce out — this trip is no longer ours.
             ctx.navigate?.({ trip: null });
           } catch (e) {
-            alert("Could not leave: " + e.message);
+            alert(t("members.couldNotLeave", { error: e.message }));
           } finally {
             ctx.onSaveDone?.();
           }
         },
-      }, "Leave trip"));
+      }, t("members.leaveTrip")));
     } else if (isOwner) {
       actionCell.appendChild(el("button", {
         class: "icon-btn danger",
-        title: "Remove from trip",
+        title: t("members.removeTooltip"),
         onClick: async () => {
-          if (!confirm(`Remove ${m.email || m.display_name || "this member"} from the trip?`)) return;
+          const who = m.email || m.display_name || t("members.removeFallback");
+          if (!confirm(t("members.confirmRemove2", { who }))) return;
           ctx.onSaveStart?.();
           try {
             await members.remove(trip.id, m.user_id);
             await refresh();
           } catch (e) {
-            alert("Could not remove: " + e.message);
+            alert(t("members.couldNotRemove", { error: e.message }));
           } finally {
             ctx.onSaveDone?.();
           }
@@ -212,25 +212,15 @@ export async function renderMembers(host, ctx) {
   }
 
   // =============== Share-link management (owner-only) ===============
-  //
-  // The header Share button mints + reuses one default link per role
-  // (NULL label). Power users come here to:
-  //   - see the active links roster
-  //   - mint labeled links for different audiences ("Family chat" /
-  //     "Travel crew") with granular revocation
-  //   - revoke a link, optionally cascading to remove every guest who
-  //     joined through it (per the design we locked: link-only by
-  //     default, cascade as an explicit checkbox).
 
   async function refreshShareLinks() {
     linksHost.innerHTML = "";
     const card = el("section", { class: "card members-share-card" });
-    card.appendChild(el("h3", { text: "Share links" }));
-    card.appendChild(el("p", { class: "muted small",
-      text: "Mint additional labeled links to share with different groups. Revoke any link to cut off new sign-ups (you can optionally remove everyone who joined through it)." }));
+    card.appendChild(el("h3", { text: t("members.shareLinksSection") }));
+    card.appendChild(el("p", { class: "muted small", text: t("members.shareLinksHint") }));
 
     const listWrap = el("div", { class: "share-links-list" },
-      el("p", { class: "muted small", text: "Loading…" })
+      el("p", { class: "muted small", text: t("members.shareLoading") })
     );
     card.appendChild(listWrap);
     card.appendChild(createLinkForm());
@@ -240,8 +230,7 @@ export async function renderMembers(host, ctx) {
       const rows = await share.list(trip.id);
       listWrap.innerHTML = "";
       if (rows.length === 0) {
-        listWrap.appendChild(el("p", { class: "muted small",
-          text: "No active links. Use the Share button in the header, or create a labeled link below." }));
+        listWrap.appendChild(el("p", { class: "muted small", text: t("members.shareEmpty") }));
         return;
       }
       const table = el("table", { class: "share-links-table" });
@@ -251,54 +240,50 @@ export async function renderMembers(host, ctx) {
       listWrap.appendChild(table);
     } catch (e) {
       listWrap.innerHTML = "";
-      listWrap.appendChild(el("p", { class: "error", text: "Could not load share links: " + e.message }));
+      listWrap.appendChild(el("p", { class: "error",
+        text: t("members.shareLoadFailed", { error: e.message }) }));
     }
   }
 
   function shareLinkRow(row) {
     const tr = el("tr", { class: "share-link-row" });
 
-    // Meta line under the label combines the creation time and role,
-    // and tacks on an expiry phrase if the link has one. Already-expired
-    // links flag the row visibly so the owner notices to revoke or rotate.
     const expiry = row.expires_at ? new Date(row.expires_at) : null;
     const isExpired = expiry && expiry < new Date();
     const metaBits = [
-      formatRelativeTime(row.created_at) || "just now",
-      ROLE_LABELS[row.role] || row.role,
+      formatRelativeTime(row.created_at) || t("members.shareJustNow"),
+      t(ROLE_LABEL_KEY[row.role]) || row.role,
     ];
     if (expiry) {
       metaBits.push(isExpired
-        ? `expired ${formatRelativeTime(expiry)}`
-        : `expires ${expiry.toLocaleDateString()}`);
+        ? t("members.shareExpired", { when: formatRelativeTime(expiry) })
+        : t("members.shareExpiresOn", { date: expiry.toLocaleDateString(getLocale()) }));
     }
     if (isExpired) tr.classList.add("share-link-row--expired");
 
     tr.appendChild(el("td", { class: "share-link-label" },
-      el("div", { class: "share-link-name",
-        text: row.label || "Default link" }),
-      el("div", { class: "muted small share-link-meta",
-        text: metaBits.join(" · ") }),
+      el("div", { class: "share-link-name", text: row.label || t("members.shareDefaultName") }),
+      el("div", { class: "muted small share-link-meta", text: metaBits.join(" · ") }),
     ));
 
     const copyBtn = el("button", {
       class: "btn ghost share-link-copy",
-      title: "Copy link",
+      title: t("members.copyTip"),
       onClick: async () => {
         try {
           await navigator.clipboard.writeText(share.buildUrl(trip.id, row.token));
           const orig = copyBtn.textContent;
-          copyBtn.textContent = "Copied";
+          copyBtn.textContent = t("members.copiedFlash");
           setTimeout(() => { copyBtn.textContent = orig; }, 1200);
         } catch (e) {
-          alert("Copy failed: " + (e.message || e));
+          alert(t("members.copyFailed", { error: e.message || e }));
         }
       },
-    }, "Copy");
+    }, t("members.copyBtn"));
 
     const revokeBtn = el("button", {
       class: "icon-btn danger share-link-revoke",
-      title: "Revoke this link",
+      title: t("members.revokeTip"),
       onClick: () => onRevokeClick(row),
     }, "✕");
 
@@ -307,20 +292,16 @@ export async function renderMembers(host, ctx) {
   }
 
   async function onRevokeClick(row) {
-    // Use the design's two-step revoke: confirm the basic revoke, then
-    // ask separately whether to cascade. Browser confirms aren't pretty
-    // but they're consistent with the existing patterns in members.js
-    // ("Remove from trip?" / "Leave this trip?").
-    const label = row.label || "this link";
-    if (!confirm(`Revoke ${label}? New click-throughs will fail.`)) return;
-    const cascade = confirm("Also remove members who joined through this link? Click OK to remove them, Cancel to keep them.");
+    const label = row.label || t("members.confirmRevokeFallback");
+    if (!confirm(t("members.confirmRevoke", { label }))) return;
+    const cascade = confirm(t("members.confirmCascade"));
     ctx.onSaveStart?.();
     try {
       await share.revoke(row.token, cascade);
       await refreshShareLinks();
       if (cascade) await refresh();
     } catch (e) {
-      alert("Revoke failed: " + (e.message || e));
+      alert(t("members.revokeFailed", { error: e.message || e }));
     } finally {
       ctx.onSaveDone?.();
     }
@@ -329,19 +310,16 @@ export async function renderMembers(host, ctx) {
   function createLinkForm() {
     const wrap = el("div", { class: "share-links-create" });
     const labelInput = el("input", {
-      type: "text", placeholder: "Label (e.g. Family chat)",
+      type: "text", placeholder: t("members.createLabelPlaceholder"),
       class: "share-link-label-input", maxlength: "60",
     });
     const roleSelect = el("select", { class: "share-link-role-select" });
     for (const r of ["editor", "viewer"]) {
-      roleSelect.appendChild(el("option", { value: r, text: ROLE_LABELS[r] }));
+      roleSelect.appendChild(el("option", { value: r, text: t(ROLE_LABEL_KEY[r]) }));
     }
-    // Optional expiry. Empty input → no expiry (link lives until
-    // manually revoked). When set, server stores the value verbatim;
-    // peek/redeem RPCs refuse the token after that timestamp.
     const expiryInput = el("input", {
       type: "date", class: "share-link-expiry-input",
-      title: "Optional expiry date — leave blank for no expiry",
+      title: t("members.createExpiryTip"),
     });
 
     const status = el("div", { class: "muted small" });
@@ -349,24 +327,21 @@ export async function renderMembers(host, ctx) {
     async function submit() {
       const label = labelInput.value.trim();
       if (!label) {
-        status.textContent = "Give the link a label so you can tell it apart later.";
+        status.textContent = t("members.createNeedsLabel");
         status.classList.add("error");
         return;
       }
       let expiresAt = null;
       if (expiryInput.value) {
-        // Treat the date input as end-of-day local time so a "good
-        // through May 20" link doesn't die at midnight UTC partway
-        // through May 19 for users west of UTC.
         const d = new Date(expiryInput.value + "T23:59:59");
         if (Number.isNaN(d.getTime())) {
-          status.textContent = "Invalid expiry date.";
+          status.textContent = t("members.createInvalidExpiry");
           status.classList.add("error");
           return;
         }
         expiresAt = d.toISOString();
       }
-      status.textContent = "Creating…";
+      status.textContent = t("members.creating");
       status.classList.remove("error");
       ctx.onSaveStart?.();
       try {
@@ -383,7 +358,7 @@ export async function renderMembers(host, ctx) {
       }
     }
 
-    const addBtn = el("button", { class: "btn", onClick: submit }, "Create link");
+    const addBtn = el("button", { class: "btn", onClick: submit }, t("members.createBtn"));
     labelInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") { e.preventDefault(); submit(); }
     });
@@ -392,8 +367,7 @@ export async function renderMembers(host, ctx) {
       el("div", { class: "share-links-create-row" },
         labelInput, roleSelect, expiryInput, addBtn,
       ),
-      el("p", { class: "muted small share-links-create-hint",
-        text: "Expiry is optional. Leave the date blank for a link that lives until you revoke it." }),
+      el("p", { class: "muted small share-links-create-hint", text: t("members.createHint") }),
       status,
     );
     return wrap;

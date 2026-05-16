@@ -8,6 +8,7 @@
 // Escape dismisses.
 
 import { el } from "../_utils.js";
+import { t } from "../../i18n/locale.js";
 
 const SHEET_ID = "vy-mobile-sheet";
 
@@ -21,21 +22,23 @@ export function openMoreSheet(ctx) {
   const sheet = el("div", { class: "vy-mobile-sheet", role: "dialog" });
 
   sheet.appendChild(el("div", { class: "vy-mobile-sheet-handle" }));
-  sheet.appendChild(el("h3", { class: "vy-mobile-sheet-title", text: "More" }));
+  sheet.appendChild(el("h3", { class: "vy-mobile-sheet-title", text: t("mobile.more.title") }));
 
   const items = [
-    { id: "overview", glyph: "tune",        label: "Trip overview",
+    { id: "overview",    glyph: "tune",      label: t("mobile.more.tripOverview"),
       onClick: () => ctx.navigate?.({ page: "overview" }) },
-    { id: "members",  glyph: "group",       label: "Members & roles",
+    { id: "members",     glyph: "group",     label: t("mobile.more.membersRoles"),
       onClick: () => ctx.navigate?.({ page: "members" }) },
-    { id: "share",    glyph: "share",       label: "Share trip",
+    { id: "share",       glyph: "share",     label: t("mobile.more.shareTrip"),
       onClick: () => ctx.openShare?.() },
-    { id: "print",    glyph: "print",       label: "Print preview",
+    { id: "print",       glyph: "print",     label: t("mobile.more.printPreview"),
       onClick: () => ctx.openPrint?.() },
+    { id: "preferences", glyph: "settings",  label: t("mobile.more.preferences"),
+      onClick: () => ctx.openPreferences?.() },
     { type: "sep" },
-    { id: "back",     glyph: "luggage",     label: "Back to all trips",
+    { id: "back",        glyph: "luggage",   label: t("mobile.more.backTrips"),
       onClick: () => ctx.navigate?.({ trip: null }) },
-    { id: "signout",  glyph: "logout",      label: "Sign out", danger: true,
+    { id: "signout",     glyph: "logout",    label: t("mobile.more.signOut"), danger: true,
       onClick: () => ctx.signOut?.() },
   ];
 

@@ -7,6 +7,7 @@
 
 import { items as itemsApi, packItems } from "../../supabase.js";
 import { el, formatTime, formatTimeRange } from "../_utils.js";
+import { t, getLocale } from "../../i18n/locale.js";
 import { TYPE_VISUALS } from "../itinerary.js";
 
 // Reuse the time math from Today; small enough to inline rather than
@@ -31,27 +32,26 @@ function formatDuration(mins) {
 
 // Status enum — values and labels in user-friendly order.
 const STATUS_OPTIONS = [
-  { value: "idea",          label: "Idea"          },
-  { value: "planned",       label: "Planned"       },
-  { value: "needs_booking", label: "Needs booking" },
-  { value: "booked",        label: "Booked"        },
-  { value: "done",          label: "Done"          },
-  { value: "cancelled",     label: "Cancelled"     },
+  { value: "idea",          labelKey: "mobile.detail.status.idea" },
+  { value: "planned",       labelKey: "mobile.detail.status.planned" },
+  { value: "needs_booking", labelKey: "mobile.detail.status.needs_booking" },
+  { value: "booked",        labelKey: "mobile.detail.status.booked" },
+  { value: "done",          labelKey: "mobile.detail.status.done" },
+  { value: "cancelled",     labelKey: "mobile.detail.status.cancelled" },
 ];
 
 export function renderMobileDetail(host, ctx) {
   const itemId = ctx.selectedItemId;
   host.innerHTML = "";
   if (!itemId) {
-    host.appendChild(emptyCard("No item selected", "Use the back arrow to return."));
+    host.appendChild(emptyCard(t("mobile.detail.noItem.title"), t("mobile.detail.noItem.body")));
     return;
   }
 
   // Find the item + its day across the trip.
   const { item, day, dayIdx } = findItem(ctx.trip, itemId);
   if (!item) {
-    host.appendChild(emptyCard("Item not found",
-      "It may have been deleted. Use the back arrow to return."));
+    host.appendChild(emptyCard(t("mobile.detail.notFound.title"), t("mobile.detail.notFound.body")));
     return;
   }
 
@@ -61,22 +61,22 @@ export function renderMobileDetail(host, ctx) {
   host.appendChild(renderHero(item, day, dayIdx, v));
 
   // Detail rows.
-  host.appendChild(detailRow("schedule", "WHEN",
+  host.appendChild(detailRow("schedule", t("mobile.detail.when"),
     item.start_time || item.end_time
       ? formatTimeRange(item.start_time, item.end_time) || formatTime(item.start_time)
-      : "Time not set",
+      : t("mobile.detail.timeNotSet"),
     item.end_time && item.start_time
       ? formatDuration(timeToMinutes(item.end_time) - timeToMinutes(item.start_time))
       : null));
 
   if (item.location_name) {
-    host.appendChild(detailRow("location_on", "WHERE",
+    host.appendChild(detailRow("location_on", t("mobile.detail.where"),
       item.location_name,
       day?.city ? `${day.city}` : null));
   }
 
   if (item.notes && item.notes.trim()) {
-    host.appendChild(detailRow("notes", "NOTES", item.notes, null, { multiline: true }));
+    host.appendChild(detailRow("notes", t("mobile.detail.notes"), item.notes, null, { multiline: true }));
   }
 
   // Pack row — tagged pack items for this event with inline checkboxes.
@@ -94,7 +94,7 @@ export function renderMobileDetail(host, ctx) {
 
   // Read-only footer hint.
   host.appendChild(el("p", { class: "vy-mobile-detail-footer muted small",
-    text: "Open this trip on desktop to edit titles, times, or notes." }));
+    text: t("mobile.detail.editOnDesktop") }));
 }
 
 // ─── Hero ─────────────────────────────────────────────────────────
@@ -116,14 +116,14 @@ function renderHero(item, day, dayIdx, v) {
 
   // Bottom: caption + title overlaid on the gradient stripe
   const dateLabel = day?.date
-    ? new Date(day.date + "T00:00:00").toLocaleDateString(undefined,
+    ? new Date(day.date + "T00:00:00").toLocaleDateString(getLocale(),
         { weekday: "short", month: "short", day: "numeric" }).toUpperCase()
-    : `DAY ${(dayIdx ?? 0) + 1}`;
+    : t("mobile.detail.dayLabelCaps", { n: (dayIdx ?? 0) + 1 });
   const timeLabel = item.start_time ? ` · ${formatTime(item.start_time)}` : "";
   const caption = `${dateLabel}${day?.city ? " · " + day.city.toUpperCase() : ""}${timeLabel}`;
   const bottom = el("div", { class: "vy-mobile-detail-hero-bottom" },
     el("div", { class: "vy-mobile-detail-hero-caption", text: caption }),
-    el("h1", { class: "vy-mobile-detail-hero-title", text: item.title || "(untitled)" }),
+    el("h1", { class: "vy-mobile-detail-hero-title", text: item.title || t("mobile.detail.untitled") }),
   );
   hero.appendChild(bottom);
   return hero;
@@ -136,13 +136,13 @@ function countdownPill(item) {
   const now = nowMinutes();
   let text;
   if (now < startMin) {
-    text = `STARTS IN ${formatDuration(startMin - now)}`;
+    text = t("mobile.detail.startsIn", { duration: formatDuration(startMin - now) });
   } else if (endMin == null) {
-    text = `STARTED ${formatDuration(now - startMin)} AGO`;
+    text = t("mobile.detail.startedAgo", { duration: formatDuration(now - startMin) });
   } else if (now < endMin) {
-    text = `LIVE · ${formatDuration(endMin - now)} LEFT`;
+    text = t("mobile.detail.liveLeft", { duration: formatDuration(endMin - now) });
   } else {
-    text = `ENDED ${formatDuration(now - endMin)} AGO`;
+    text = t("mobile.detail.endedAgo", { duration: formatDuration(now - endMin) });
   }
   return el("span", { class: "vy-mobile-detail-countdown", text });
 }
@@ -172,7 +172,7 @@ function packRow(ctx, packs) {
   );
   const body = el("div", { class: "vy-mobile-detail-row-body" },
     el("div", { class: "vy-mobile-detail-row-label",
-      text: `PACK · ${packs.filter((p) => p.packed).length} OF ${packs.length}` }),
+      text: t("mobile.detail.packLabel", { packed: packs.filter((p) => p.packed).length, total: packs.length }) }),
   );
   const list = el("div", { class: "vy-mobile-detail-pack-list" });
   for (const p of packs) list.appendChild(renderPackPill(ctx, p));
@@ -193,7 +193,7 @@ function renderPackPill(ctx, p) {
         p.packed = target;
       } catch (err) {
         pill.classList.toggle("is-packed", !target);
-        ctx.toast?.("Couldn't update: " + (err.message || err), true);
+        ctx.toast?.(t("mobile.detail.packUpdateFailed", { error: err.message || err }), true);
       }
     },
   },
@@ -210,11 +210,11 @@ function renderActionRow(ctx, item) {
   const showDefer = !item.is_fixed;
   const row = el("section", { class: "vy-mobile-action-row vy-mobile-detail-actions" });
 
-  row.appendChild(actionBtn("check", "Done", async () => {
-    await safeUpdate(ctx, item, { status: "done" }, "Marked done");
+  row.appendChild(actionBtn("check", t("mobile.detail.action.done"), async () => {
+    await safeUpdate(ctx, item, { status: "done" }, t("mobile.detail.action.markedDone"));
   }));
-  row.appendChild(actionBtn("close", "Cancelled", async () => {
-    await safeUpdate(ctx, item, { status: "cancelled" }, "Cancelled");
+  row.appendChild(actionBtn("close", t("mobile.detail.action.cancelled"), async () => {
+    await safeUpdate(ctx, item, { status: "cancelled" }, t("mobile.detail.action.markedCancelled"));
   }));
   if (showDefer) row.appendChild(deferBtn(ctx, item));
   return row;
@@ -240,7 +240,7 @@ function deferBtn(ctx, item) {
     },
   },
     el("span", { class: "material-symbols-outlined", text: "schedule" }),
-    el("span", { text: "Defer" }),
+    el("span", { text: t("mobile.detail.action.defer") }),
   );
   const picker = el("div", { class: "vy-mobile-defer-picker" });
   for (const mins of [30, 60]) {
@@ -251,7 +251,7 @@ function deferBtn(ctx, item) {
         wrap.classList.remove("is-open");
         runDefer(ctx, item, mins);
       },
-    }, mins === 60 ? "+1 h" : `+${mins} min`));
+    }, mins === 60 ? t("mobile.detail.defer60") : t("mobile.detail.defer30")));
   }
   wrap.append(btn, picker);
   return wrap;
@@ -275,9 +275,12 @@ async function runDefer(ctx, it, mins) {
   ctx.onSaveStart?.();
   try {
     const collisions = await itemsApi.cascadeDefer(it.id, mins);
-    const base = `Pushed by ${mins === 60 ? "1 hour" : `${mins} min`}`;
+    const amount = mins === 60
+      ? t("mobile.detail.deferOneHour")
+      : t("mobile.detail.deferMin", { n: mins });
+    const base = t("mobile.detail.deferred", { amount });
     ctx.toast?.(collisions > 0
-      ? `${base} · ${collisions} overlap with fixed events`
+      ? t("mobile.detail.deferredCollisions", { base, n: collisions })
       : base);
     await ctx.refresh?.();
   } catch (e) {
@@ -306,8 +309,8 @@ function renderStatusChip(ctx, item) {
       openStatusPicker(ctx, item, chip);
     },
   },
-    el("span", { class: "vy-mobile-detail-status-label", text: "STATUS" }),
-    el("span", { class: "vy-mobile-detail-status-value", text: current.label }),
+    el("span", { class: "vy-mobile-detail-status-label", text: t("mobile.detail.statusLabel") }),
+    el("span", { class: "vy-mobile-detail-status-value", text: t(current.labelKey) }),
     el("span", { class: "material-symbols-outlined", text: "expand_more" }),
   );
   return chip;
@@ -328,12 +331,13 @@ function openStatusPicker(ctx, item, anchor) {
         e.stopPropagation();
         picker.remove();
         if (opt.value === item.status) return;
-        await safeUpdate(ctx, item, { status: opt.value }, `Marked ${opt.label.toLowerCase()}`);
+        await safeUpdate(ctx, item, { status: opt.value },
+          t("mobile.detail.statusMarked", { label: t(opt.labelKey) }));
       },
     },
       el("span", { class: "material-symbols-outlined",
         text: isCurrent ? "check" : "circle" }),
-      el("span", { text: opt.label }),
+      el("span", { text: t(opt.labelKey) }),
     );
     picker.appendChild(row);
   }
@@ -355,12 +359,12 @@ function openStatusPicker(ctx, item, anchor) {
 function renderHighlightToggle(ctx, item) {
   const btn = el("button", {
     class: `vy-mobile-detail-star ${item.is_highlight ? "is-on" : ""}`.trim(),
-    title: item.is_highlight ? "Unhighlight" : "Highlight",
+    title: item.is_highlight ? t("mobile.detail.unhighlight") : t("mobile.detail.highlight"),
     onClick: async (e) => {
       e.stopPropagation();
       await safeUpdate(ctx, item,
         { is_highlight: !item.is_highlight },
-        item.is_highlight ? "Highlight removed" : "Marked highlight");
+        item.is_highlight ? t("mobile.detail.highlightOff") : t("mobile.detail.highlightOn"));
     },
   },
     el("span", { class: "material-symbols-outlined", text: "star" }),

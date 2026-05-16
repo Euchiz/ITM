@@ -4,42 +4,41 @@
 // desktop, or jump to Today.
 
 import { el } from "../_utils.js";
+import { t } from "../../i18n/locale.js";
 
-const PAGE_LABELS = {
-  io:       "Import / Export",
-  map:      "Map",
-  // Mobile-reachable pages won't hit this stub. Anything else gets a
-  // generic label.
+const PAGE_LABEL_KEYS = {
+  io:  "mobile.unavailable.io",
+  map: "mobile.unavailable.map",
 };
 
 export function renderMobileUnavailable(host, ctx) {
-  const page = ctx.page || "this page";
-  const label = PAGE_LABELS[page] || page.replace(/_/g, " ");
+  const page = ctx.page || "";
+  const label = PAGE_LABEL_KEYS[page]
+    ? t(PAGE_LABEL_KEYS[page])
+    : (page ? page.replace(/_/g, " ") : t("mobile.unavailable.fallbackLabel"));
   host.innerHTML = "";
   host.appendChild(
     el("section", { class: "vy-mobile-edge card vy-mobile-unavailable" },
       el("span", { class: "material-symbols-outlined", text: "desktop_mac" }),
-      el("h2", { text: "Page not available on mobile" }),
-      el("p", { class: "muted",
-        text: `"${label}" is part of the desktop planning view. ` +
-              `Open this trip on a desktop browser, or jump to Today.` }),
+      el("h2", { text: t("mobile.unavailable.titleAlt") }),
+      el("p", { class: "muted", text: t("mobile.unavailable.bodyAlt", { label }) }),
       el("div", { class: "vy-mobile-unavailable-actions" },
         el("button", {
           class: "btn",
           onClick: () => {
             try {
               navigator.clipboard?.writeText(location.href);
-              ctx.toast?.("URL copied — open on desktop");
+              ctx.toast?.(t("mobile.unavailable.copied"));
             } catch {}
           },
-        }, "Copy URL"),
+        }, t("mobile.unavailable.copyUrl")),
         el("button", {
           class: "btn primary",
           onClick: () => {
             ctx.setMobileMode?.("travel");
             ctx.navigate?.({ page: "today" });
           },
-        }, "Go to Today"),
+        }, t("mobile.unavailable.goToday")),
       ),
     )
   );

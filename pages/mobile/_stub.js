@@ -7,6 +7,7 @@
 // the user sees they're on mobile and is pointed at desktop.
 
 import { el } from "../_utils.js";
+import { t } from "../../i18n/locale.js";
 
 export function renderMobileStub(host, ctx) {
   const trip = ctx.trip;
@@ -16,26 +17,23 @@ export function renderMobileStub(host, ctx) {
       el("div", { class: "vy-mobile-stub-mark" },
         el("span", { class: "material-symbols-outlined", text: "smartphone" }),
       ),
-      el("h2", { text: "Mobile view in progress" }),
-      el("p", {
-        text: "The mobile experience for Hermes Daybook is being built. " +
-              "For now, please open this trip on a desktop browser."
-      }),
+      el("h2", { text: t("mobile.stub.title") }),
+      el("p", { text: t("mobile.stub.body") }),
       trip ? el("p", { class: "small muted",
-        text: `Trip: ${trip.title || "Untitled trip"}`
+        text: t("mobile.stub.tripLine", { title: trip.title || t("sidebar.untitledTrip") })
       }) : null,
       el("div", { class: "vy-mobile-stub-actions" },
         el("button", { class: "btn ghost",
           onClick: () => {
             try {
               navigator.clipboard?.writeText(location.href);
-              ctx.toast?.("URL copied — open on desktop");
+              ctx.toast?.(t("mobile.unavailable.copied"));
             } catch {}
           },
-        }, "Copy URL"),
+        }, t("mobile.stub.copyUrl")),
         el("button", { class: "btn",
           onClick: () => ctx.navigate?.({ trip: null }),
-        }, "All trips"),
+        }, t("mobile.stub.allTrips")),
       ),
     )
   );

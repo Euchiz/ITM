@@ -15,6 +15,7 @@ import {
   el, debouncedSave, withSaveIndicator, formatMoney,
   parseAmountToCents, centsToAmountText, currencyMinorUnits,
 } from "./_utils.js";
+import { t, getLocale } from "../i18n/locale.js";
 import { TYPE_VISUALS } from "./itinerary.js";
 import { ITEM_TYPES } from "../io/schema.js";
 import { renderFuelBar, renderFuelPill } from "./_components/fuel-bar.js";
@@ -43,7 +44,7 @@ export function renderCosts(host, ctx) {
   host.innerHTML = "";
   const layout = el("div", { class: "vy-budget-layout" });
   const main = el("div", { class: "vy-budget-main" });
-  const rail = el("aside", { class: "vy-budget-rail", "aria-label": "Budget gauge" });
+  const rail = el("aside", { class: "vy-budget-rail", "aria-label": t("budget.gaugeAria") });
   layout.append(main, rail);
   host.appendChild(layout);
   renderFuelBar(rail, ctx);
@@ -52,10 +53,9 @@ export function renderCosts(host, ctx) {
   // ── Page head ─────────────────────────────────────────────────────
   main.appendChild(el("section", { class: "page-head vy-budget-head" },
     el("div", { class: "vy-budget-head-l" },
-      el("h2", { text: "Costs" }),
+      el("h2", { text: t("costs.title") }),
       el("p", { class: "muted", text: view === "update"
-        ? "Log what you actually spent, day by day. Tap Use proposed to confirm a planned price; add unplanned expenses for spends that aren't on the itinerary."
-        : "Trip-wide breakdown of actuals against the plan, with settlement at the bottom when shared." }),
+        ? t("costs.subtitleUpdate") : t("costs.subtitleBreakdown") }),
     ),
     el("div", { class: "vy-budget-head-r" },
       isMobile ? null : viewToggle(),
@@ -87,7 +87,7 @@ export function renderCosts(host, ctx) {
           writeView(v);
           ctx.rerender?.();
         },
-      }, v[0].toUpperCase() + v.slice(1));
+      }, t(`costs.view.${v === "update" ? "update" : "breakdownTab"}`));
       btn.dataset.v = v;
       wrap.appendChild(btn);
     });
@@ -103,8 +103,8 @@ export function renderCosts(host, ctx) {
 
     if (!day) {
       return el("div", { class: "empty-state" },
-        el("h3", { text: "No days yet" }),
-        el("p", { text: "Add a day on Itinerary first." }),
+        el("h3", { text: t("costs.empty.noDays.title") }),
+        el("p", { text: t("costs.empty.noDays.body") }),
       );
     }
 
@@ -112,11 +112,11 @@ export function renderCosts(host, ctx) {
 
     // Day header
     const dateLabel = day.date
-      ? new Date(day.date + "T00:00:00").toLocaleDateString(undefined,
+      ? new Date(day.date + "T00:00:00").toLocaleDateString(getLocale(),
           { weekday: "long", month: "short", day: "numeric" })
-      : `Day ${idx + 1}`;
+      : t("itinerary.day", { n: idx + 1 });
     wrap.appendChild(el("section", { class: "vy-costs-day-head" },
-      el("div", { class: "vy-meta", text: `DAY ${idx + 1} OF ${(trip.days || []).length}` }),
+      el("div", { class: "vy-meta", text: t("costs.dayOf", { n: idx + 1, total: (trip.days || []).length }) }),
       el("h3", { text: dateLabel + (day.city ? ` · ${day.city}` : "") }),
     ));
 
@@ -127,17 +127,16 @@ export function renderCosts(host, ctx) {
 
     const card = el("section", { class: "card vy-costs-card" });
     card.appendChild(el("header", { class: "vy-costs-card-head" },
-      el("h4", { text: "Planned items" }),
+      el("h4", { text: t("costs.plannedItems") }),
       readOnly ? null : el("button", {
         class: "btn primary xs",
         type: "button",
         onClick: () => openUnplannedDialog(day, idx, ctx),
-      }, "+ Add unplanned"),
+      }, t("costs.addUnplanned")),
     ));
 
     if (planned.length === 0) {
-      card.appendChild(el("p", { class: "muted small",
-        text: "No planned items for this day." }));
+      card.appendChild(el("p", { class: "muted small", text: t("costs.noPlannedDay") }));
     } else {
       const list = el("div", { class: "vy-costs-list" });
       planned.forEach((it) => list.appendChild(costRow(it, day)));
@@ -148,7 +147,7 @@ export function renderCosts(host, ctx) {
     if (unplanned.length > 0) {
       const upWrap = el("section", { class: "card vy-costs-card" });
       upWrap.appendChild(el("header", { class: "vy-costs-card-head" },
-        el("h4", { text: "Unplanned spends" }),
+        el("h4", { text: t("costs.unplannedSpends") }),
       ));
       const list = el("div", { class: "vy-costs-list" });
       unplanned.forEach((it) => list.appendChild(costRow(it, day, true)));
@@ -175,18 +174,17 @@ export function renderCosts(host, ctx) {
         el("span", { text: v.label }),
       ),
       el("div", { class: "vy-costs-row-title-wrap" },
-        el("span", { class: "vy-costs-row-title", text: it.title || "(untitled)" }),
+        el("span", { class: "vy-costs-row-title", text: it.title || t("today.untitled") }),
         // Proposed + tag on a sub-line — read-only context for entry.
         !isUnplannedRow ? el("span", { class: "vy-costs-row-sub muted small" },
-          el("span", { text: "Proposed: " }),
+          el("span", { text: t("costs.proposed") }),
           it.proposed_cost_cents != null
             ? el("span", { text: formatMoney(it.proposed_cost_cents, currency) })
-            : el("span", { text: "—" }),
+            : el("span", { text: t("costs.dash") }),
           it.cost_tag
             ? el("span", { class: "vy-costs-sub-tag", text: " · " + (TAG_LABELS[it.cost_tag] || it.cost_tag) })
             : null,
-        ) : el("span", { class: "vy-costs-row-sub muted small",
-            text: "Unplanned expense" }),
+        ) : el("span", { class: "vy-costs-row-sub muted small", text: t("costs.unplannedRow") }),
       ),
     ));
 
@@ -213,13 +211,13 @@ export function renderCosts(host, ctx) {
       class: "vy-costs-use-proposed",
       type: "button",
       disabled: readOnly,
-      title: "Set actual = proposed and tag as actual",
+      title: t("costs.useProposedTitle"),
     });
     function refreshUseBtn() {
       const canUse = it.proposed_cost_cents != null && it.actual_cost_cents == null;
       useBtn.hidden = !canUse;
       if (canUse) {
-        useBtn.textContent = `↩ Use ${formatMoney(it.proposed_cost_cents, currency)}`;
+        useBtn.textContent = t("costs.useProposedLabel", { amount: formatMoney(it.proposed_cost_cents, currency) });
       }
     }
     refreshUseBtn();
@@ -232,8 +230,8 @@ export function renderCosts(host, ctx) {
 
     // Glyph adornments
     const adorn = el("div", { class: "vy-budget-row-adorn" });
-    if (hasShares) adorn.appendChild(el("span", { class: "vy-budget-glyph", title: "Custom split", text: "✂" }));
-    const warnEl = el("span", { class: "vy-budget-glyph is-warn", title: "Split actual doesn't match", text: "⚠" });
+    if (hasShares) adorn.appendChild(el("span", { class: "vy-budget-glyph", title: t("budget.customSplit"), text: "✂" }));
+    const warnEl = el("span", { class: "vy-budget-glyph is-warn", title: t("costs.splitActualMismatch"), text: "⚠" });
     warnEl.hidden = !splitActualMismatch(it);
     adorn.appendChild(warnEl);
     inputs.appendChild(adorn);
@@ -303,39 +301,40 @@ function openUnplannedDialog(day, dayIdx, ctx) {
   dlg.className = "settings-dialog vy-unplanned-dialog no-print";
   dlg.innerHTML = `
     <form method="dialog">
-      <h3>Add unplanned expense</h3>
+      <h3>${t("costs.addUnplannedTitle")}</h3>
       <p class="muted small">
-        For day ${dayIdx + 1}${day.date ? " · " + day.date : ""}. The item
-        is flagged as unplanned and tagged as <b>actual</b> by default —
-        edit the title and type as you like.
+        ${t("costs.addUnplannedHelp", {
+          dayIdx: dayIdx + 1,
+          dateSuffix: day.date ? " · " + day.date : "",
+        })}
       </p>
-      <label>Title
+      <label>${t("costs.field.title")}
         <input id="upTitle" type="text" required maxlength="120"
-               placeholder="e.g. Coffee at the station">
+               placeholder="${t("costs.field.titlePlaceholder")}">
       </label>
-      <label>Type
+      <label>${t("costs.field.type")}
         <select id="upType">
-          ${ITEM_TYPES.map((t) => {
-            const label = (TYPE_VISUALS[t]?.label || t).toLowerCase();
-            const sel = t === "shopping" ? "selected" : "";
-            return `<option value="${t}" ${sel}>${label}</option>`;
+          ${ITEM_TYPES.map((type) => {
+            const label = (TYPE_VISUALS[type]?.label || type).toLowerCase();
+            const sel = type === "shopping" ? "selected" : "";
+            return `<option value="${type}" ${sel}>${label}</option>`;
           }).join("")}
         </select>
       </label>
       <div class="new-trip-dates">
-        <label>Amount
+        <label>${t("costs.field.amount")}
           <input id="upAmount" type="number" min="0" step="any"
                  placeholder="${currencyMinorUnits(defaultCurrency) === 0 ? "0" : "0.00"}">
         </label>
-        <label>Currency
+        <label>${t("costs.field.currency")}
           <input id="upCurrency" type="text" maxlength="3"
                  value="${defaultCurrency}" style="text-transform:uppercase">
         </label>
       </div>
       <p id="upStatus" class="auth-status muted small" hidden></p>
       <menu>
-        <button value="cancel">Cancel</button>
-        <button id="upSubmit" value="save" type="submit" class="primary">Add</button>
+        <button value="cancel">${t("costs.cancel")}</button>
+        <button id="upSubmit" value="save" type="submit" class="primary">${t("costs.add")}</button>
       </menu>
     </form>
   `;
@@ -368,7 +367,7 @@ function openUnplannedDialog(day, dayIdx, ctx) {
       });
       await ctx.refresh?.();
     } catch (e) {
-      ctx.toast?.("Could not add: " + (e.message || e), true);
+      ctx.toast?.(t("costs.addFailed", { error: e.message || e }), true);
     } finally {
       ctx.onSaveDone?.();
       dlg.remove();
@@ -479,14 +478,14 @@ function greedySettle(netMap) {
 function renderSettlement(settlement, trip) {
   const wrap = el("section", { class: "card vy-settlement" });
   wrap.appendChild(el("header", { class: "vy-settlement-head" },
-    el("h3", { text: "Settlement" }),
-    el("span", { class: "muted small", text: "Who owes who at trip end" }),
+    el("h3", { text: t("costs.settlement.title") }),
+    el("span", { class: "muted small", text: t("costs.settlement.subtitle") }),
   ));
 
   const membersById = Object.fromEntries((trip.members || []).map((m) => [m.user_id, m]));
   const nameFor = (uid) => {
     const m = membersById[uid];
-    return m?.display_name || m?.email || "Former member";
+    return m?.display_name || m?.email || t("costs.settlement.formerMember");
   };
 
   settlement.perCurrency.forEach((edges, code) => {
@@ -505,7 +504,7 @@ function renderSettlement(settlement, trip) {
     });
     block.appendChild(list);
     block.appendChild(el("div", { class: "vy-settlement-total muted small",
-      text: `Total to settle: ${formatMoney(total, code)}` }));
+      text: t("costs.settlement.total", { amount: formatMoney(total, code) }) }));
     wrap.appendChild(block);
   });
 
@@ -526,7 +525,7 @@ function splitActualMismatch(it) {
 
 function currencySymbol(code) {
   try {
-    const fmt = new Intl.NumberFormat(undefined, {
+    const fmt = new Intl.NumberFormat(getLocale(), {
       style: "currency", currency: (code || "USD").toUpperCase(),
       currencyDisplay: "narrowSymbol",
     });

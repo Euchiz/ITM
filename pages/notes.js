@@ -11,22 +11,22 @@ import {
   el, debouncedSave, autosize, withSaveIndicator,
   formatRelativeTime, memberName,
 } from "./_utils.js";
+import { t } from "../i18n/locale.js";
 
 export function renderNotes(host, ctx) {
-  const t = ctx.trip;
+  const trip = ctx.trip;
   const readOnly = ctx.role === "viewer";
 
-  const list = (t.notes || []).slice().sort((a, b) => a.sort_order - b.sort_order);
+  const list = (trip.notes || []).slice().sort((a, b) => a.sort_order - b.sort_order);
 
   const cardsHost = el("div", { class: "notes-list" });
 
   host.appendChild(
     el("section", { class: "page-head" },
-      el("h2", { text: "Notes" }),
-      el("p", { class: "muted",
-        text: "Free-form notes the whole trip should know — food preferences, document locations, emergency contacts." }),
+      el("h2", { text: t("notes.title") }),
+      el("p", { class: "muted", text: t("notes.subtitleAlt") }),
       !readOnly
-        ? el("button", { class: "btn primary", onClick: () => addDraftNote() }, "+ Add note")
+        ? el("button", { class: "btn primary", onClick: () => addDraftNote() }, t("notes.addBtn"))
         : null,
     )
   );
@@ -40,8 +40,8 @@ export function renderNotes(host, ctx) {
 
   function emptyHint() {
     return el("div", { class: "empty-state notes-empty" },
-      el("h3", { text: "No notes yet" }),
-      el("p", { text: readOnly ? "Nothing here." : "Click + Add note to start." }),
+      el("h3", { text: t("notes.empty.title") }),
+      el("p", { text: readOnly ? t("notes.empty.bodyReadOnly") : t("notes.empty.bodyEdit") }),
     );
   }
 
@@ -59,14 +59,14 @@ export function renderNotes(host, ctx) {
     const wrap = el("section", { class: "card note-card" });
 
     const titleInput = el("input", {
-      type: "text", value: n.title || "", placeholder: "Note title",
+      type: "text", value: n.title || "", placeholder: t("notes.titlePlaceholder"),
       class: "note-title-input", disabled: readOnly,
     });
     titleInput.addEventListener("input", () => save({ title: titleInput.value }));
 
     const bodyTa = el("textarea", {
       class: "block-edit-input note-body",
-      placeholder: "Write the note…",
+      placeholder: t("notes.bodyPlaceholder"),
       disabled: readOnly, rows: 3,
     });
     bodyTa.value = n.body || "";
@@ -80,7 +80,9 @@ export function renderNotes(host, ctx) {
     const when   = formatRelativeTime(n.created_at);
     const attribution = author
       ? el("p", { class: "note-attribution muted small",
-          text: when ? `Added by ${author} · ${when}` : `Added by ${author}` })
+          text: when
+            ? t("notes.attribution", { who: author, when })
+            : t("notes.attributionNoWhen", { who: author }) })
       : null;
 
     wrap.append(
@@ -89,15 +91,15 @@ export function renderNotes(host, ctx) {
         !readOnly
           ? el("button", {
               class: "icon-btn danger",
-              title: "Delete note",
+              title: t("notes.deleteTooltip"),
               onClick: async () => {
-                if (!confirm("Delete this note?")) return;
+                if (!confirm(t("notes.confirmDelete2"))) return;
                 ctx.onSaveStart?.();
                 try {
                   await notes.remove(n.id);
                   await ctx.refresh();
                 } catch (e) {
-                  alert("Delete failed: " + e.message);
+                  alert(t("notes.deleteFailed", { error: e.message }));
                 } finally {
                   ctx.onSaveDone?.();
                 }
@@ -126,15 +128,15 @@ export function renderNotes(host, ctx) {
     clearEmptyHint();
 
     const wrap = el("section", { class: "card note-card draft" });
-    let row = null; // becomes set once promoted
+    let row = null;
 
     const titleInput = el("input", {
-      type: "text", value: "", placeholder: "Note title",
+      type: "text", value: "", placeholder: t("notes.titlePlaceholder"),
       class: "note-title-input",
     });
     const bodyTa = el("textarea", {
       class: "block-edit-input note-body",
-      placeholder: "Write the note…",
+      placeholder: t("notes.bodyPlaceholder"),
       rows: 3,
     });
     setTimeout(() => autosize(bodyTa), 0);
@@ -149,18 +151,16 @@ export function renderNotes(host, ctx) {
       pendingPromotion = true;
       ctx.onSaveStart?.();
       try {
-        row = await notes.add(t.id, {
+        row = await notes.add(trip.id, {
           title, body,
-          sort_order: (t.notes?.length || 0),
+          sort_order: (trip.notes?.length || 0),
         });
-        // Mirror the new row into the in-memory trip so subsequent
-        // refreshes reconcile cleanly.
-        (t.notes ||= []).push(row);
+        (trip.notes ||= []).push(row);
         wrap.classList.remove("draft");
       } catch (e) {
-        alert("Could not save note: " + e.message);
+        alert(t("notes.draftSaveFailed", { error: e.message }));
         wrap.remove();
-        if ((t.notes?.length || 0) === 0) cardsHost.appendChild(emptyHint());
+        if ((trip.notes?.length || 0) === 0) cardsHost.appendChild(emptyHint());
       } finally {
         pendingPromotion = false;
         ctx.onSaveDone?.();
@@ -171,7 +171,7 @@ export function renderNotes(host, ctx) {
       ctx.onSaveStart?.();
       notes.update(row.id, patch)
         .then(() => Object.assign(row, patch))
-        .catch((e) => alert("Save failed: " + e.message))
+        .catch((e) => alert(t("notes.saveFailed", { error: e.message })))
         .finally(() => ctx.onSaveDone?.());
     };
     const debouncedExisting = debounce(saveExisting, 700);
@@ -188,23 +188,22 @@ export function renderNotes(host, ctx) {
 
     const discardBtn = el("button", {
       class: "icon-btn danger",
-      title: "Delete note",
+      title: t("notes.deleteTooltip"),
       onClick: async () => {
         if (row) {
-          if (!confirm("Delete this note?")) return;
+          if (!confirm(t("notes.confirmDelete2"))) return;
           ctx.onSaveStart?.();
           try {
             await notes.remove(row.id);
             await ctx.refresh();
           } catch (e) {
-            alert("Delete failed: " + e.message);
+            alert(t("notes.deleteFailed", { error: e.message }));
           } finally {
             ctx.onSaveDone?.();
           }
         } else {
-          // Draft only — discard locally.
           wrap.remove();
-          if ((t.notes?.length || 0) === 0) cardsHost.appendChild(emptyHint());
+          if ((trip.notes?.length || 0) === 0) cardsHost.appendChild(emptyHint());
         }
       },
     }, "✕");
@@ -219,9 +218,9 @@ export function renderNotes(host, ctx) {
 }
 
 function debounce(fn, ms) {
-  let t = null;
+  let timer = null;
   return (...args) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...args), ms);
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), ms);
   };
 }

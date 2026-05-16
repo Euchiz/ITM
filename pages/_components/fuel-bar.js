@@ -15,6 +15,7 @@
 // any keystroke that mutates state.trip can re-call this synchronously.
 
 import { el, formatMoney } from "../_utils.js";
+import { t, getLocale } from "../../i18n/locale.js";
 import { trips } from "../../supabase.js";
 
 /** Render the fuel bar inside `host`. Returns the host (for chaining).
@@ -31,14 +32,14 @@ export function renderFuelBar(host, ctx) {
     // Empty-state: small CTA to set a target. Owner sees the button;
     // viewers / editors see a muted hint.
     host.appendChild(el("div", { class: "vy-fuel-empty" },
-      el("span", { class: "vy-meta", text: "BUDGET TARGET" }),
+      el("span", { class: "vy-meta", text: t("fuel.budgetTarget") }),
       trip.role === "owner"
         ? el("button", {
             class: "btn ghost xs",
             type: "button",
             onClick: () => openSetTargetDialog(trip, ctx),
-          }, "+ Set target")
-        : el("span", { class: "muted small", text: "Owner hasn't set a target yet." }),
+          }, t("fuel.setTarget"))
+        : el("span", { class: "muted small", text: t("fuel.ownerNotSet") }),
     ));
     return host;
   }
@@ -62,7 +63,7 @@ export function renderFuelBar(host, ctx) {
   // Top label — used / of target / percent
   rail.appendChild(el("div", { class: "vy-fuel-top" },
     el("div", { class: "vy-fuel-used", text: formatMoney(usedCents, currency) }),
-    el("div", { class: "vy-fuel-target", text: `of ${formatMoney(target, currency)}` }),
+    el("div", { class: "vy-fuel-target", text: t("fuel.ofTarget", { amount: formatMoney(target, currency) }) }),
     el("div", { class: "vy-fuel-pct", text: `${Math.round(pct)}%` }),
   ));
 
@@ -76,8 +77,8 @@ export function renderFuelBar(host, ctx) {
   // Bottom label — remaining / over
   rail.appendChild(el("div", { class: "vy-fuel-bot" },
     overspend > 0
-      ? el("span", { class: "vy-fuel-over", text: `${formatMoney(overspend, currency)} over` })
-      : el("span", { class: "vy-fuel-remaining", text: `${formatMoney(remaining, currency)} left` }),
+      ? el("span", { class: "vy-fuel-over", text: t("fuel.over", { amount: formatMoney(overspend, currency) }) })
+      : el("span", { class: "vy-fuel-remaining", text: t("fuel.left", { amount: formatMoney(remaining, currency) }) }),
   ));
 
   // Multi-currency tail — chips for any non-default currency totals.
@@ -114,7 +115,7 @@ export function renderFuelPill(host, ctx) {
 
   host.appendChild(el("button", {
     class: "vy-fuel-pill", "data-tier": tier, type: "button",
-    title: `${formatMoney(used, currency)} of ${formatMoney(target, currency)} (${Math.round(pct)}%)`,
+    title: t("fuel.pillTitle", { used: formatMoney(used, currency), target: formatMoney(target, currency), pct: Math.round(pct) }),
   },
     el("span", { text: `${formatMoney(used, currency)} / ${formatMoney(target, currency)}` }),
     el("span", { class: "vy-fuel-pill-pct", text: `${Math.round(pct)}%` }),
@@ -175,25 +176,21 @@ function openSetTargetDialog(trip, ctx) {
   dlg.className = "settings-dialog vy-fuel-dialog no-print";
   dlg.innerHTML = `
     <form method="dialog">
-      <h3>Set budget target</h3>
-      <p class="muted small">
-        Set an overall spending target for this trip. The fuel bar
-        compares your projected spend against this number. Leave blank
-        to clear an existing target.
-      </p>
-      <label>Currency
+      <h3>${t("fuel.dialog.title")}</h3>
+      <p class="muted small">${t("fuel.dialog.help")}</p>
+      <label>${t("fuel.dialog.currency")}
         <input id="fuelDlgCurrency" type="text" maxlength="3"
                value="${(trip.default_currency || "USD").toUpperCase()}"
                style="text-transform:uppercase">
       </label>
-      <label>Target amount
+      <label>${t("fuel.dialog.amount")}
         <input id="fuelDlgTarget" type="number" min="0" step="any"
-               placeholder="e.g. 5000">
+               placeholder="${t("fuel.dialog.placeholder")}">
       </label>
       <menu>
-        <button value="cancel">Cancel</button>
-        <button value="clear" type="submit">Clear target</button>
-        <button value="save" type="submit" class="primary">Save</button>
+        <button value="cancel">${t("fuel.dialog.cancel")}</button>
+        <button value="clear" type="submit">${t("fuel.dialog.clear")}</button>
+        <button value="save" type="submit" class="primary">${t("fuel.dialog.save")}</button>
       </menu>
     </form>
   `;
@@ -213,7 +210,7 @@ function openSetTargetDialog(trip, ctx) {
         trip.budget_target_cents = target;
         ctx.rerender?.();
       } catch (e) {
-        ctx.toast?.("Could not save budget: " + (e.message || e), true);
+        ctx.toast?.(t("fuel.saveFailed", { error: e.message || e }), true);
       }
     } else if (action === "clear") {
       try {
@@ -221,7 +218,7 @@ function openSetTargetDialog(trip, ctx) {
         trip.budget_target_cents = null;
         ctx.rerender?.();
       } catch (e) {
-        ctx.toast?.("Could not clear budget: " + (e.message || e), true);
+        ctx.toast?.(t("fuel.clearFailed", { error: e.message || e }), true);
       }
     }
     dlg.remove();
@@ -230,7 +227,7 @@ function openSetTargetDialog(trip, ctx) {
 
 function minorUnits(code) {
   try {
-    return new Intl.NumberFormat(undefined, {
+    return new Intl.NumberFormat(getLocale(), {
       style: "currency", currency: code,
     }).resolvedOptions().maximumFractionDigits ?? 2;
   } catch { return 2; }

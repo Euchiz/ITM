@@ -14,6 +14,7 @@
 // survives navigation.
 
 import { el, formatMoney } from "../_utils.js";
+import { t, getLocale } from "../../i18n/locale.js";
 import { TYPE_VISUALS } from "../itinerary.js";
 import { ITEM_TYPES } from "../../io/schema.js";
 
@@ -47,16 +48,15 @@ export function renderBreakdown(host, ctx) {
   // Empty state — no items or no costs at all
   if (items.length === 0) {
     host.appendChild(el("div", { class: "empty-state vy-bd-empty" },
-      el("h3", { text: "Nothing to break down" }),
-      el("p", { text: "Add events on Itinerary and assign costs in Edit mode." }),
+      el("h3", { text: t("breakdown.empty.title") }),
+      el("p", { text: t("breakdown.empty.body") }),
     ));
     return host;
   }
   const anyCost = items.some((it) =>
     it.proposed_cost_cents != null || it.actual_cost_cents != null);
   if (!anyCost) {
-    host.appendChild(el("p", { class: "muted vy-bd-hint",
-      text: "No costs entered yet. Switch to Edit mode to add proposed amounts." }));
+    host.appendChild(el("p", { class: "muted vy-bd-hint", text: t("breakdown.noCosts") }));
     return host;
   }
 
@@ -80,8 +80,7 @@ export function renderBreakdown(host, ctx) {
       byCode.get(code).push(it);
     }
     const wrap = el("div", { class: "vy-bd-overrides" });
-    wrap.appendChild(el("h3", { class: "vy-bd-overrides-head",
-      text: "Other currencies" }));
+    wrap.appendChild(el("h3", { class: "vy-bd-overrides-head", text: t("breakdown.otherCurrencies") }));
     byCode.forEach((items, code) => {
       wrap.appendChild(renderSection(items, code, bucketBy, donutMode, { withDonut: false }));
     });
@@ -110,10 +109,10 @@ function renderSection(items, currency, bucketBy, donutMode, { withDonut = true 
     a + (Number(it.actual_cost_cents) || 0), 0);
   head.appendChild(el("span", { class: "vy-bd-section-totals" },
     el("span", { class: "muted small",
-      text: `Proposed ${formatMoney(proposedTotal, currency)}` }),
+      text: t("breakdown.proposedTotal", { amount: formatMoney(proposedTotal, currency) }) }),
     actualTotal > 0
       ? el("span", { class: "muted small",
-          text: `· Actual ${formatMoney(actualTotal, currency)}` })
+          text: t("breakdown.actualTotal", { amount: formatMoney(actualTotal, currency) }) })
       : null,
   ));
   section.appendChild(head);
@@ -191,7 +190,7 @@ function renderDonut(slices, total, currency, donutMode) {
     el("div", { class: "vy-bd-donut-amount",
       text: formatMoney(total, currency) }),
     el("div", { class: "vy-bd-donut-label",
-      text: donutMode === "actual" ? "ACTUAL" : "PROPOSED" }),
+      text: donutMode === "actual" ? t("breakdown.donutActual") : t("breakdown.donutProposed") }),
   ));
   return wrap;
 }
@@ -210,7 +209,9 @@ function renderBucketRow(b, currency) {
     if (delta !== 0) {
       top.appendChild(el("span", {
         class: "vy-bd-variance " + (delta > 0 ? "is-over" : "is-under"),
-        text: `${delta > 0 ? "+" : "−"}${formatMoney(Math.abs(delta), currency)} ${delta > 0 ? "over" : "under"}`,
+        text: delta > 0
+          ? t("breakdown.varianceOver", { amount: formatMoney(Math.abs(delta), currency) })
+          : t("breakdown.varianceUnder", { amount: formatMoney(Math.abs(delta), currency) }),
       }));
     }
   }
@@ -219,10 +220,10 @@ function renderBucketRow(b, currency) {
   // Two bars stacked, normalized against bucket max
   const denom = Math.max(b.proposed, b.actual) || 1;
   if (b.proposed > 0) {
-    row.appendChild(barLine("Proposed", b.proposed, denom, currency, b.color, true));
+    row.appendChild(barLine(t("breakdown.barProposed"), b.proposed, denom, currency, b.color, true));
   }
   if (b.actual > 0) {
-    row.appendChild(barLine("Actual", b.actual, denom, currency, b.color, false));
+    row.appendChild(barLine(t("breakdown.barActual"), b.actual, denom, currency, b.color, false));
   }
 
   return row;
@@ -262,7 +263,7 @@ function bucketToggle(host, current) {
         const ctx = host.__bdCtx;
         if (ctx) renderBreakdown(host, ctx);
       },
-    }, "By " + v);
+    }, v === "category" ? t("breakdown.bucketByCategory") : t("breakdown.bucketByDay"));
     btn.dataset.v = v;
     wrap.appendChild(btn);
   });
@@ -289,12 +290,12 @@ function computeBuckets(items, bucketBy) {
       if (!buckets.has(key)) {
         const d = it._day;
         const dateLabel = d.date
-          ? new Date(d.date + "T00:00:00").toLocaleDateString(undefined,
+          ? new Date(d.date + "T00:00:00").toLocaleDateString(getLocale(),
               { weekday: "short", month: "short", day: "numeric" })
-          : `Day ${it._dayIdx + 1}`;
+          : t("itinerary.day", { n: it._dayIdx + 1 });
         buckets.set(key, {
           key,
-          label: `DAY ${it._dayIdx + 1} · ${dateLabel}`.toUpperCase(),
+          label: `${t("itinerary.day", { n: it._dayIdx + 1 })} · ${dateLabel}`.toUpperCase(),
           chipClass: "stay",
           glyph: "calendar_month",
           color: DAY_COLORS[it._dayIdx % DAY_COLORS.length],

@@ -15,6 +15,7 @@ import {
   el, debouncedSave, withSaveIndicator, formatMoney,
   parseAmountToCents, centsToAmountText, currencyMinorUnits,
 } from "./_utils.js";
+import { t, plural, getLocale } from "../i18n/locale.js";
 import { TYPE_VISUALS } from "./itinerary.js";
 import { ITEM_TYPES } from "../io/schema.js";
 import { renderFuelBar, renderFuelPill } from "./_components/fuel-bar.js";
@@ -26,24 +27,24 @@ const FILTER_KEY   = "voyage:budget-filter";
 const VIEW_OPTIONS  = ["edit", "breakdown"];
 const GROUP_OPTIONS = ["day", "category"];
 
-// Filter modes — used by the dropdown next to the group toggle.
-// "review" = unassigned + guessing (everything that still needs a
-// human decision on the cost). The other options narrow further.
+// Filter modes — used by the dropdown next to the group toggle. Labels
+// resolve via t() at render time so a locale switch retranslates the
+// dropdown without rebuilding the array.
 const FILTER_OPTIONS = [
-  { value: "all",        label: "All items" },
-  { value: "unassigned", label: "Unassigned only" },
-  { value: "guessing",   label: "Guessing only" },
-  { value: "review",     label: "Needs review · unassigned + guessing" },
+  { value: "all",        labelKey: "budget.filter.all" },
+  { value: "unassigned", labelKey: "budget.filter.unassigned" },
+  { value: "guessing",   labelKey: "budget.filter.guessing" },
+  { value: "review",     labelKey: "budget.filter.review" },
 ];
 
 // Tag picker entries. NULL = "unassigned" — the default for items that
 // haven't been considered yet; surfaced by the filter dropdown.
 const TAG_OPTIONS = [
-  { value: "",         label: "Unassigned" },  // empty-string in <option>, mapped to null on save
-  { value: "n_a",      label: "N/A · free"     },
-  { value: "guessing", label: "Guessing"       },
-  { value: "approx",   label: "Approx"         },
-  { value: "actual",   label: "Actual"         },
+  { value: "",         labelKey: "budget.tag.unassigned" },
+  { value: "n_a",      labelKey: "budget.tag.na" },
+  { value: "guessing", labelKey: "budget.tag.guessing" },
+  { value: "approx",   labelKey: "budget.tag.approx" },
+  { value: "actual",   labelKey: "budget.tag.actual" },
 ];
 
 export function renderBudget(host, ctx) {
@@ -62,7 +63,7 @@ export function renderBudget(host, ctx) {
   host.innerHTML = "";
   const layout = el("div", { class: "vy-budget-layout" });
   const main = el("div", { class: "vy-budget-main" });
-  const rail = el("aside", { class: "vy-budget-rail", "aria-label": "Budget gauge" });
+  const rail = el("aside", { class: "vy-budget-rail", "aria-label": t("budget.gaugeAria") });
   layout.append(main, rail);
   host.appendChild(layout);
   renderFuelBar(rail, ctx);
@@ -72,11 +73,9 @@ export function renderBudget(host, ctx) {
   // ── Page head ─────────────────────────────────────────────────────
   const head = el("section", { class: "page-head vy-budget-head" },
     el("div", { class: "vy-budget-head-l" },
-      el("h2", { text: "Budget" }),
+      el("h2", { text: t("budget.title") }),
       el("p", { class: "muted", text: view === "edit"
-        ? "Enter the proposed cost for each event. Add a tag to track confidence. " +
-          "Custom-split is optional — by default events are split evenly across travelers at view time."
-        : "Trip-wide breakdown of proposed vs actual spending. Donut and bar list ship soon." }),
+        ? t("budget.subtitleEdit") : t("budget.subtitleBreakdown") }),
     ),
     // Render the edit-only controls FIRST and the view toggle LAST so
     // the view toggle stays pinned to the right edge regardless of
@@ -123,7 +122,7 @@ export function renderBudget(host, ctx) {
           writeView(v);
           ctx.rerender?.();
         },
-      }, v[0].toUpperCase() + v.slice(1));
+      }, t(`budget.view.${v}`));
       btn.dataset.v = v;
       wrap.appendChild(btn);
     });
@@ -141,7 +140,7 @@ export function renderBudget(host, ctx) {
           writeGroup(v);
           ctx.rerender?.();
         },
-      }, "By " + v);
+      }, t("budget.groupByPrefix", { grouping: t(`budget.group.${v}`) }));
       btn.dataset.v = v;
       wrap.appendChild(btn);
     });
@@ -150,10 +149,10 @@ export function renderBudget(host, ctx) {
 
   function filterSelectEl() {
     const lbl = el("label", { class: "vy-budget-filter" });
-    lbl.appendChild(el("span", { class: "vy-budget-filter-label", text: "Filter" }));
+    lbl.appendChild(el("span", { class: "vy-budget-filter-label", text: t("budget.filterLabel") }));
     const sel = el("select", { class: "vy-budget-filter-select" });
     FILTER_OPTIONS.forEach((opt) => {
-      const o = el("option", { value: opt.value, text: opt.label });
+      const o = el("option", { value: opt.value, text: t(opt.labelKey) });
       if (opt.value === filterMode) o.setAttribute("selected", "");
       sel.appendChild(o);
     });
@@ -171,11 +170,11 @@ export function renderBudget(host, ctx) {
 
     if (!trip.days?.length) {
       wrap.appendChild(el("div", { class: "empty-state" },
-        el("h3", { text: "No items yet" }),
-        el("p", { text: "Add events on Itinerary first, then come back to assign costs." }),
+        el("h3", { text: t("budget.empty.noDays.title") }),
+        el("p", { text: t("budget.empty.noDays.body") }),
         el("div", { class: "actions" },
           el("button", { class: "btn", onClick: () => ctx.navigate?.({ page: "itinerary" }) },
-            "Go to Itinerary →"),
+            t("budget.empty.goToItinerary")),
         ),
       ));
       return wrap;
@@ -193,8 +192,8 @@ export function renderBudget(host, ctx) {
 
     if (flat.length === 0) {
       wrap.appendChild(el("div", { class: "empty-state" },
-        el("h3", { text: "No planned items" }),
-        el("p", { text: "Once you add events on the Itinerary, they'll appear here for cost entry." }),
+        el("h3", { text: t("budget.empty.noPlanned.title") }),
+        el("p", { text: t("budget.empty.noPlanned.body") }),
       ));
       return wrap;
     }
@@ -225,15 +224,15 @@ export function renderBudget(host, ctx) {
 
   function dayGroup(day, di, items) {
     const dateLabel = day.date
-      ? new Date(day.date + "T00:00:00").toLocaleDateString(undefined,
+      ? new Date(day.date + "T00:00:00").toLocaleDateString(getLocale(),
           { weekday: "short", month: "short", day: "numeric" })
-      : "Set date";
-    const heading = `Day ${di + 1} · ${dateLabel}${day.city ? " · " + day.city : ""}`;
+      : t("budget.day.setDate");
+    const heading = `${t("itinerary.day", { n: di + 1 })} · ${dateLabel}${day.city ? " · " + day.city : ""}`;
 
     const group = el("section", { class: "vy-budget-day card" });
     group.appendChild(el("header", { class: "vy-budget-day-head" },
       el("span", { class: "vy-meta", text: heading.toUpperCase() }),
-      el("span", { class: "muted small", text: `${items.length} item${items.length === 1 ? "" : "s"}` }),
+      el("span", { class: "muted small", text: plural("budget.day.itemCount", items.length, { n: items.length }) }),
     ));
     const list = el("div", { class: "vy-budget-day-list" });
     items.forEach((it) => list.appendChild(budgetRow(it, day, di)));
@@ -300,7 +299,7 @@ export function renderBudget(host, ctx) {
     // Tag dropdown
     const tagSel = el("select", { class: "vy-budget-tag", disabled: readOnly });
     TAG_OPTIONS.forEach((opt) => {
-      const o = el("option", { value: opt.value, text: opt.label });
+      const o = el("option", { value: opt.value, text: t(opt.labelKey) });
       if ((it.cost_tag || "") === opt.value) o.setAttribute("selected", "");
       tagSel.appendChild(o);
     });
@@ -313,16 +312,16 @@ export function renderBudget(host, ctx) {
       splitToggle = el("button", {
         class: "vy-budget-split-toggle",
         type: "button",
-        title: "Custom split",
+        title: t("budget.customSplit"),
         disabled: readOnly,
-      }, "Custom split ▾");
+      }, t("budget.customSplitOpen"));
       inputs.appendChild(splitToggle);
     }
 
     // Adornments: ✂ if shares exist, ⚠ if split-sum mismatch
     const adorn = el("div", { class: "vy-budget-row-adorn" });
-    if (hasShares) adorn.appendChild(el("span", { class: "vy-budget-glyph", title: "Custom split", text: "✂" }));
-    const warnEl = el("span", { class: "vy-budget-glyph is-warn", title: "Split total doesn't match proposed", text: "⚠" });
+    if (hasShares) adorn.appendChild(el("span", { class: "vy-budget-glyph", title: t("budget.customSplit"), text: "✂" }));
+    const warnEl = el("span", { class: "vy-budget-glyph is-warn", title: t("budget.splitMismatch"), text: "⚠" });
     warnEl.hidden = !splitMismatch(it);
     adorn.appendChild(warnEl);
     inputs.appendChild(adorn);
@@ -374,7 +373,7 @@ export function renderBudget(host, ctx) {
           const stillHasShares = (it.shares || []).length > 0;
           const adorned = adorn.querySelector("span:not(.is-warn)");
           if (stillHasShares && !adorned) {
-            adorn.insertBefore(el("span", { class: "vy-budget-glyph", title: "Custom split", text: "✂" }), warnEl);
+            adorn.insertBefore(el("span", { class: "vy-budget-glyph", title: t("budget.customSplit"), text: "✂" }), warnEl);
           } else if (!stillHasShares && adorned) {
             adorned.remove();
           }
@@ -382,7 +381,7 @@ export function renderBudget(host, ctx) {
         }, readOnly, ctx); built = true; }
         const willShow = splitPanel.hidden;
         splitPanel.hidden = !willShow;
-        splitToggle.textContent = willShow ? "Custom split ▴" : "Custom split ▾";
+        splitToggle.textContent = willShow ? t("budget.customSplitClose") : t("budget.customSplitOpen");
       });
     }
 
@@ -436,7 +435,7 @@ function splitMismatch(it) {
 
 function currencySymbol(code) {
   try {
-    const fmt = new Intl.NumberFormat(undefined, {
+    const fmt = new Intl.NumberFormat(getLocale(), {
       style: "currency", currency: (code || "USD").toUpperCase(),
       currencyDisplay: "narrowSymbol",
     });
@@ -501,7 +500,7 @@ function buildSplitPanel(panel, it, trip, currency, onChanged, readOnly, ctx) {
   const members = trip.members || [];
   if (members.length < 2) {
     panel.appendChild(el("p", { class: "muted small",
-      text: "Solo trip — splits aren't needed." }));
+      text: t("budget.split.solo") }));
     return;
   }
 
@@ -510,14 +509,14 @@ function buildSplitPanel(panel, it, trip, currency, onChanged, readOnly, ctx) {
   const sharesByUser = new Map((it.shares || []).map((s) => [s.user_id, { ...s }]));
 
   const head = el("header", { class: "vy-split-head" },
-    el("span", { class: "muted small", text: "Split among travelers" }),
+    el("span", { class: "muted small", text: t("budget.split.among") }),
     el("div", { class: "vy-split-actions" },
       el("button", { class: "btn ghost xs", type: "button",
         disabled: readOnly,
-        onClick: () => evenSplit() }, "Even split"),
+        onClick: () => evenSplit() }, t("budget.split.even")),
       el("button", { class: "btn ghost xs", type: "button",
         disabled: readOnly,
-        onClick: () => resetSplit() }, "Reset"),
+        onClick: () => resetSplit() }, t("budget.split.reset")),
     ),
   );
   panel.appendChild(head);
@@ -530,7 +529,7 @@ function buildSplitPanel(panel, it, trip, currency, onChanged, readOnly, ctx) {
   members.forEach((m) => {
     const r = el("label", { class: "vy-split-row" });
     r.appendChild(el("span", { class: "vy-split-name",
-      text: m.display_name || m.email || "Member" }));
+      text: m.display_name || m.email || t("budget.split.memberFallback") }));
     const inp = el("input", {
       type: "text",
       inputmode: "decimal",
@@ -550,14 +549,14 @@ function buildSplitPanel(panel, it, trip, currency, onChanged, readOnly, ctx) {
 
   // Paid by picker
   const paidBlock = el("div", { class: "vy-split-paidby" },
-    el("span", { class: "muted small", text: "Paid by" }),
+    el("span", { class: "muted small", text: t("budget.split.paidBy") }),
   );
   const paidSel = el("select", { class: "vy-split-paid-select", disabled: readOnly });
   paidSel.appendChild(el("option", { value: "", text: "— no one yet —" }));
   members.forEach((m) => {
     const o = el("option", {
       value: m.user_id,
-      text: m.display_name || m.email || "Member",
+      text: m.display_name || m.email || t("budget.split.memberFallback"),
     });
     if (it.paid_by === m.user_id) o.setAttribute("selected", "");
     paidSel.appendChild(o);

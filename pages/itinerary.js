@@ -18,20 +18,42 @@ import {
   el, debouncedSave, autosize, withSaveIndicator, formatTime, formatTimeRange,
   formatRelativeTime, memberName, COMMON_CURRENCIES,
 } from "./_utils.js";
+import { t as i18n, plural as i18nPlural, getLocale } from "../i18n/locale.js";
 import { openPrintView } from "./print-view.js";
 
 // Visual mapping for item types. The chip's CSS class matches the
 // Voyage palette (transit/blue, stay/viridian, meal/amber, thing/viridian,
 // note/muted). Glyphs are Material Symbols Outlined names. Exported so
 // Budget / Costs / Print can render the same chips without duplicating.
+//
+// `label` is a getter so it resolves t() at access time — switching
+// locale retranslates the chip text without rebuilding the object.
+const TYPE_LABEL_KEY = {
+  activity:  "itinerary.typeChip.activity",
+  food:      "itinerary.typeChip.food",
+  transport: "itinerary.typeChip.transport",
+  lodging:   "itinerary.typeChip.lodging",
+  shopping:  "itinerary.typeChip.shopping",
+  rest:      "itinerary.typeChip.rest",
+  note:      "itinerary.typeChip.note",
+};
+
+function makeTypeVisual(type, glyph, chipClass) {
+  return {
+    glyph, chipClass,
+    get label() { return i18n(TYPE_LABEL_KEY[type]); },
+    labelKey: TYPE_LABEL_KEY[type],
+  };
+}
+
 export const TYPE_VISUALS = {
-  activity:  { glyph: "explore",            label: "ACTIVITY", chipClass: "thing"   },
-  food:      { glyph: "restaurant",         label: "DINING",   chipClass: "meal"    },
-  transport: { glyph: "directions_railway", label: "TRANSIT",  chipClass: "transit" },
-  lodging:   { glyph: "bed",                label: "STAY",     chipClass: "stay"    },
-  shopping:  { glyph: "shopping_bag",       label: "SHOPPING", chipClass: "thing"   },
-  rest:      { glyph: "spa",                label: "REST",     chipClass: "note"    },
-  note:      { glyph: "edit_note",          label: "NOTE",     chipClass: "note"    },
+  activity:  makeTypeVisual("activity",  "explore",            "thing"),
+  food:      makeTypeVisual("food",      "restaurant",         "meal"),
+  transport: makeTypeVisual("transport", "directions_railway", "transit"),
+  lodging:   makeTypeVisual("lodging",   "bed",                "stay"),
+  shopping:  makeTypeVisual("shopping",  "shopping_bag",       "thing"),
+  rest:      makeTypeVisual("rest",      "spa",                "note"),
+  note:      makeTypeVisual("note",      "edit_note",          "note"),
 };
 
 const VIEW_STORAGE_KEY = "voyage:itinerary-view";
@@ -90,24 +112,20 @@ export function renderItinerary(host, ctx) {
 
   // ── Page head — title, summary, tool buttons ───────────────────────
   const headBlurb = (() => {
-    if (!dayCount) return "Add your first day to start planning.";
-    if (view === "category") {
-      return "Every item across the trip, grouped by type. " +
-             "Click a row to jump back to that day on the timeline.";
-    }
-    return `Editing day ${idx + 1} of ${dayCount}. Switch days with the strip above. ` +
-           "Click any event card to edit. Use the view toggle to switch between Timeline, Cards, and Category.";
+    if (!dayCount) return i18n("itinerary.head.empty");
+    if (view === "category") return i18n("itinerary.head.category");
+    return i18n("itinerary.head.editing", { idx: idx + 1, total: dayCount });
   })();
   host.appendChild(
     el("section", { class: "page-head vy-itin-head" },
       el("div", { class: "vy-itin-head-l" },
-        el("h2", { text: "Itinerary" }),
+        el("h2", { text: i18n("itinerary.head.title") }),
         el("p", { class: "muted", text: headBlurb }),
       ),
       el("div", { class: "vy-itin-head-r" },
         viewToggle(),
         !readOnly && view !== "category"
-          ? el("button", { class: "btn primary", onClick: () => addNewDay() }, "+ Add day")
+          ? el("button", { class: "btn primary", onClick: () => addNewDay() }, i18n("itinerary.head.addDay"))
           : null,
         toolMenu(),
       ),
@@ -122,8 +140,8 @@ export function renderItinerary(host, ctx) {
 
   if (!day) {
     host.appendChild(el("div", { class: "empty-state" },
-      el("h3", { text: "No days yet" }),
-      el("p", { text: "Add your first day to start planning." }),
+      el("h3", { text: i18n("itinerary.empty.noDays.title") }),
+      el("p", { text: i18n("itinerary.empty.noDays.body") }),
     ));
     appendRouteStale();
     return;
@@ -147,8 +165,8 @@ export function renderItinerary(host, ctx) {
 
     if (flat.length === 0) {
       wrap.appendChild(el("div", { class: "empty-state" },
-        el("h3", { text: "No items yet" }),
-        el("p", { text: "Add events on any day to see them grouped here." }),
+        el("h3", { text: i18n("itinerary.empty.noItems.title") }),
+        el("p", { text: i18n("itinerary.empty.noItems.body") }),
       ));
       return wrap;
     }
@@ -196,7 +214,8 @@ export function renderItinerary(host, ctx) {
           el("span", { class: "material-symbols-outlined", text: visuals.glyph }),
           el("span", { text: visuals.label }),
         ),
-        el("span", { class: "vy-meta", text: `${entries.length} ${entries.length === 1 ? "ITEM" : "ITEMS"}` }),
+        el("span", { class: "vy-meta",
+          text: i18nPlural("itinerary.category.itemsCount", entries.length, { n: entries.length }) }),
       ));
 
       const list = el("div", { class: "vy-category-list" });
@@ -213,8 +232,8 @@ export function renderItinerary(host, ctx) {
       ? formatTimeRange(it.start_time, it.end_time)
       : "";
     const dayLabel = d.date
-      ? new Date(d.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
-      : `Day ${dayIdx + 1}`;
+      ? new Date(d.date + "T00:00:00").toLocaleDateString(getLocale(), { weekday: "short", month: "short", day: "numeric" })
+      : i18n("itinerary.category.dayFallback", { n: dayIdx + 1 });
     const cityLabel = d.city ? ` · ${d.city}` : "";
 
     const row = el("button", {
@@ -224,24 +243,23 @@ export function renderItinerary(host, ctx) {
       onClick: () => jumpToDay(dayIdx),
     },
       el("div", { class: "vy-category-row-main" },
-        el("span", { class: "vy-category-row-title", text: it.title || "(untitled)" }),
+        el("span", { class: "vy-category-row-title", text: it.title || i18n("today.untitled") }),
         it.location_name
           ? el("span", { class: "vy-category-row-loc",
               text: it.location_name })
           : null,
       ),
       el("div", { class: "vy-category-row-meta" },
-        // Unplanned items (logged via Costs page) get a small chip so
-        // they're distinguishable from planned events in the trip-wide
-        // summary. ✂ glyph signals an item with a custom split.
         it.is_unplanned
-          ? el("span", { class: "vy-category-row-unplanned", text: "UNPLANNED" })
+          ? el("span", { class: "vy-category-row-unplanned", text: i18n("itinerary.category.unplanned") })
           : null,
         (it.shares || []).length > 0
-          ? el("span", { class: "vy-category-row-split", title: "Custom split", text: "✂" })
+          ? el("span", { class: "vy-category-row-split", title: i18n("itinerary.category.customSplit"), text: "✂" })
           : null,
         timeLabel ? el("span", { class: "vy-category-row-time", text: timeLabel }) : null,
-        el("span", { class: "vy-category-row-day", text: `Day ${dayIdx + 1} · ${dayLabel}${cityLabel}` }),
+        el("span", { class: "vy-category-row-day",
+          text: i18n("itinerary.category.dayPrefix",
+            { n: dayIdx + 1, label: dayLabel, city: cityLabel }) }),
       ),
     );
     if (it.is_highlight) row.classList.add("is-highlight");
@@ -279,7 +297,7 @@ export function renderItinerary(host, ctx) {
           if (dayList) dayList.dataset.view = v;
           wrap.querySelectorAll("button").forEach((b) => b.classList.toggle("is-active", b.dataset.v === v));
         },
-      }, v[0].toUpperCase() + v.slice(1));
+      }, i18n(`itinerary.view.${v}`));
       btn.dataset.v = v;
       wrap.appendChild(btn);
     });
@@ -288,11 +306,11 @@ export function renderItinerary(host, ctx) {
 
   function toolMenu() {
     return el("div", { class: "vy-itin-tools" },
-      el("button", { class: "icon-btn", title: "Import / Export",
+      el("button", { class: "icon-btn", title: i18n("sidebar.ioTooltip"),
         onClick: () => ctx.navigate({ page: "io" }) },
         el("span", { class: "material-symbols-outlined", text: "swap_vert" }),
       ),
-      el("button", { class: "icon-btn", title: "Print preview",
+      el("button", { class: "icon-btn", title: i18n("sidebar.printTooltip"),
         onClick: () => openPrintView(t) },
         el("span", { class: "material-symbols-outlined", text: "print" }),
       ),
@@ -306,10 +324,9 @@ export function renderItinerary(host, ctx) {
           el("span", { class: "material-symbols-outlined", text: "route" }),
         ),
         el("div", { class: "vy-stale-body" },
-          el("strong", { class: "vy-stale-title", text: "Route preview" }),
-          el("span", { class: "vy-meta", text: "PROPOSED · STAYS EMPTY FOR THIS VERSION" }),
-          el("p", { class: "small",
-            text: "Future: visualised route across cities, drag-to-add stops, swap transit segments." }),
+          el("strong", { class: "vy-stale-title", text: i18n("itinerary.routeStale.title") }),
+          el("span", { class: "vy-meta", text: i18n("itinerary.routeStale.badge") }),
+          el("p", { class: "small", text: i18n("itinerary.routeStale.body") }),
         ),
       )
     );
@@ -325,8 +342,8 @@ export function renderItinerary(host, ctx) {
 
     // ── Day header ────────────────────────────────────────────────
     const dateLabel = day.date
-      ? new Date(day.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
-      : "Set date…";
+      ? new Date(day.date + "T00:00:00").toLocaleDateString(getLocale(), { weekday: "short", month: "short", day: "numeric" })
+      : i18n("itinerary.day.setDate");
     const dayNum = String(idx + 1).padStart(2, "0");
 
     const header = el("div", { class: "vy-day-header" });
@@ -334,19 +351,20 @@ export function renderItinerary(host, ctx) {
       el("div", { class: "vy-day-num", text: dayNum }, el("small", { text: ` / ${String(t.days.length).padStart(2, "0")}` })),
       el("div", { class: "vy-day-name" },
         el("b", { text: `${dateLabel}${day.city ? " · " + day.city : ""}` }),
-        el("span", { text: (day.title || day.notes || "DAY").toUpperCase().slice(0, 60) }),
+        el("span", { text: (day.title || day.notes || i18n("itinerary.day.fallback")).toUpperCase().slice(0, 60) }),
       ),
     );
     const headerR = el("div", { class: "vy-day-header-r" },
       el("span", { class: "vy-meta",
-        text: `${(day.items || []).length} ITEMS · DAY ${idx + 1} OF ${t.days.length}` }),
+        text: i18n("itinerary.day.itemsLine", {
+          count: (day.items || []).length, n: idx + 1, total: t.days.length,
+        }) }),
       !readOnly
         ? el("div", { class: "day-controls" },
-            el("button", { class: "icon-btn", title: "Edit day info",
+            el("button", { class: "icon-btn", title: i18n("itinerary.day.editTip"),
               onClick: () => toggleDayEditor() }, "✎"),
-            // Reorder is via the day-strip grip / right-click menu — no
-            // ↑/↓ buttons here.
-            el("button", { class: "icon-btn danger", title: "Delete day", onClick: () => deleteDay(day) }, "✕"),
+            el("button", { class: "icon-btn danger", title: i18n("itinerary.day.deleteTip"),
+              onClick: () => deleteDay(day) }, "✕"),
           )
         : null,
     );
@@ -357,26 +375,25 @@ export function renderItinerary(host, ctx) {
     const dayEditor = el("div", { class: "vy-day-editor", hidden: true });
     const dateInput = el("input", { type: "date", value: day.date || "", disabled: readOnly });
     const titleInput = el("input", { type: "text", value: day.title || "",
-      placeholder: "Day title (e.g. Arrival)", disabled: readOnly });
+      placeholder: i18n("itinerary.day.titlePlaceholder"), disabled: readOnly });
     const cityInput  = el("input", { type: "text", value: day.city || "",
-      placeholder: "City", disabled: readOnly });
+      placeholder: i18n("itinerary.day.cityPlaceholderShort"), disabled: readOnly });
     dateInput.addEventListener("input", () => saveDay({ date: dateInput.value || null }));
     titleInput.addEventListener("input", () => saveDay({ title: titleInput.value }));
     cityInput.addEventListener("input", () => saveDay({ city: cityInput.value }));
     dayEditor.append(
-      labeledField("Date", dateInput),
-      labeledField("Title", titleInput),
-      labeledField("City", cityInput),
+      labeledField(i18n("itinerary.day.dateLabel"), dateInput),
+      labeledField(i18n("itinerary.day.titleLabel"), titleInput),
+      labeledField(i18n("itinerary.day.cityLabel"), cityInput),
     );
 
-    // Day notes (textarea) — always visible when has content, else under the editor
     const notesTa = el("textarea", { class: "block-edit-input vy-day-notes",
-      placeholder: "Notes for this day (jet lag, weather, plans for the group…)",
+      placeholder: i18n("itinerary.day.notesPlaceholder"),
       disabled: readOnly, rows: 1 });
     notesTa.value = day.notes || "";
     setTimeout(() => autosize(notesTa), 0);
     notesTa.addEventListener("input", () => { autosize(notesTa); saveDay({ notes: notesTa.value }); });
-    dayEditor.append(labeledField("Notes", notesTa));
+    dayEditor.append(labeledField(i18n("itinerary.day.notesLabel"), notesTa));
     card.appendChild(dayEditor);
 
     function toggleDayEditor() {
@@ -401,7 +418,7 @@ export function renderItinerary(host, ctx) {
     if (!readOnly) {
       tl.appendChild(el("div", { class: "vy-tl-add-row" },
         el("button", { class: "btn ghost inline-add",
-          onClick: () => addNewItem(day) }, "+ Add event"),
+          onClick: () => addNewItem(day) }, i18n("itinerary.day.addEvent")),
       ));
     }
     card.appendChild(tl);
@@ -589,7 +606,7 @@ export function renderItinerary(host, ctx) {
         else if (expandedItemId === it.id)              renderEditorView();
         else                                             renderCardView();
       } catch (e) {
-        alert("Save failed: " + e.message);
+        alert(i18n("itinerary.editor.saveFailed", { error: e.message }));
       } finally {
         ctx.onSaveDone?.();
       }
@@ -718,7 +735,7 @@ export function renderItinerary(host, ctx) {
       // independent: the event still belongs to this day's column.
       if (endsNextDay(it.start_time, it.end_time)) {
         cell.classList.add("is-overnight");
-        cell.appendChild(el("span", { class: "vy-tl-time-next", text: "+1d", title: "Ends next morning" }));
+        cell.appendChild(el("span", { class: "vy-tl-time-next", text: i18n("itinerary.editor.endsNextMorning"), title: i18n("itinerary.editor.endsNextMorningTip2") }));
       }
       return cell;
     }
@@ -768,7 +785,7 @@ export function renderItinerary(host, ctx) {
       // page is where the actual breakdown lives; this just signals
       // "shared costs apply here."
       if ((it.shares || []).length > 0) {
-        flagRow.appendChild(el("span", { class: "vy-tl-split-glyph", title: "Has custom split — see Budget", text: "✂" }));
+        flagRow.appendChild(el("span", { class: "vy-tl-split-glyph", title: i18n("itinerary.editor.customSplitTip"), text: "✂" }));
       }
       if (flagRow.children.length) lhs.appendChild(flagRow);
       card.appendChild(lhs);
@@ -801,7 +818,7 @@ export function renderItinerary(host, ctx) {
       if (!readOnly) {
         const grip = el("button", {
           class: "vy-tl-card-grip",
-          title: "Drag to reorder",
+          title: i18n("itinerary.editor.dragReorderTip"),
           tabindex: "-1",
           onClick: (e) => e.stopPropagation(),
         },
@@ -840,9 +857,9 @@ export function renderItinerary(host, ctx) {
 
       // ── Time inputs + overlap guard ────────────────────────────────
       const startInput = el("input", { type: "time", class: "time-input",
-        value: (it.start_time || "").slice(0, 5), disabled: readOnly, title: "Start time" });
+        value: (it.start_time || "").slice(0, 5), disabled: readOnly, title: i18n("itinerary.editor.startTimeTip") });
       const endInput   = el("input", { type: "time", class: "time-input",
-        value: (it.end_time   || "").slice(0, 5), disabled: readOnly, title: "End time" });
+        value: (it.end_time   || "").slice(0, 5), disabled: readOnly, title: i18n("itinerary.editor.endTimeTip") });
 
       let lastGoodStart = (it.start_time || "").slice(0, 5);
       let lastGoodEnd   = (it.end_time   || "").slice(0, 5);
@@ -855,7 +872,7 @@ export function renderItinerary(host, ctx) {
       // the timeline-time cell uses on collapsed cards.
       const nextDayBadge = el("span", {
         class: "vy-edit-nextday",
-        title: "Ends the next morning",
+        title: i18n("itinerary.editor.endNextMorningTip"),
         text: "+1d",
       });
       nextDayBadge.hidden = !endsNextDay(it.start_time, it.end_time);
@@ -888,7 +905,7 @@ export function renderItinerary(host, ctx) {
 
       // ── Title ──────────────────────────────────────────────────────
       const titleInput = el("input", { type: "text", class: "vy-edit-title-input",
-        value: it.title || "", placeholder: "Untitled event", disabled: readOnly });
+        value: it.title || "", placeholder: i18n("itinerary.editor.titlePlaceholder"), disabled: readOnly });
       titleInput.addEventListener("input", () => saveItem({ title: titleInput.value }));
 
       // ── Classify ───────────────────────────────────────────────────
@@ -897,16 +914,16 @@ export function renderItinerary(host, ctx) {
 
       // ── Where ──────────────────────────────────────────────────────
       const locInput = el("input", { type: "text", value: it.location_name || "",
-        placeholder: "Place name", disabled: readOnly });
+        placeholder: i18n("itinerary.editor.placePlaceholder"), disabled: readOnly });
       locInput.addEventListener("input", () => saveItem({ location_name: locInput.value }));
 
       const mapInput = el("input", { type: "url", value: it.map_url || "",
-        placeholder: "Map URL (optional)", disabled: readOnly });
+        placeholder: i18n("itinerary.editor.mapPlaceholder"), disabled: readOnly });
       mapInput.addEventListener("input", () => saveItem({ map_url: mapInput.value }));
 
       // ── Notes ──────────────────────────────────────────────────────
       const notesTa = el("textarea", { class: "block-edit-input",
-        placeholder: "Notes — context, reservations, reminders…",
+        placeholder: i18n("itinerary.editor.notesPlaceholder"),
         disabled: readOnly, rows: 2 });
       notesTa.value = it.notes || "";
       setTimeout(() => autosize(notesTa), 0);
@@ -918,10 +935,10 @@ export function renderItinerary(host, ctx) {
           el("span", { class: "material-symbols-outlined", text: v.glyph }),
           el("span", { text: v.label }),
         ),
-        el("span", { class: "vy-edit-state", text: "EDITING" }),
-        el("span", { class: "vy-edit-hint", text: "Click outside or press ✕ to close" }),
+        el("span", { class: "vy-edit-state", text: i18n("itinerary.editor.editing") }),
+        el("span", { class: "vy-edit-hint", text: i18n("itinerary.editor.hint") }),
         !readOnly
-          ? el("button", { class: "vy-edit-close", title: "Close editor",
+          ? el("button", { class: "vy-edit-close", title: i18n("itinerary.editor.closeTip"),
               onClick: () => { if (expandedCloseFn) expandedCloseFn(); } },
               el("span", { class: "material-symbols-outlined", text: "close" }),
             )
@@ -960,17 +977,17 @@ export function renderItinerary(host, ctx) {
 
       const foot = !readOnly
         ? el("div", { class: "vy-edit-foot" },
-            el("button", { class: "vy-edit-delete", title: "Delete this event",
+            el("button", { class: "vy-edit-delete", title: i18n("itinerary.editor.deleteTip"),
               onClick: () => deleteItem(it) },
               el("span", { class: "material-symbols-outlined", text: "delete" }),
-              el("span", { text: "Delete event" }),
+              el("span", { text: i18n("itinerary.editor.deleteBtn") }),
             ),
             // Cost editing intentionally lives on the Budget page so the
             // Itinerary editor stays focused on what / when / where.
             el("a", { class: "vy-edit-budget-link", href: "#",
               onClick: (e) => { e.preventDefault(); ctx.navigate?.({ page: "budget" }); } },
               el("span", { class: "material-symbols-outlined", text: "payments" }),
-              el("span", { text: "Costs and splits → Budget" }),
+              el("span", { text: i18n("itinerary.editor.budgetLink") }),
             ),
           )
         : null;
@@ -1017,19 +1034,19 @@ export function renderItinerary(host, ctx) {
       await days.add(t.id, { date: newDate, sort_order: (t.days || []).length });
       await ctx.refresh();
     } catch (e) {
-      alert("Could not add day: " + e.message);
+      alert(i18n("itinerary.editor.addDayFailed", { error: e.message }));
     } finally {
       ctx.onSaveDone?.();
     }
   }
 
   async function deleteDay(day) {
-    if (!confirm("Delete this day and everything in it?")) return;
+    if (!confirm(i18n("itinerary.editor.confirmDeleteDay"))) return;
     ctx.onSaveStart?.();
     try {
       await days.remove(day.id);
       await ctx.refresh();
-    } catch (e) { alert("Delete failed: " + e.message); }
+    } catch (e) { alert(i18n("itinerary.editor.deleteDayFailed", { error: e.message })); }
     finally { ctx.onSaveDone?.(); }
   }
 
@@ -1043,7 +1060,7 @@ export function renderItinerary(host, ctx) {
     try {
       await days.reorder(arr.map((x) => x.id));
       await ctx.refresh();
-    } catch (e) { alert("Reorder failed: " + e.message); }
+    } catch (e) { alert(i18n("itinerary.editor.reorderFailed", { error: e.message })); }
     finally { ctx.onSaveDone?.(); }
   }
 
@@ -1062,19 +1079,19 @@ export function renderItinerary(host, ctx) {
       }
       await ctx.refresh();
     } catch (e) {
-      alert("Could not add item: " + e.message);
+      alert(i18n("itinerary.editor.addItemFailed", { error: e.message }));
     } finally {
       ctx.onSaveDone?.();
     }
   }
 
   async function deleteItem(it) {
-    if (!confirm("Delete this item?")) return;
+    if (!confirm(i18n("itinerary.editor.confirmDeleteItem"))) return;
     ctx.onSaveStart?.();
     try {
       await items.remove(it.id);
       await ctx.refresh();
-    } catch (e) { alert("Delete failed: " + e.message); }
+    } catch (e) { alert(i18n("itinerary.editor.deleteItemFailed", { error: e.message })); }
     finally { ctx.onSaveDone?.(); }
   }
 

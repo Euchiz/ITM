@@ -7,6 +7,7 @@
 
 import { trips } from "../supabase.js";
 import { el, escapeHtml, fmtDateRange } from "./_utils.js";
+import { t, plural } from "../i18n/locale.js";
 
 export async function renderDashboard(host, {
   user,
@@ -21,13 +22,13 @@ export async function renderDashboard(host, {
   onConvert,
 }) {
   host.innerHTML = `
-    <section class="profile-card" aria-label="Your account">
+    <section class="profile-card" aria-label="${escapeHtml(t("dashboard.profile.aria"))}">
       <div class="profile-card-left">
         <div class="profile-avatar" id="profileAvatar"></div>
         <div class="profile-meta">
           <div class="profile-name-row">
             <span class="profile-name" id="profileNameText"></span>
-            <button class="profile-edit-btn" id="profileEditNameBtn" title="Edit display name" type="button">Edit</button>
+            <button class="profile-edit-btn" id="profileEditNameBtn" title="${escapeHtml(t("dashboard.profile.editNameTooltip"))}" type="button">${escapeHtml(t("dashboard.profile.editName"))}</button>
           </div>
           <div class="profile-sub">
             <span class="profile-email" id="profileEmail"></span>
@@ -37,28 +38,25 @@ export async function renderDashboard(host, {
       </div>
       <div class="profile-card-right">
         ${isAnonymous ? `
-          <button id="profileConvertBtn" class="btn primary" type="button">Save your trips · Create account</button>
+          <button id="profileConvertBtn" class="btn primary" type="button">${escapeHtml(t("dashboard.profile.saveTripCta2"))}</button>
         ` : `
-          <button id="profilePasswordBtn" class="btn ghost" type="button">Change password</button>
+          <button id="profilePasswordBtn" class="btn ghost" type="button">${escapeHtml(t("dashboard.profile.changePassword"))}</button>
         `}
-        <button id="profileSignOutBtn" class="btn ghost" type="button">Sign out</button>
+        <button id="profileSignOutBtn" class="btn ghost" type="button">${escapeHtml(t("dashboard.profile.signOut"))}</button>
       </div>
     </section>
 
     <header class="trips-header">
-      <h1>All trips</h1>
+      <h1>${escapeHtml(t("dashboard.allTrips"))}</h1>
       <div class="trips-header-actions">
-        <button class="btn primary" id="newTripBtn">+ New trip</button>
+        <button class="btn primary" id="newTripBtn">${escapeHtml(t("dashboard.newTrip"))}</button>
       </div>
     </header>
     ${isAnonymous ? `
-      <p class="muted small dashboard-anon-note">
-        You're browsing as a guest. Trips you've been invited to appear below.
-        Create an account to start your own.
-      </p>
+      <p class="muted small dashboard-anon-note">${escapeHtml(t("dashboard.guestNote"))}</p>
     ` : ""}
     <div id="tripsList" class="trips-list" aria-live="polite">
-      <p class="muted">Loading…</p>
+      <p class="muted">${escapeHtml(t("dashboard.loading"))}</p>
     </div>
   `;
 
@@ -74,7 +72,7 @@ export async function renderDashboard(host, {
 
   host.querySelector("#profileEditNameBtn").addEventListener("click", async () => {
     const current = profile?.display_name || "";
-    const next = window.prompt("Display name (shown on trips you share):", current);
+    const next = window.prompt(t("dashboard.profile.displayNamePrompt"), current);
     if (next == null) return;
     if (next.trim() === current.trim()) return;
     try {
@@ -82,7 +80,7 @@ export async function renderDashboard(host, {
       profile = { ...(profile || {}), display_name: next.trim() || null };
       paintProfile();
     } catch (e) {
-      alert("Could not save display name: " + e.message);
+      alert(t("dashboard.profile.displayNameError", { error: e.message }));
     }
   });
 
@@ -97,13 +95,17 @@ export async function renderDashboard(host, {
   function paintProfile() {
     const name = (profile?.display_name || "").trim();
     const email = user?.email || profile?.email || "";
-    const fallback = isAnonymous ? "Guest" : (email.split("@")[0] || "You");
+    const fallback = isAnonymous
+      ? t("dashboard.profile.fallback.guest")
+      : (email.split("@")[0] || t("dashboard.profile.fallback.you"));
     const shown = name || fallback;
 
     host.querySelector("#profileNameText").textContent = shown;
-    host.querySelector("#profileEmail").textContent = isAnonymous ? "No email on file" : email;
+    host.querySelector("#profileEmail").textContent = isAnonymous
+      ? t("dashboard.profile.email.none") : email;
     const typeEl = host.querySelector("#profileType");
-    typeEl.textContent = isAnonymous ? "Guest" : "Account";
+    typeEl.textContent = isAnonymous
+      ? t("dashboard.profile.type.guest") : t("dashboard.profile.type.account");
     typeEl.dataset.type = isAnonymous ? "guest" : "account";
 
     const avatar = host.querySelector("#profileAvatar");
@@ -119,54 +121,56 @@ export async function renderDashboard(host, {
     }
     try {
       const res = await fetch("./sample.json");
-      if (!res.ok) throw new Error("sample.json not found");
+      if (!res.ok) throw new Error(t("dashboard.sampleMissing"));
       const payload = await res.json();
       const id = await trips.createFromJson(payload);
       onOpen?.(id);
     } catch (e) {
-      alert("Could not load sample: " + e.message);
+      alert(t("dashboard.sampleLoadFailed", { error: e.message }));
     }
   }
 
   async function refresh() {
-    list.innerHTML = `<p class="muted">Loading…</p>`;
+    list.innerHTML = `<p class="muted">${escapeHtml(t("dashboard.loading"))}</p>`;
     try {
       const rows = await trips.list();
       if (rows.length === 0) {
         list.innerHTML = "";
         const empty = el("div", { class: "empty-state" },
-          el("h2", { text: "No trips yet" }),
-          el("p", { text: "Click + New trip to start, or load the Japan sample to see how a populated trip looks." }),
+          el("h2", { text: t("dashboard.empty.titleAlt") }),
+          el("p", { text: t("dashboard.empty.bodyAlt") }),
           el("div", { class: "actions" },
-            el("button", { class: "btn", onClick: () => loadSample() }, "Load sample trip"),
+            el("button", { class: "btn", onClick: () => loadSample() }, t("dashboard.loadSample")),
           ),
         );
         list.appendChild(empty);
         return;
       }
       list.innerHTML = "";
-      rows.forEach((t) => list.appendChild(rowEl(t)));
+      rows.forEach((row) => list.appendChild(rowEl(row)));
     } catch (e) {
-      list.innerHTML = `<p class="error">Could not load trips: ${escapeHtml(e.message)}</p>`;
+      list.innerHTML = `<p class="error">${escapeHtml(t("dashboard.loadFailed", { error: e.message }))}</p>`;
     }
   }
 
-  function rowEl(t) {
-    const dates = fmtDateRange(t.start_date, t.end_date);
-    const prep = t.prepTotal > 0 ? `Preparation: ${t.prepDone} / ${t.prepTotal} done` : "";
-    const shared = t.memberCount > 1
-      ? `· shared with ${t.memberCount - 1} other${t.memberCount === 2 ? "" : "s"}`
+  function rowEl(row) {
+    const dates = fmtDateRange(row.start_date, row.end_date);
+    const prep = row.prepTotal > 0
+      ? t("dashboard.trip.preparationCount", { done: row.prepDone, total: row.prepTotal })
       : "";
-    const card = el("div", { class: "trip-card", "data-id": t.id },
+    const shared = row.memberCount > 1
+      ? plural("dashboard.trip.shared", row.memberCount - 1, { n: row.memberCount - 1 })
+      : "";
+    const card = el("div", { class: "trip-card", "data-id": row.id },
       el("button", {
         class: "trip-open",
-        title: "Open",
-        onClick: () => onOpen?.(t.id),
+        title: t("dashboard.trip.open"),
+        onClick: () => onOpen?.(row.id),
       },
-        el("span", { class: "trip-title", text: t.title || "(untitled)" }),
-        t.destination ? el("span", { class: "trip-destination", text: t.destination }) : null,
+        el("span", { class: "trip-title", text: row.title || t("dashboard.trip.untitled") }),
+        row.destination ? el("span", { class: "trip-destination", text: row.destination }) : null,
         el("span", { class: "trip-meta" },
-          el("span", { class: `role role-${t.role}`, text: t.role }),
+          el("span", { class: `role role-${row.role}`, text: row.role }),
           dates ? el("span", { text: dates }) : null,
           prep ? el("span", { class: "muted", text: prep }) : null,
           shared ? el("span", { class: "muted", text: shared }) : null,
@@ -174,22 +178,22 @@ export async function renderDashboard(host, {
       ),
     );
 
-    if (t.role === "owner") {
+    if (row.role === "owner") {
       card.appendChild(el("div", { class: "trip-actions" },
         el("button", {
           class: "btn ghost danger",
-          title: "Delete",
+          title: t("dashboard.trip.delete"),
           onClick: async (e) => {
             e.stopPropagation();
-            if (!confirm("Delete this trip? This removes it for everyone it's shared with.")) return;
+            if (!confirm(t("dashboard.trip.confirmDelete"))) return;
             try {
-              await trips.remove(t.id);
+              await trips.remove(row.id);
               await refresh();
             } catch (err) {
-              alert("Delete failed: " + err.message);
+              alert(t("dashboard.trip.deleteFailed", { error: err.message }));
             }
           },
-          text: "Delete",
+          text: t("dashboard.trip.delete"),
         }),
       ));
     }

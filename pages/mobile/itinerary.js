@@ -11,13 +11,14 @@
 
 import { days as daysApi, items as itemsApi } from "../../supabase.js";
 import { el, formatTime } from "../_utils.js";
+import { t, plural, getLocale } from "../../i18n/locale.js";
 import { TYPE_VISUALS } from "../itinerary.js";
 
 export function renderMobileItinerary(host, ctx) {
   const trip = ctx.trip;
   if (!trip) {
     host.innerHTML = "";
-    host.appendChild(el("p", { class: "muted small", text: "No trip loaded." }));
+    host.appendChild(el("p", { class: "muted small", text: t("mobile.iti.noTrip") }));
     return;
   }
   host.innerHTML = "";
@@ -25,8 +26,8 @@ export function renderMobileItinerary(host, ctx) {
   const days = trip.days || [];
   if (days.length === 0) {
     host.appendChild(emptyCard(
-      "No days yet",
-      "Tap + Add day below to start planning."
+      t("mobile.iti.empty.title"),
+      t("mobile.iti.empty.body"),
     ));
     host.appendChild(addDayBtn(ctx));
     return;
@@ -40,10 +41,10 @@ export function renderMobileItinerary(host, ctx) {
 
 function renderDayCard(ctx, day, dayIdx) {
   const dateLabel = day.date
-    ? new Date(day.date + "T00:00:00").toLocaleDateString(undefined,
+    ? new Date(day.date + "T00:00:00").toLocaleDateString(getLocale(),
         { weekday: "short", month: "short", day: "numeric" })
-    : "Set date";
-  const heading = `Day ${dayIdx + 1} · ${dateLabel}${day.city ? " · " + day.city : ""}`;
+    : t("mobile.iti.setDate");
+  const heading = `${t("itinerary.day", { n: dayIdx + 1 })} · ${dateLabel}${day.city ? " · " + day.city : ""}`;
   const items = (day.items || []).filter((it) => !it.is_unplanned);
 
   const card = el("section", { class: "vy-mobile-iti-day card" });
@@ -53,10 +54,10 @@ function renderDayCard(ctx, day, dayIdx) {
     el("div", { class: "vy-mobile-iti-day-meta" },
       el("span", { class: "vy-meta", text: heading.toUpperCase() }),
       el("span", { class: "muted small",
-        text: `${items.length} item${items.length === 1 ? "" : "s"}` }),
+        text: plural("mobile.iti.itemCount", items.length, { n: items.length }) }),
     ),
     el("div", { class: "vy-mobile-iti-day-actions" },
-      iconBtn("delete_outline", "Delete day", "is-danger",
+      iconBtn("delete_outline", t("mobile.iti.deleteDayTip"), "is-danger",
         () => deleteDay(ctx, day)),
     ),
   ));
@@ -71,8 +72,7 @@ function renderDayCard(ctx, day, dayIdx) {
     class: "vy-mobile-iti-add",
     onClick: () => addItem(ctx, day),
   },
-    el("span", { class: "material-symbols-outlined", text: "add" }),
-    el("span", { text: "Add event" }),
+    el("span", { class: "material-symbols-outlined", text: "add" }),    el("span", { text: t("mobile.iti.addEvent") }),
   ));
 
   return card;
@@ -97,7 +97,7 @@ function renderItemRow(ctx, day, item) {
       el("span", { class: "material-symbols-outlined", text: v.glyph }),
     ),
     el("span", { class: "vy-mobile-iti-time mono small", text: time || "—" }),
-    el("span", { class: "vy-mobile-iti-title", text: item.title || "(untitled)" }),
+    el("span", { class: "vy-mobile-iti-title", text: item.title || t("mobile.iti.untitled") }),
     item.is_highlight ? el("span", { class: "material-symbols-outlined vy-mobile-iti-star",
       text: "star" }) : null,
   ));
@@ -105,7 +105,7 @@ function renderItemRow(ctx, day, item) {
   // Delete only — drag-to-reorder ships later; the ↑/↓ buttons made
   // the row too dense for phone widths.
   row.appendChild(el("div", { class: "vy-mobile-iti-row-actions" },
-    iconBtn("delete_outline", "Delete", "is-danger",
+    iconBtn("delete_outline", t("mobile.iti.deleteTip"), "is-danger",
       () => deleteItem(ctx, item)),
   ));
 
@@ -120,47 +120,48 @@ function renderItemRow(ctx, day, item) {
 // Mobile users reorder on desktop for now.
 
 async function deleteDay(ctx, day) {
-  if (!confirm(`Delete this day? All its events will be deleted too.`)) return;
+  if (!confirm(t("mobile.iti.confirmDeleteDay"))) return;
   ctx.onSaveStart?.();
   try {
     await daysApi.remove(day.id);
     await ctx.refresh?.();
-    ctx.toast?.("Day deleted");
+    ctx.toast?.(t("mobile.iti.dayDeleted"));
   } catch (e) {
-    ctx.toast?.("Couldn't delete: " + (e.message || e), true);
+    ctx.toast?.(t("mobile.iti.deleteFailed", { error: e.message || e }), true);
   } finally {
     ctx.onSaveDone?.();
   }
 }
 
 async function deleteItem(ctx, item) {
-  if (!confirm(`Delete "${item.title || "this event"}"?`)) return;
+  const title = item.title || t("mobile.iti.thisEvent");
+  if (!confirm(t("mobile.iti.confirmDeleteItem", { title }))) return;
   ctx.onSaveStart?.();
   try {
     await itemsApi.remove(item.id);
     await ctx.refresh?.();
-    ctx.toast?.("Event deleted");
+    ctx.toast?.(t("mobile.iti.eventDeleted"));
   } catch (e) {
-    ctx.toast?.("Couldn't delete: " + (e.message || e), true);
+    ctx.toast?.(t("mobile.iti.deleteFailed", { error: e.message || e }), true);
   } finally {
     ctx.onSaveDone?.();
   }
 }
 
 async function addItem(ctx, day) {
-  const title = window.prompt("Event title:", "");
+  const title = window.prompt(t("mobile.iti.eventTitlePrompt"), "");
   if (title == null) return;
   ctx.onSaveStart?.();
   try {
     const items = (day.items || []).filter((it) => !it.is_unplanned);
     await itemsApi.add(ctx.trip.id, day.id, {
-      title: title.trim() || "Untitled",
+      title: title.trim() || t("mobile.iti.untitledFallback"),
       type: "activity",
       sort_order: items.length,
     });
     await ctx.refresh?.();
   } catch (e) {
-    ctx.toast?.("Couldn't add: " + (e.message || e), true);
+    ctx.toast?.(t("mobile.iti.addFailed", { error: e.message || e }), true);
   } finally {
     ctx.onSaveDone?.();
   }
@@ -188,7 +189,7 @@ async function addNewDay(ctx) {
     });
     await ctx.refresh?.();
   } catch (e) {
-    ctx.toast?.("Couldn't add day: " + (e.message || e), true);
+    ctx.toast?.(t("mobile.iti.addDayFailed", { error: e.message || e }), true);
   } finally {
     ctx.onSaveDone?.();
   }
@@ -218,7 +219,7 @@ function addDayBtn(ctx) {
     onClick: () => addNewDay(ctx),
   },
     el("span", { class: "material-symbols-outlined", text: "add" }),
-    el("span", { text: "Add day" }),
+    el("span", { text: t("mobile.iti.addDay") }),
   );
 }
 

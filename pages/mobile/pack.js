@@ -11,30 +11,34 @@
 
 import { packItems } from "../../supabase.js";
 import { el } from "../_utils.js";
+import { t, plural } from "../../i18n/locale.js";
 
+// Preset entries. Labels and item titles resolve via t() at render
+// time so a locale switch retranslates the dropdown — item titles are
+// translated at insert time and stored as user content from then on.
 const PRESETS = [
   {
     id: "international",
-    label: "International travel",
+    labelKey: "mobile.pack.preset.international",
     items: ["Passport", "Visa", "Travel insurance card",
             "Vaccination certificate", "Foreign currency / debit card",
             "Power adapter", "Driver's license (international)"],
   },
   {
     id: "business",
-    label: "Business trip",
+    labelKey: "mobile.pack.preset.business",
     items: ["Business cards", "Laptop + charger", "Presentation materials",
             "Receipts envelope", "ID badge"],
   },
   {
     id: "scholar",
-    label: "Scholar visiting",
+    labelKey: "mobile.pack.preset.scholar",
     items: ["Visa", "University ID", "Invitation letter",
             "CV / publications", "Conference badge"],
   },
   {
     id: "weekend",
-    label: "Domestic / weekend",
+    labelKey: "mobile.pack.preset.weekend",
     items: ["ID", "Hotel confirmation", "Tickets"],
   },
 ];
@@ -43,7 +47,7 @@ export function renderMobilePack(host, ctx) {
   const trip = ctx.trip;
   if (!trip) {
     host.innerHTML = "";
-    host.appendChild(el("p", { class: "muted small", text: "No trip loaded." }));
+    host.appendChild(el("p", { class: "muted small", text: t("mobile.pack.noTrip") }));
     return;
   }
   host.innerHTML = "";
@@ -52,13 +56,9 @@ export function renderMobilePack(host, ctx) {
   const packedCount = packs.filter((p) => p.packed).length;
   const totalCount = packs.length;
 
-  // Summary banner — packed count + sweep buttons
   host.appendChild(renderSummary(ctx, packedCount, totalCount));
-
-  // Add row — text input + preset dropdown
   host.appendChild(renderAddRow(ctx));
 
-  // List
   if (packs.length === 0) {
     host.appendChild(emptyState());
     return;
@@ -67,8 +67,6 @@ export function renderMobilePack(host, ctx) {
   for (const p of packs) list.appendChild(renderRow(ctx, p));
   host.appendChild(list);
 }
-
-// ─── Summary banner with sweep buttons ────────────────────────────
 
 function renderSummary(ctx, packed, total) {
   const wrap = el("section", { class: "vy-mobile-pack-summary card" });
@@ -79,7 +77,7 @@ function renderSummary(ctx, packed, total) {
     el("span", { class: "vy-mobile-pack-summary-of",
       text: total === 0 ? "" : ` / ${total}` }),
     el("span", { class: "vy-mobile-pack-summary-label",
-      text: total === 0 ? "No items yet" : "PACKED" }),
+      text: total === 0 ? t("mobile.pack.noItemsYet") : t("mobile.pack.packedLabel") }),
   ));
 
   if (total > 0) {
@@ -88,12 +86,12 @@ function renderSummary(ctx, packed, total) {
         class: "btn ghost small",
         disabled: packed === total,
         onClick: async () => sweepAll(ctx, true),
-      }, "Mark all packed"),
+      }, t("mobile.pack.markAll")),
       el("button", {
         class: "btn ghost small",
         disabled: packed === 0,
         onClick: async () => sweepAll(ctx, false),
-      }, "Clear all"),
+      }, t("mobile.pack.clearAll")),
     ));
   }
   return wrap;
@@ -103,17 +101,14 @@ async function sweepAll(ctx, packed) {
   ctx.onSaveStart?.();
   try {
     await packItems.markAll(ctx.trip.id, packed);
-    // Mutate local state for instant feedback
     (ctx.trip.pack_items || []).forEach((p) => { p.packed = packed; });
     ctx.rerender?.();
   } catch (e) {
-    ctx.toast?.("Couldn't update: " + (e.message || e), true);
+    ctx.toast?.(t("mobile.pack.updateFailed", { error: e.message || e }), true);
   } finally {
     ctx.onSaveDone?.();
   }
 }
-
-// ─── Add row — input + preset dropdown ────────────────────────────
 
 function renderAddRow(ctx) {
   const wrap = el("section", { class: "vy-mobile-pack-add card" });
@@ -130,29 +125,28 @@ function renderAddRow(ctx) {
     },
   });
   inputRow.appendChild(el("input", {
-    type: "text", placeholder: "Add a pack item…", maxlength: "80",
+    type: "text", placeholder: t("mobile.pack.addPlaceholder"), maxlength: "80",
   }));
   inputRow.appendChild(el("button", {
     type: "submit",
     class: "vy-mobile-pack-add-btn",
-    title: "Add",
+    title: t("mobile.pack.addBtn"),
   }, el("span", { class: "material-symbols-outlined", text: "add" })));
   wrap.appendChild(inputRow);
 
-  // Preset dropdown — a labelled <select> for native iOS picker
   const presetLabel = el("label", { class: "vy-mobile-pack-preset" });
   presetLabel.appendChild(el("span", { class: "vy-mobile-pack-preset-label",
-    text: "Or start from a preset" }));
+    text: t("mobile.pack.fromPreset") }));
   const select = el("select", { class: "vy-mobile-pack-preset-select" });
-  select.appendChild(el("option", { value: "", text: "Pick a preset…" }));
+  select.appendChild(el("option", { value: "", text: t("mobile.pack.pickPreset") }));
   for (const p of PRESETS) {
-    select.appendChild(el("option", { value: p.id, text: p.label }));
+    select.appendChild(el("option", { value: p.id, text: t(p.labelKey) }));
   }
   select.addEventListener("change", async (e) => {
     const id = e.target.value;
     if (!id) return;
     const preset = PRESETS.find((p) => p.id === id);
-    e.target.value = "";  // reset
+    e.target.value = "";
     if (preset) await addPreset(ctx, preset);
   });
   presetLabel.appendChild(select);
@@ -173,7 +167,7 @@ async function addOne(ctx, title) {
     ctx.trip.pack_items = existing;
     ctx.rerender?.();
   } catch (e) {
-    ctx.toast?.("Couldn't add: " + (e.message || e), true);
+    ctx.toast?.(t("mobile.pack.addFailed", { error: e.message || e }), true);
   } finally {
     ctx.onSaveDone?.();
   }
@@ -184,36 +178,32 @@ async function addPreset(ctx, preset) {
   try {
     const inserted = await packItems.addMany(ctx.trip.id, preset.items);
     if (inserted.length === 0) {
-      ctx.toast?.("All preset items already in your list");
+      ctx.toast?.(t("mobile.pack.presetAllExisting"));
     } else {
-      ctx.toast?.(`Added ${inserted.length} item${inserted.length === 1 ? "" : "s"} from ${preset.label}`);
+      ctx.toast?.(plural("mobile.pack.presetAdded", inserted.length,
+        { n: inserted.length, preset: t(preset.labelKey) }));
     }
-    // Re-fetch the full list to get fresh tagged_item_ids
     ctx.trip.pack_items = await packItems.list(ctx.trip.id);
     ctx.rerender?.();
   } catch (e) {
-    ctx.toast?.("Couldn't add preset: " + (e.message || e), true);
+    ctx.toast?.(t("mobile.pack.presetFailed", { error: e.message || e }), true);
   } finally {
     ctx.onSaveDone?.();
   }
 }
 
-// ─── List rows ────────────────────────────────────────────────────
-
 function renderRow(ctx, p) {
   const row = el("div", { class: `vy-mobile-pack-row ${p.packed ? "is-packed" : ""}`.trim() });
 
-  // Checkbox button
   row.appendChild(el("button", {
     class: "vy-mobile-pack-row-check",
     onClick: () => togglePacked(ctx, p),
-    "aria-label": p.packed ? "Mark unpacked" : "Mark packed",
+    "aria-label": p.packed ? t("mobile.pack.markUnpacked") : t("mobile.pack.markPacked"),
   },
     el("span", { class: "material-symbols-outlined",
       text: p.packed ? "check_box" : "check_box_outline_blank" }),
   ));
 
-  // Title (inline-editable on tap)
   const title = el("input", {
     type: "text",
     class: "vy-mobile-pack-row-title",
@@ -223,7 +213,7 @@ function renderRow(ctx, p) {
   title.addEventListener("blur", async () => {
     const next = title.value.trim();
     if (next && next !== p.title) await updateTitle(ctx, p, next);
-    else if (!next) title.value = p.title;  // revert empty edits
+    else if (!next) title.value = p.title;
   });
   title.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); title.blur(); }
@@ -231,18 +221,17 @@ function renderRow(ctx, p) {
   });
   row.appendChild(title);
 
-  // Tagged-count badge (if any tagged)
   if ((p.tagged_item_ids || []).length > 0) {
+    const n = p.tagged_item_ids.length;
     row.appendChild(el("span", { class: "vy-mobile-pack-row-tagged",
-      text: `${p.tagged_item_ids.length}`,
-      title: `Tagged to ${p.tagged_item_ids.length} event${p.tagged_item_ids.length === 1 ? "" : "s"}` }));
+      text: `${n}`,
+      title: plural("mobile.pack.taggedTooltip", n, { n }) }));
   }
 
-  // Delete button
   row.appendChild(el("button", {
     class: "vy-mobile-pack-row-del",
     onClick: () => deleteRow(ctx, p),
-    "aria-label": "Delete pack item",
+    "aria-label": t("mobile.pack.deleteTooltip"),
   },
     el("span", { class: "material-symbols-outlined", text: "delete_outline" }),
   ));
@@ -259,7 +248,7 @@ async function togglePacked(ctx, p) {
   } catch (e) {
     p.packed = !next;
     ctx.rerender?.();
-    ctx.toast?.("Couldn't update: " + (e.message || e), true);
+    ctx.toast?.(t("mobile.pack.updateFailed", { error: e.message || e }), true);
   }
 }
 
@@ -269,30 +258,27 @@ async function updateTitle(ctx, p, newTitle) {
     await packItems.update(p.id, { title: newTitle });
     p.title = newTitle;
   } catch (e) {
-    ctx.toast?.("Couldn't rename: " + (e.message || e), true);
+    ctx.toast?.(t("mobile.pack.renameFailed", { error: e.message || e }), true);
   } finally {
     ctx.onSaveDone?.();
   }
 }
 
 async function deleteRow(ctx, p) {
-  if (!confirm(`Delete "${p.title}"?`)) return;
+  if (!confirm(t("mobile.pack.confirmDelete", { title: p.title }))) return;
   try {
     await packItems.remove(p.id);
     ctx.trip.pack_items = (ctx.trip.pack_items || []).filter((x) => x.id !== p.id);
     ctx.rerender?.();
   } catch (e) {
-    ctx.toast?.("Couldn't delete: " + (e.message || e), true);
+    ctx.toast?.(t("mobile.pack.deleteFailed", { error: e.message || e }), true);
   }
 }
-
-// ─── Empty state ──────────────────────────────────────────────────
 
 function emptyState() {
   return el("section", { class: "vy-mobile-edge card" },
     el("span", { class: "material-symbols-outlined", text: "luggage" }),
-    el("h2", { text: "No pack items yet" }),
-    el("p", { class: "muted",
-      text: "Add items above, or start from a preset list to fill in the basics." }),
+    el("h2", { text: t("mobile.pack.empty.title") }),
+    el("p", { class: "muted", text: t("mobile.pack.empty.body") }),
   );
 }

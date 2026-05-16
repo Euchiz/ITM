@@ -24,18 +24,28 @@
 <body data-view="auth">
   <header class="app-header no-print">
     <div class="app-header-left">
-      <strong class="brand">Hermes Daybook</strong>
-      <button id="backToTripsBtn" class="btn ghost" hidden>← All trips</button>
+      <strong class="brand" data-i18n="app.brand">Hermes Daybook</strong>
+      <button id="backToTripsBtn" class="btn ghost" hidden data-i18n="header.allTrips">← All trips</button>
     </div>
     <div class="app-header-right">
       <span id="saveStatus" class="save-status" hidden>Saved</span>
-      <button id="guestChipBtn" class="btn guest-chip" hidden title="Save this trip to your account">
+      <button id="guestChipBtn" class="btn guest-chip" hidden
+              data-i18n="header.guestSaveTrip"
+              data-i18n-title="header.guestSaveTripTooltip"
+              title="Save this trip to your account">
         👤 Guest · Save trip
       </button>
-      <button id="printTripBtn" class="btn ghost" hidden title="Open print preview">🖨 Print PDF</button>
-      <span id="userBadge" class="user-badge" hidden></span>
-      <button id="signOutBtn" class="btn ghost" hidden>Sign out</button>
-      <button id="settingsBtn" class="btn icon" title="Connection settings">⚙</button>
+      <button id="printTripBtn" class="btn ghost" hidden
+              data-i18n="header.printPdf"
+              data-i18n-title="header.printPdfTooltip"
+              title="Open print preview">🖨 Print PDF</button>
+      <button id="userBadge" class="user-badge" hidden
+              data-i18n-title="header.preferences"
+              title="Preferences"></button>
+      <button id="signOutBtn" class="btn ghost" hidden data-i18n="header.signOut">Sign out</button>
+      <button id="settingsBtn" class="btn icon"
+              data-i18n-title="header.connectionSettings"
+              title="Connection settings">⚙</button>
     </div>
   </header>
 
@@ -55,7 +65,7 @@
             <div id="tripPage" class="trip-page"></div>
           </div>
           <div class="vy-foot no-print">
-            <span class="vy-powered"><span class="vy-powered-dot"></span> POWERED BY <b>VIRIDIAN BLUE</b></span>
+            <span class="vy-powered"><span class="vy-powered-dot"></span> <span data-i18n="app.poweredBy">POWERED BY</span> <b data-i18n="app.brandName">VIRIDIAN BLUE</b></span>
           </div>
         </div>
       </div>
@@ -63,129 +73,148 @@
   </main>
 
   <nav class="mobile-nav no-print" id="mobileNav" hidden role="tablist">
-    <button data-page="itinerary" role="tab" data-mode="plan">Itinerary</button>
-    <button data-page="prepare"   role="tab" data-mode="plan">Prepare</button>
-    <button data-page="today"     role="tab" data-mode="travel">Today</button>
-    <button data-page="notes"     role="tab" data-mode="travel">Notes</button>
-    <button data-page="overview"  role="tab" data-mode="any">More</button>
+    <button data-page="itinerary" role="tab" data-mode="plan"   data-i18n="nav.itinerary">Itinerary</button>
+    <button data-page="prepare"   role="tab" data-mode="plan"   data-i18n="nav.prepare">Prepare</button>
+    <button data-page="today"     role="tab" data-mode="travel" data-i18n="nav.today">Today</button>
+    <button data-page="notes"     role="tab" data-mode="travel" data-i18n="nav.notes">Notes</button>
+    <button data-page="overview"  role="tab" data-mode="any"    data-i18n="nav.more">More</button>
   </nav>
 
   <div id="shareMenu" class="share-menu no-print" popover="auto">
     <div id="shareMenuBody" class="share-menu-body">
-      <div class="share-menu-loading muted small">Loading…</div>
+      <div class="share-menu-loading muted small" data-i18n="share.menu.loading">Loading…</div>
     </div>
     <div class="share-menu-foot">
-      <a id="shareManageLink" href="#" class="btn primary share-menu-manage">Manage all share links →</a>
+      <a id="shareManageLink" href="#" class="btn primary share-menu-manage" data-i18n="share.menu.manageAll">Manage all share links →</a>
     </div>
   </div>
 
   <dialog id="newTripDialog" class="settings-dialog new-trip-dialog no-print">
     <form method="dialog">
-      <h3>Start a new trip</h3>
-      <p class="muted small">
+      <h3 data-i18n="dialog.newTrip.title">Start a new trip</h3>
+      <p class="muted small" data-i18n="dialog.newTrip.help">
         Set the basics now — you can refine everything later. Only the
         title is required.
       </p>
-      <label>Title
+      <label><span data-i18n="dialog.newTrip.titleLabel">Title</span>
         <input id="newTripTitle" type="text" required maxlength="120"
+               data-i18n-placeholder="dialog.newTrip.titlePlaceholder"
                placeholder="Hokkaido winter, Lisbon weekend, …">
       </label>
-      <label>Destination
+      <label><span data-i18n="dialog.newTrip.destLabel">Destination</span>
         <input id="newTripDestination" type="text" maxlength="120"
+               data-i18n-placeholder="dialog.newTrip.destPlaceholder"
                placeholder="Country, city, or region">
       </label>
       <div class="new-trip-dates">
-        <label>Start date
+        <label><span data-i18n="dialog.newTrip.startLabel">Start date</span>
           <input id="newTripStart" type="date">
         </label>
-        <label>End date
+        <label><span data-i18n="dialog.newTrip.endLabel">End date</span>
           <input id="newTripEnd" type="date">
         </label>
       </div>
-      <label>Travelers
+      <label><span data-i18n="dialog.newTrip.travelersLabel">Travelers</span>
         <input id="newTripTravelers" type="text"
+               data-i18n-placeholder="dialog.newTrip.travelersPlaceholder"
                placeholder="Alex, Sam, Jamie (comma-separated)">
       </label>
       <fieldset class="new-trip-template">
-        <legend>Starting template</legend>
+        <legend data-i18n="dialog.newTrip.templateLegend">Starting template</legend>
         <label class="new-trip-template-opt">
           <input type="radio" name="newTripTemplate" value="blank" checked>
-          <span><b>Blank trip</b><br><span class="muted small">Empty itinerary you fill in yourself.</span></span>
+          <span><b data-i18n="dialog.newTrip.templateBlank">Blank trip</b><br><span class="muted small" data-i18n="dialog.newTrip.templateBlankSub">Empty itinerary you fill in yourself.</span></span>
         </label>
         <label class="new-trip-template-opt">
           <input type="radio" name="newTripTemplate" value="sample">
-          <span><b>From sample (Japan)</b><br><span class="muted small">Pre-filled days, items, and prep checklist — handy if it's your first trip.</span></span>
+          <span><b data-i18n="dialog.newTrip.templateSample">From sample (Japan)</b><br><span class="muted small" data-i18n="dialog.newTrip.templateSampleSub">Pre-filled days, items, and prep checklist — handy if it's your first trip.</span></span>
         </label>
       </fieldset>
       <p id="newTripDialogStatus" class="auth-status muted small" hidden></p>
       <menu>
-        <button value="cancel">Cancel</button>
-        <button id="newTripSubmit" value="create" type="submit" class="primary">Create trip</button>
+        <button value="cancel" data-i18n="dialog.newTrip.cancel">Cancel</button>
+        <button id="newTripSubmit" value="create" type="submit" class="primary" data-i18n="dialog.newTrip.create">Create trip</button>
       </menu>
     </form>
   </dialog>
 
   <dialog id="passwordDialog" class="settings-dialog no-print">
     <form method="dialog">
-      <h3>Change password</h3>
-      <p class="muted small">
+      <h3 data-i18n="dialog.password.title">Change password</h3>
+      <p class="muted small" data-i18n="dialog.password.help">
         You're already signed in, so we don't need your current password.
         Pick a new one of at least 6 characters.
       </p>
-      <label>New password
+      <label><span data-i18n="dialog.password.newLabel">New password</span>
         <input id="newPassword" type="password" required minlength="6" autocomplete="new-password">
       </label>
-      <label>Confirm new password
+      <label><span data-i18n="dialog.password.confirmLabel">Confirm new password</span>
         <input id="newPasswordConfirm" type="password" required minlength="6" autocomplete="new-password">
       </label>
       <p id="passwordDialogStatus" class="auth-status muted small" hidden></p>
       <menu>
-        <button value="cancel">Cancel</button>
-        <button id="passwordSubmit" value="update" type="submit" class="primary">Update password</button>
+        <button value="cancel" data-i18n="dialog.password.cancel">Cancel</button>
+        <button id="passwordSubmit" value="update" type="submit" class="primary" data-i18n="dialog.password.update">Update password</button>
       </menu>
     </form>
   </dialog>
 
   <dialog id="convertDialog" class="settings-dialog no-print">
     <form method="dialog">
-      <h3>Save trip to your account</h3>
-      <p class="muted small">
+      <h3 data-i18n="dialog.convert.title">Save trip to your account</h3>
+      <p class="muted small" data-i18n="dialog.convert.help">
         Right now you're editing as a guest. Add an email and password to
         keep this trip in your personal list. Your edits stay attached to
         you.
       </p>
-      <label>Email
+      <label><span data-i18n="dialog.convert.emailLabel">Email</span>
         <input id="convertEmail" type="email" required autocomplete="email">
       </label>
-      <label>Password
+      <label><span data-i18n="dialog.convert.passwordLabel">Password</span>
         <input id="convertPassword" type="password" required minlength="6" autocomplete="new-password">
       </label>
       <p id="convertDialogStatus" class="auth-status muted small" hidden></p>
       <menu>
-        <button value="cancel">Not now</button>
-        <button id="convertSubmit" value="convert" type="submit" class="primary">Create account</button>
+        <button value="cancel" data-i18n="dialog.convert.cancel">Not now</button>
+        <button id="convertSubmit" value="convert" type="submit" class="primary" data-i18n="dialog.convert.submit">Create account</button>
       </menu>
     </form>
   </dialog>
 
   <dialog id="settingsDialog" class="settings-dialog no-print">
     <form method="dialog">
-      <h3>Supabase connection</h3>
-      <p class="muted">
+      <h3 data-i18n="dialog.settings.title">Supabase connection</h3>
+      <p class="muted" data-i18n="dialog.settings.help">
         Stored only in this browser's localStorage. The deployed site uses
         repo Secrets via GitHub Actions and ignores these unless you set them.
       </p>
       <p id="sbConfigSource" class="muted"></p>
-      <label>Project URL
+      <label><span data-i18n="dialog.settings.urlLabel">Project URL</span>
         <input id="sbUrl" type="url" placeholder="https://xxxx.supabase.co">
       </label>
-      <label>Publishable / anon key
+      <label><span data-i18n="dialog.settings.keyLabel">Publishable / anon key</span>
         <input id="sbKey" type="text" placeholder="sb_publishable_... or eyJ...">
       </label>
       <menu>
-        <button value="cancel">Cancel</button>
-        <button value="disconnect" type="submit">Clear local override</button>
-        <button value="connect" type="submit" class="primary">Save &amp; reload</button>
+        <button value="cancel" data-i18n="dialog.settings.cancel">Cancel</button>
+        <button value="disconnect" type="submit" data-i18n="dialog.settings.disconnect">Clear local override</button>
+        <button value="connect" type="submit" class="primary" data-i18n="dialog.settings.save">Save &amp; reload</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <dialog id="preferencesDialog" class="settings-dialog no-print">
+    <form method="dialog">
+      <h3 data-i18n="dialog.prefs.title">Preferences</h3>
+      <p class="muted small" data-i18n="dialog.prefs.help">Saved in this browser only.</p>
+      <label><span data-i18n="dialog.prefs.language">Language</span>
+        <select id="prefLanguage">
+          <option value="en">English</option>
+          <option value="zh-CN">中文 (简体)</option>
+        </select>
+      </label>
+      <menu>
+        <button value="close" type="submit" class="primary" data-i18n="dialog.prefs.close">Close</button>
       </menu>
     </form>
   </dialog>

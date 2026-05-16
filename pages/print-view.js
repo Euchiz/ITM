@@ -12,6 +12,7 @@
 //   4. Click "Close" → overlay removed, normal app restored.
 
 import { el, formatDate, formatTime, formatMoney } from "./_utils.js";
+import { t as i18n, formatLongDate as fmtLongDate } from "../i18n/locale.js";
 import { ITEM_TYPES } from "../io/schema.js";
 import { computeSettlement } from "./costs.js";
 
@@ -43,19 +44,17 @@ const STATUS_LABELS = {
   cancelled: "Cancelled",
 };
 
-const WEEKDAY = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-
 export function openPrintView(trip) {
   // Remove any prior overlay first (defensive).
   document.querySelectorAll(".print-overlay").forEach((n) => n.remove());
 
   const overlay = el("div", { class: "print-overlay" });
   const toolbar = el("div", { class: "print-toolbar no-print" },
-    el("strong", { text: "Print preview" }),
-    el("span", { class: "muted small", text: "Use the Print button to save as PDF." }),
+    el("strong", { text: i18n("print.toolbar.title") }),
+    el("span", { class: "muted small", text: i18n("print.toolbar.hint") }),
     el("span", { class: "spacer" }),
-    el("button", { class: "btn", onClick: close }, "Close"),
-    el("button", { class: "btn primary", onClick: doPrint }, "Print PDF"),
+    el("button", { class: "btn", onClick: close }, i18n("print.toolbar.close")),
+    el("button", { class: "btn primary", onClick: doPrint }, i18n("print.toolbar.printPdf")),
   );
 
   const doc = buildDoc(trip);
@@ -167,8 +166,8 @@ function cover(t, totalDays, totalNights) {
     : "";
 
   return el("section", { class: "print-cover" },
-    el("div", { class: "cover-eyebrow", text: "ITINERARY" }),
-    el("h1", { class: "cover-title", text: t.title || "Untitled Trip" }),
+    el("div", { class: "cover-eyebrow", text: i18n("print.cover.eyebrow") }),
+    el("h1", { class: "cover-title", text: t.title || i18n("print.cover.untitled") }),
     t.destination ? el("div", { class: "cover-destination", text: t.destination }) : null,
     el("div", { class: "cover-dates" },
       dates ? el("div", { class: "cover-date-range", text: dates }) : null,
@@ -177,7 +176,7 @@ function cover(t, totalDays, totalNights) {
 
     (t.travelers && t.travelers.length > 0)
       ? el("div", { class: "cover-block" },
-          el("div", { class: "cover-label", text: "Travelers" }),
+          el("div", { class: "cover-label", text: i18n("print.cover.travelers") }),
           el("ul", { class: "traveler-list" },
             ...t.travelers.map((name) => el("li", { text: name })),
           ),
@@ -186,7 +185,7 @@ function cover(t, totalDays, totalNights) {
 
     t.summary
       ? el("div", { class: "cover-block" },
-          el("div", { class: "cover-label", text: "Summary" }),
+          el("div", { class: "cover-label", text: i18n("print.cover.summary") }),
           el("p", { class: "cover-summary", text: t.summary }),
         )
       : null,
@@ -202,22 +201,23 @@ function glance(t, days) {
     n + (d.items || []).filter((it) => it.is_fixed).length, 0);
 
   return el("section", { class: "print-section glance" },
-    el("h2", { text: "Trip overview" }),
+    el("h2", { text: i18n("print.glance.title") }),
     el("table", { class: "facts-table" },
       el("tbody", {},
-        fact("Departure", t.start_date ? `${formatLongDate(t.start_date)}` : "—"),
-        fact("Return", t.end_date ? `${formatLongDate(t.end_date)}` : "—"),
-        fact("Duration", days.length > 0 ? `${days.length} day${days.length === 1 ? "" : "s"}` : "—"),
-        fact("Travelers", (t.travelers || []).length > 0
+        fact(i18n("print.glance.departure"), t.start_date ? `${formatLongDate(t.start_date)}` : "—"),
+        fact(i18n("print.glance.return"), t.end_date ? `${formatLongDate(t.end_date)}` : "—"),
+        fact(i18n("print.glance.duration"),
+          days.length > 0 ? i18n("print.cover.duration", { n: days.length }) : "—"),
+        fact(i18n("print.glance.travelers"), (t.travelers || []).length > 0
           ? `${t.travelers.length} (${t.travelers.join(", ")})`
           : "—"),
-        fact("Cities", cities.length > 0 ? cities.join(" → ") : (t.destination || "—")),
-        fact("Planned items", `${itemCount}${fixedCount > 0 ? ` (${fixedCount} fixed / locked)` : ""}`),
+        fact(i18n("print.glance.cities"), cities.length > 0 ? cities.join(" → ") : (t.destination || "—")),
+        fact(i18n("print.glance.plannedItems"), `${itemCount}${fixedCount > 0 ? i18n("print.glance.fixedNote", { n: fixedCount }) : ""}`),
       ),
     ),
     t.general_notes
       ? el("div", { class: "general-notes" },
-          el("div", { class: "section-label small", text: "General notes" }),
+          el("div", { class: "section-label small", text: i18n("print.glance.generalNotes") }),
           el("p", { text: t.general_notes }),
         )
       : null,
@@ -236,13 +236,13 @@ function fact(label, value) {
 function dayByDay(days, tripDefaultCurrency) {
   if (days.length === 0) {
     return el("section", { class: "print-section" },
-      el("h2", { text: "Day-by-day itinerary" }),
-      el("p", { class: "muted", text: "No days planned yet." }),
+      el("h2", { text: i18n("print.daily.title") }),
+      el("p", { class: "muted", text: i18n("print.daily.empty") }),
     );
   }
 
   const sec = el("section", { class: "print-section daily" },
-    el("h2", { text: "Day-by-day itinerary" }),
+    el("h2", { text: i18n("print.daily.title") }),
   );
 
   days.forEach((day, idx) => {
@@ -358,7 +358,7 @@ function accommodationSection(lodging) {
   }));
 
   return el("section", { class: "print-section accommodation" },
-    el("h2", { text: "Accommodation" }),
+    el("h2", { text: i18n("print.accommodation.title") }),
     el("table", { class: "list-table" },
       el("thead", {},
         el("tr", {},
@@ -396,7 +396,7 @@ function transportSection(transport) {
   });
 
   return el("section", { class: "print-section transport" },
-    el("h2", { text: "Transportation" }),
+    el("h2", { text: i18n("print.transport.title") }),
     el("table", { class: "list-table" },
       el("thead", {},
         el("tr", {},
@@ -429,7 +429,7 @@ function transportSection(transport) {
 
 function prepSection(prep) {
   return el("section", { class: "print-section prep" },
-    el("h2", { text: "Preparation checklist" }),
+    el("h2", { text: i18n("print.prep.title") }),
     el("ul", { class: "prep-list" },
       ...prep.map((c) =>
         el("li", { class: c.is_done ? "done" : "" },
@@ -449,7 +449,7 @@ function prepSection(prep) {
 
 function notesSection(notes) {
   return el("section", { class: "print-section notes" },
-    el("h2", { text: "Notes" }),
+    el("h2", { text: i18n("print.notes.title") }),
     ...notes.map((n) =>
       el("div", { class: "note-block" },
         n.title ? el("h4", { text: n.title }) : null,
@@ -499,7 +499,7 @@ function budgetSummary(t) {
   const settlement = computeSettlement(t);
 
   return el("section", { class: "print-section budget-summary" },
-    el("h2", { text: "Budget summary" }),
+    el("h2", { text: i18n("print.budget.title") }),
 
     // Per-currency block
     el("div", { class: "print-summary-block" },
@@ -645,15 +645,15 @@ function settlementBlock(code, edges, trip) {
 
 // ----- Footer -----
 
-function footer(t) {
-  const now = new Date();
-  const stamp = now.toLocaleDateString(undefined, {
-    year: "numeric", month: "long", day: "numeric",
-  });
+function footer(trip) {
+  const stamp = new Date().toLocaleDateString(
+    document.documentElement.lang || undefined,
+    { year: "numeric", month: "long", day: "numeric" }
+  );
   return el("footer", { class: "print-footer" },
-    el("span", { text: t.title || "Trip itinerary" }),
+    el("span", { text: trip.title || i18n("print.title.fallback") }),
     el("span", { class: "spacer" }),
-    el("span", { text: "Generated " + stamp }),
+    el("span", { text: i18n("print.generated", { date: stamp }) }),
   );
 }
 
@@ -668,14 +668,7 @@ function uniq(arr) {
   return out;
 }
 
-function formatLongDate(iso) {
-  if (!iso) return "";
-  const d = new Date(iso + "T00:00:00");
-  if (isNaN(d.getTime())) return iso;
-  return `${WEEKDAY[d.getDay()]}, ${d.toLocaleDateString(undefined, {
-    month: "long", day: "numeric", year: "numeric",
-  })}`;
-}
+const formatLongDate = fmtLongDate;
 
 function formatTimeRange(a, b) {
   if (!a && !b) return "";

@@ -11,22 +11,22 @@
 //   somePageRenderer(slot, ctx);
 
 import { el } from "../_utils.js";
+import { t, plural } from "../../i18n/locale.js";
 import { openMoreSheet } from "./more.js";
 
-// Tab configuration per mode. id maps to state.page; label is the
-// short tab title; glyph is a Material Symbols name; soon flags the
-// SOON badge (Map only, for now).
+// Tab configuration per mode. Labels resolve via t() at render time so
+// a locale switch retranslates the bar without rebuilding the array.
 export const TRAVEL_TABS = [
-  { id: "today",  glyph: "today",          label: "Today" },
-  { id: "map",    glyph: "map",            label: "Map",   soon: true },
-  { id: "costs",  glyph: "receipt_long",   label: "Costs" },
-  { id: "notes",  glyph: "edit_note",      label: "Notes" },
+  { id: "today",  glyph: "today",          labelKey: "mobile.tab.today" },
+  { id: "map",    glyph: "map",            labelKey: "mobile.tab.map", soon: true },
+  { id: "costs",  glyph: "receipt_long",   labelKey: "mobile.tab.costs" },
+  { id: "notes",  glyph: "edit_note",      labelKey: "mobile.tab.notes" },
 ];
 export const OVERVIEW_TABS = [
-  { id: "itinerary", glyph: "calendar_month", label: "Itinerary" },
-  { id: "prepare",   glyph: "fact_check",     label: "Prepare"   },
-  { id: "budget",    glyph: "savings",        label: "Budget"    },
-  { id: "pack",      glyph: "luggage",        label: "Pack"      },
+  { id: "itinerary", glyph: "calendar_month", labelKey: "mobile.tab.itinerary" },
+  { id: "prepare",   glyph: "fact_check",     labelKey: "mobile.tab.prepare" },
+  { id: "budget",    glyph: "savings",        labelKey: "mobile.tab.budget" },
+  { id: "pack",      glyph: "luggage",        labelKey: "mobile.tab.pack" },
 ];
 
 const MODE_FIRST_TAB = { travel: "today", overview: "itinerary" };
@@ -36,13 +36,6 @@ const MODE_FIRST_TAB = { travel: "today", overview: "itinerary" };
 // bar + no mode pill — the user came from a specific origin and the
 // back arrow takes them there.
 const DRILL_IN_PAGES = new Set(["detail", "overview", "members", "io"]);
-
-const DRILL_IN_LABELS = {
-  detail:   "Back",
-  overview: "Back",
-  members:  "Back",
-  io:       "Back",
-};
 
 export function renderMobileShell(host, ctx) {
   const trip = ctx.trip || {};
@@ -60,18 +53,15 @@ export function renderMobileShell(host, ctx) {
   const row1 = el("div", { class: "vy-mobile-headline" });
   row1.appendChild(buildBackButton(ctx, page, isDrillIn));
   row1.appendChild(el("h1", { class: "vy-mobile-trip-title",
-    text: isDrillIn ? drillInTitle(page, trip) : (trip.title || "Untitled trip") }));
+    text: isDrillIn ? drillInTitle(page, trip) : (trip.title || t("sidebar.untitledTrip")) }));
   row1.appendChild(el("button", {
     class: "vy-mobile-more-btn",
-    "aria-label": "More",
-    title: "More",
+    "aria-label": t("mobile.shell.more"),
+    title: t("mobile.shell.more"),
     onClick: () => openMoreSheet(ctx),
   }, el("span", { class: "material-symbols-outlined", text: "more_horiz" })));
   header.appendChild(row1);
 
-  // Row 2: mode pill · meta. Hidden on drill-in screens — the back
-  // arrow already provides context and the mode pill would just
-  // invite the user to leave the drill-in.
   if (!isDrillIn) {
     const row2 = el("div", { class: "vy-mobile-headmeta" });
     row2.appendChild(buildModePill(ctx, mode));
@@ -81,12 +71,9 @@ export function renderMobileShell(host, ctx) {
 
   host.appendChild(header);
 
-  // Content slot — the page renders into this. Padding-bottom clears
-  // the floating tab bar; safe-area-inset is in the CSS.
   const slot = el("section", { class: "vy-mobile-content" });
   host.appendChild(slot);
 
-  // Floating glass tab bar — only on regular tab pages, not drill-ins.
   if (!isDrillIn) host.appendChild(buildTabBar(ctx, tabs, page));
 
   return slot;
@@ -94,10 +81,10 @@ export function renderMobileShell(host, ctx) {
 
 function drillInTitle(page, trip) {
   switch (page) {
-    case "members":  return "Members";
-    case "overview": return "Trip overview";
-    case "io":       return "Import / Export";
-    case "detail":   return trip?.title || "Event";
+    case "members":  return t("mobile.shell.drillInMembers");
+    case "overview": return t("mobile.shell.drillInOverview");
+    case "io":       return t("mobile.shell.drillInIo");
+    case "detail":   return trip?.title || t("mobile.shell.drillInDetail");
     default:         return trip?.title || "";
   }
 }
@@ -113,7 +100,7 @@ function buildBackButton(ctx, page, isDrillIn) {
       },
     },
       el("span", { class: "material-symbols-outlined", text: "chevron_left" }),
-      el("span", { text: DRILL_IN_LABELS[page] || "Back" }),
+      el("span", { text: t("mobile.shell.back") }),
     );
   }
   return el("button", {
@@ -121,7 +108,7 @@ function buildBackButton(ctx, page, isDrillIn) {
     onClick: () => ctx.navigate?.({ trip: null }),
   },
     el("span", { class: "material-symbols-outlined", text: "chevron_left" }),
-    el("span", { text: "Trips" }),
+    el("span", { text: t("mobile.shell.trips") }),
   );
 }
 
@@ -137,7 +124,7 @@ function buildModePill(ctx, currentMode) {
         ctx.setMobileMode?.(m);
         ctx.navigate?.({ page: MODE_FIRST_TAB[m] });
       },
-    }, m === "travel" ? "Travel" : "Overview");
+    }, m === "travel" ? t("mobile.shell.travelTab") : t("mobile.shell.overviewTab"));
     wrap.appendChild(btn);
   }
   return wrap;
@@ -148,7 +135,7 @@ function buildHeadMetaText(ctx, trip) {
   const wrap = el("div", { class: "vy-mobile-headmeta-r" });
   if (dayCount > 0) {
     wrap.appendChild(el("span", { class: "vy-meta",
-      text: `${dayCount} DAY${dayCount === 1 ? "" : "S"}` }));
+      text: plural("mobile.shell.dayCount", dayCount, { n: dayCount }) }));
   } else {
     wrap.appendChild(el("span", { class: "vy-meta muted", text: "—" }));
   }
@@ -157,18 +144,18 @@ function buildHeadMetaText(ctx, trip) {
 
 function buildTabBar(ctx, tabs, currentPage) {
   const bar = el("nav", { class: "vy-mobile-tabbar", role: "tablist" });
-  for (const t of tabs) {
-    const isActive = t.id === currentPage;
+  for (const tab of tabs) {
+    const isActive = tab.id === currentPage;
     const btn = el("button", {
       class: `vy-mobile-tabbar-btn ${isActive ? "is-active" : ""}`.trim(),
       role: "tab",
       "aria-selected": isActive ? "true" : "false",
-      "data-page": t.id,
-      onClick: () => ctx.navigate?.({ page: t.id }),
+      "data-page": tab.id,
+      onClick: () => ctx.navigate?.({ page: tab.id }),
     },
-      el("span", { class: "material-symbols-outlined", text: t.glyph }),
-      el("span", { class: "vy-mobile-tabbar-label", text: t.label }),
-      t.soon ? el("span", { class: "vy-mobile-tabbar-soon", text: "SOON" }) : null,
+      el("span", { class: "material-symbols-outlined", text: tab.glyph }),
+      el("span", { class: "vy-mobile-tabbar-label", text: t(tab.labelKey) }),
+      tab.soon ? el("span", { class: "vy-mobile-tabbar-soon", text: t("mobile.tab.soon") }) : null,
     );
     bar.appendChild(btn);
   }

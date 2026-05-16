@@ -21,12 +21,13 @@
 
 import { auth, share } from "../supabase.js";
 import { el } from "./_utils.js";
+import { t } from "../i18n/locale.js";
 
 export async function renderShareLanding(host, opts) {
   const { token, onAuthRequest, onRedeemed, onError } = opts;
 
   host.innerHTML = "";
-  host.appendChild(el("div", { class: "share-landing-loading", text: "Opening shared trip…" }));
+  host.appendChild(el("div", { class: "share-landing-loading", text: t("shareLanding.opening") }));
 
   let preview = null;
   try {
@@ -34,25 +35,27 @@ export async function renderShareLanding(host, opts) {
   } catch (e) {
     onError?.(e);
     host.innerHTML = "";
-    host.appendChild(renderError("We couldn't open that link. It may be malformed or expired."));
+    host.appendChild(renderError(t("shareLanding.errMalformed")));
     return;
   }
 
   if (!preview) {
     host.innerHTML = "";
-    host.appendChild(renderError("This share link doesn't exist."));
+    host.appendChild(renderError(t("shareLanding.errMissing")));
     return;
   }
 
+  const ownerWho = preview.owner_display_name || t("shareLanding.errOwnerFallback");
+
   if (preview.revoked) {
     host.innerHTML = "";
-    host.appendChild(renderError(`This link has been revoked by ${preview.owner_display_name || "the owner"}. Ask them for a new one.`));
+    host.appendChild(renderError(t("shareLanding.errRevoked", { who: ownerWho })));
     return;
   }
 
   if (preview.expired) {
     host.innerHTML = "";
-    host.appendChild(renderError(`This link has expired. Ask ${preview.owner_display_name || "the owner"} for a new one.`));
+    host.appendChild(renderError(t("shareLanding.errExpired", { who: ownerWho })));
     return;
   }
 
@@ -62,7 +65,7 @@ export async function renderShareLanding(host, opts) {
 
 function renderError(message) {
   return el("div", { class: "share-landing-card share-landing-error" },
-    el("h1", { text: "Can't open this link" }),
+    el("h1", { text: t("shareLanding.errorTitle") }),
     el("p", { class: "muted", text: message }),
   );
 }
@@ -71,14 +74,15 @@ function renderCard(preview, token, { onAuthRequest, onRedeemed, onError }) {
   const card = el("section", { class: "share-landing-card" });
 
   // ===== Trip context =====
-  const roleLabel = preview.role === "viewer" ? "View-only access" : "Editor access";
+  const roleLabel = preview.role === "viewer"
+    ? t("shareLanding.viewerAccess") : t("shareLanding.editorAccess");
   const dateLabel = formatDateRange(preview.start_date, preview.end_date);
   const ownerLabel = preview.owner_display_name
-    ? `Shared by ${preview.owner_display_name}`
-    : "Shared with you";
+    ? t("shareLanding.sharedBy", { who: preview.owner_display_name })
+    : t("shareLanding.sharedWithYou");
 
   card.appendChild(el("div", { class: "share-landing-context" },
-    el("h1", { class: "share-landing-title", text: preview.trip_title || "Untitled trip" }),
+    el("h1", { class: "share-landing-title", text: preview.trip_title || t("shareLanding.untitled") }),
     preview.destination
       ? el("p", { class: "share-landing-destination", text: preview.destination })
       : null,
@@ -96,13 +100,13 @@ function renderCard(preview, token, { onAuthRequest, onRedeemed, onError }) {
   const ctas = el("div", { class: "share-landing-ctas" });
   card.appendChild(ctas);
 
-  const signInBtn = el("button", { class: "btn", text: "Sign in", type: "button" });
+  const signInBtn = el("button", { class: "btn", text: t("shareLanding.signInBtn"), type: "button" });
   signInBtn.addEventListener("click", () => onAuthRequest?.("sign-in"));
 
-  const signUpBtn = el("button", { class: "btn", text: "Sign up", type: "button" });
+  const signUpBtn = el("button", { class: "btn", text: t("shareLanding.signUpBtn"), type: "button" });
   signUpBtn.addEventListener("click", () => onAuthRequest?.("sign-up"));
 
-  const guestBtn = el("button", { class: "btn primary", text: "Continue as guest →", type: "button" });
+  const guestBtn = el("button", { class: "btn primary", text: t("shareLanding.guestBtn"), type: "button" });
 
   ctas.appendChild(signInBtn);
   ctas.appendChild(signUpBtn);
@@ -110,12 +114,12 @@ function renderCard(preview, token, { onAuthRequest, onRedeemed, onError }) {
 
   // ===== Guest name input (optional) =====
   const nameWrap = el("label", { class: "share-landing-name" },
-    el("span", { class: "share-landing-name-label", text: "Your name (optional)" }),
+    el("span", { class: "share-landing-name-label", text: t("shareLanding.nameLabel") }),
   );
   const nameInput = el("input", {
     type: "text",
     class: "share-landing-name-input",
-    placeholder: "Helps the team know who you are",
+    placeholder: t("shareLanding.namePlaceholder"),
     autocomplete: "given-name",
     maxlength: "40",
   });
@@ -123,8 +127,7 @@ function renderCard(preview, token, { onAuthRequest, onRedeemed, onError }) {
   card.appendChild(nameWrap);
 
   // Disclosure line under the CTAs.
-  card.appendChild(el("p", { class: "share-landing-note muted",
-    text: "Guests can edit but trips won't save to your list. You can register anytime to keep this trip." }));
+  card.appendChild(el("p", { class: "share-landing-note muted", text: t("shareLanding.note") }));
 
   const statusEl = el("p", { class: "share-landing-status muted", hidden: true });
   card.appendChild(statusEl);
@@ -140,7 +143,7 @@ function renderCard(preview, token, { onAuthRequest, onRedeemed, onError }) {
     guestBtn.disabled = true;
     signInBtn.disabled = true;
     signUpBtn.disabled = true;
-    setStatus("Joining…");
+    setStatus(t("shareLanding.joining"));
     try {
       await auth.signInAnonymously();
       const tripId = await share.redeem(token, nameInput.value || null);
@@ -163,7 +166,8 @@ function formatDateRange(start, end) {
   const sd = start ? new Date(start) : null;
   const ed = end ? new Date(end) : null;
   const fmt = (d) =>
-    d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    d.toLocaleDateString(document.documentElement.lang || undefined,
+      { month: "short", day: "numeric", year: "numeric" });
   if (sd && ed) {
     if (start === end) return fmt(sd);
     return `${fmt(sd)} – ${fmt(ed)}`;

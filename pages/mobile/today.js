@@ -18,6 +18,7 @@
 
 import { items as itemsApi, packItems } from "../../supabase.js";
 import { el, formatTimeRange, formatTime } from "../_utils.js";
+import { t, plural, getLocale } from "../../i18n/locale.js";
 import { TYPE_VISUALS } from "../itinerary.js";
 
 // ─── Time math ────────────────────────────────────────────────────
@@ -106,7 +107,7 @@ export function renderMobileToday(host, ctx) {
   const trip = ctx.trip;
   if (!trip) {
     host.innerHTML = "";
-    host.appendChild(el("p", { class: "muted small", text: "No trip loaded." }));
+    host.appendChild(el("p", { class: "muted small", text: t("mobile.today.noTrip") }));
     return;
   }
 
@@ -119,8 +120,8 @@ export function renderMobileToday(host, ctx) {
   // Edge state: empty trip
   if (days.length === 0) {
     host.appendChild(emptyState({
-      title: "No days yet",
-      body: "Add your first day on desktop to start planning.",
+      title: t("mobile.today.empty.title"),
+      body: t("mobile.today.empty.body"),
     }));
     return;
   }
@@ -182,7 +183,7 @@ function renderPackReminder(host, ctx, items, todayDayId) {
   },
     el("span", { class: "material-symbols-outlined", text: "luggage" }),
     el("span", { class: "vy-mobile-pack-reminder-title",
-      text: `${items.length} pack item${items.length === 1 ? "" : "s"} for today` }),
+      text: plural("mobile.today.packReminder", items.length, { n: items.length }) }),
     el("span", { class: "material-symbols-outlined vy-mobile-pack-reminder-chev",
       text: "expand_more" }),
   );
@@ -199,7 +200,7 @@ function renderPackReminder(host, ctx, items, todayDayId) {
           p.packed = true;
           ctx.rerender?.();
         } catch (e) {
-          ctx.toast?.("Couldn't mark packed: " + (e.message || e), true);
+          ctx.toast?.(t("mobile.today.markPackedFailed", { error: e.message || e }), true);
         }
       },
     },
@@ -223,15 +224,15 @@ function renderNowCard(ctx, it, day, nextItem) {
   // Top: NOW · time range + type chip
   const top = el("div", { class: "vy-mobile-now-top" });
   const timeText = it.end_time
-    ? `NOW · ${formatTime(it.start_time)} → ${formatTime(it.end_time)}`
-    : `NOW · ${formatTime(it.start_time)}`;
+    ? t("mobile.today.nowRange", { start: formatTime(it.start_time), end: formatTime(it.end_time) })
+    : t("mobile.today.nowAt", { start: formatTime(it.start_time) });
   top.appendChild(el("span", { class: "vy-mobile-now-livedot",
     html: `<span class="material-symbols-outlined">circle</span> ${timeText}` }));
   top.appendChild(typeChip(v));
   card.appendChild(top);
 
   // Title + sub
-  card.appendChild(el("h2", { class: "vy-mobile-now-title", text: it.title || "(untitled)" }));
+  card.appendChild(el("h2", { class: "vy-mobile-now-title", text: it.title || t("mobile.today.untitled") }));
   if (it.location_name) {
     card.appendChild(el("p", { class: "vy-mobile-now-sub", text: it.location_name }));
   }
@@ -246,8 +247,8 @@ function renderNowCard(ctx, it, day, nextItem) {
     card.appendChild(el("div", { class: "vy-mobile-now-progress" },
       el("div", { class: "vy-mobile-now-progress-row" },
         el("span", { class: "mono small",
-          text: `${elapsedText} in · ${remainText} left` }),
-        el("span", { class: "vy-meta", text: `~${pct}% COMPLETE` }),
+          text: t("mobile.today.elapsedRemaining", { elapsed: elapsedText, remaining: remainText }) }),
+        el("span", { class: "vy-meta", text: t("mobile.today.pctComplete", { pct }) }),
       ),
       el("div", { class: "vy-mobile-now-progress-bar" },
         el("div", { class: "vy-mobile-now-progress-fill",
@@ -258,7 +259,7 @@ function renderNowCard(ctx, it, day, nextItem) {
     const elapsed = Math.max(0, now - startMin);
     card.appendChild(el("div", { class: "vy-mobile-now-progress" },
       el("div", { class: "vy-mobile-now-progress-row" },
-        el("span", { class: "mono small", text: `started ${formatDuration(elapsed)} ago` }),
+        el("span", { class: "mono small", text: t("mobile.today.startedAgo", { duration: formatDuration(elapsed) }) }),
       ),
     ));
   }
@@ -280,10 +281,10 @@ function renderNextAsHero(ctx, it, day, now) {
   });
   const top = el("div", { class: "vy-mobile-now-top" });
   top.appendChild(el("span", { class: "vy-mobile-now-livedot",
-    text: inMins != null ? `NEXT UP · IN ${formatDuration(inMins)}` : "NEXT UP" }));
+    text: inMins != null ? t("mobile.today.nextUpIn", { duration: formatDuration(inMins) }) : t("mobile.today.nextUp") }));
   top.appendChild(typeChip(v));
   card.appendChild(top);
-  card.appendChild(el("h2", { class: "vy-mobile-now-title", text: it.title || "(untitled)" }));
+  card.appendChild(el("h2", { class: "vy-mobile-now-title", text: it.title || t("mobile.today.untitled") }));
   if (it.location_name) {
     card.appendChild(el("p", { class: "vy-mobile-now-sub", text: it.location_name }));
   }
@@ -305,13 +306,13 @@ function renderNextCard(ctx, it, now) {
   },
     el("div", { class: "vy-mobile-next-top" },
       el("span", { class: "vy-meta",
-        text: inMins != null ? `NEXT UP · IN ${formatDuration(inMins)}` : "NEXT UP" }),
+        text: inMins != null ? t("mobile.today.nextUpIn", { duration: formatDuration(inMins) }) : t("mobile.today.nextUp") }),
       typeChip(v),
     ),
     el("div", { class: "vy-mobile-next-row" },
       el("div", { class: "vy-mobile-next-time mono", text: formatTime(it.start_time) || "—" }),
       el("div", { class: "vy-mobile-next-body" },
-        el("div", { class: "vy-mobile-next-title", text: it.title || "(untitled)" }),
+        el("div", { class: "vy-mobile-next-title", text: it.title || t("mobile.today.untitled") }),
         it.location_name
           ? el("div", { class: "vy-mobile-next-sub", text: it.location_name }) : null,
       ),
@@ -324,9 +325,9 @@ function renderNextCard(ctx, it, now) {
 function renderTodayPlan(ctx, items, nowItem) {
   const card = el("section", { class: "vy-mobile-plan card" });
   card.appendChild(el("header", { class: "vy-mobile-plan-head" },
-    el("h3", { text: "Today's plan" }),
+    el("h3", { text: t("mobile.today.plan.title") }),
     el("span", { class: "vy-meta",
-      text: `${items.length} ITEM${items.length === 1 ? "" : "S"}` }),
+      text: plural("mobile.today.plan.count", items.length, { n: items.length }) }),
   ));
   const list = el("div", { class: "vy-mobile-plan-list" });
   const now = nowMinutes();
@@ -344,8 +345,8 @@ function renderTodayPlan(ctx, items, nowItem) {
         text: formatTime(it.start_time) || "—" }),
       el("span", { class: `vy-mobile-plan-pip vy-pip--${v.chipClass}` }),
       el("span", { class: "vy-mobile-plan-title",
-        text: it.title || "(untitled)" }),
-      isNow ? el("span", { class: "vy-mobile-plan-tag-now", text: "NOW" })
+        text: it.title || t("mobile.today.untitled") }),
+      isNow ? el("span", { class: "vy-mobile-plan-tag-now", text: t("mobile.today.plan.nowTag") })
             : isPast ? el("span", { class: "material-symbols-outlined", text: "check" })
             : el("span", { class: "material-symbols-outlined", text: "chevron_right" }),
     );
@@ -358,8 +359,8 @@ function renderTodayPlan(ctx, items, nowItem) {
 function thatsYourDayCard(day) {
   return el("section", { class: "vy-mobile-done card" },
     el("span", { class: "material-symbols-outlined", text: "check_circle" }),
-    el("h2", { text: "That's your day" }),
-    el("p", { class: "muted", text: "Nothing scheduled after this point. Enjoy." }),
+    el("h2", { text: t("mobile.today.thatsYourDay.title") }),
+    el("p", { class: "muted", text: t("mobile.today.thatsYourDay.body") }),
   );
 }
 
@@ -368,31 +369,36 @@ function preTripCard(trip, firstDay) {
     (new Date(firstDay.date + "T00:00:00").getTime() - new Date(todayIsoDate() + "T00:00:00").getTime())
     / (1000 * 60 * 60 * 24)
   ));
-  const dateLabel = new Date(firstDay.date + "T00:00:00").toLocaleDateString(undefined,
+  const dateLabel = new Date(firstDay.date + "T00:00:00").toLocaleDateString(getLocale(),
     { weekday: "short", month: "short", day: "numeric" });
   return el("section", { class: "vy-mobile-edge card" },
     el("span", { class: "material-symbols-outlined", text: "rocket_launch" }),
-    el("h2", { text: days === 0 ? "Trip starts today" : `Trip starts in ${days} day${days === 1 ? "" : "s"}` }),
+    el("h2", { text: days === 0
+      ? t("mobile.today.preTrip.todayHeader")
+      : plural("mobile.today.preTrip.daysHeader", days, { n: days }) }),
     el("p", { class: "muted",
-      text: `Day 1 is ${dateLabel}${firstDay.city ? " · " + firstDay.city : ""}` }),
+      text: t("mobile.today.preTrip.day1Is", {
+        date: dateLabel,
+        city: firstDay.city ? " · " + firstDay.city : "",
+      }) }),
   );
 }
 
 function postTripCard(trip) {
   return el("section", { class: "vy-mobile-edge card" },
     el("span", { class: "material-symbols-outlined", text: "flag" }),
-    el("h2", { text: "Trip ended" }),
-    el("p", { class: "muted", text: "Welcome back. Check Costs to settle up." }),
+    el("h2", { text: t("mobile.today.postTrip.header") }),
+    el("p", { class: "muted", text: t("mobile.today.postTrip.body") }),
   );
 }
 
 function gapDayCard(trip, todayIso) {
-  const date = new Date(todayIso + "T00:00:00").toLocaleDateString(undefined,
+  const date = new Date(todayIso + "T00:00:00").toLocaleDateString(getLocale(),
     { weekday: "short", month: "short", day: "numeric" });
   return el("section", { class: "vy-mobile-edge card" },
     el("span", { class: "material-symbols-outlined", text: "today" }),
-    el("h2", { text: "Open day" }),
-    el("p", { class: "muted", text: `${date} isn't scheduled — add events on desktop, or check tomorrow's plan.` }),
+    el("h2", { text: t("mobile.today.gap.header") }),
+    el("p", { class: "muted", text: t("mobile.today.gap.body", { date }) }),
   );
 }
 
@@ -417,11 +423,11 @@ function renderActionRow(ctx, it) {
   const showDefer = !it.is_fixed;
   const row = el("div", { class: "vy-mobile-action-row" });
 
-  row.appendChild(actionBtn("check", "Done", async () => {
-    await safeUpdate(ctx, it, { status: "done" }, "Marked done");
+  row.appendChild(actionBtn("check", t("mobile.today.action.done"), async () => {
+    await safeUpdate(ctx, it, { status: "done" }, t("mobile.today.action.markedDone"));
   }));
-  row.appendChild(actionBtn("close", "Cancelled", async () => {
-    await safeUpdate(ctx, it, { status: "cancelled" }, "Cancelled");
+  row.appendChild(actionBtn("close", t("mobile.today.action.cancelled"), async () => {
+    await safeUpdate(ctx, it, { status: "cancelled" }, t("mobile.today.action.markedCancelled"));
   }));
   if (showDefer) row.appendChild(deferBtn(ctx, it));
 
@@ -448,7 +454,7 @@ function deferBtn(ctx, it) {
     },
   },
     el("span", { class: "material-symbols-outlined", text: "schedule" }),
-    el("span", { text: "Defer" }),
+    el("span", { text: t("mobile.today.action.defer") }),
   );
   const picker = el("div", { class: "vy-mobile-defer-picker" });
   for (const mins of [30, 60]) {
@@ -459,7 +465,7 @@ function deferBtn(ctx, it) {
         wrap.classList.remove("is-open");
         runDefer(ctx, it, mins);
       },
-    }, mins === 60 ? "+1 h" : `+${mins} min`));
+    }, mins === 60 ? t("mobile.today.defer60") : t("mobile.today.defer30")));
   }
   wrap.append(btn, picker);
   return wrap;
@@ -483,9 +489,12 @@ async function runDefer(ctx, it, mins) {
   ctx.onSaveStart?.();
   try {
     const collisions = await itemsApi.cascadeDefer(it.id, mins);
-    const base = `Pushed by ${mins === 60 ? "1 hour" : `${mins} min`}`;
+    const amount = mins === 60
+      ? t("mobile.today.deferOneHour")
+      : t("mobile.today.deferMin", { n: mins });
+    const base = t("mobile.today.deferred", { amount });
     ctx.toast?.(collisions > 0
-      ? `${base} · ${collisions} overlap with fixed events`
+      ? t("mobile.today.deferredCollisions", { base, n: collisions })
       : base);
     // Refetch to get the updated times.
     await ctx.refresh?.();

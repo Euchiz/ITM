@@ -41,6 +41,7 @@ import { renderMobilePack } from "./pages/mobile/pack.js";
 import { renderMobileUnavailable } from "./pages/mobile/_unavailable.js";
 import { openPrintView } from "./pages/print-view.js";
 import { el, formatRelativeTime } from "./pages/_utils.js";
+import { t, plural, getLocale, setLocale, onLocaleChange, applyI18n, formatWeekday, formatMonthDay, SUPPORTED as SUPPORTED_LOCALES } from "./i18n/locale.js";
 
 const PAGES = {
   overview: renderOverview,
@@ -121,10 +122,27 @@ const state = {
 // ===== Boot =====
 
 window.addEventListener("DOMContentLoaded", async () => {
+  applyI18n(document);
   bindAppHeader();
   bindTabs();
   bindSettings();
+  bindPreferences();
   trackFontLoading();
+
+  // Re-translate static chrome + re-render the current view whenever
+  // the user switches language. setView reuses the original renderer
+  // path (auth, trips lobby, share landing); the trip view rebuilds via
+  // renderTripPage so sidebars, day-strips, and page bodies all retranslate.
+  onLocaleChange(() => {
+    applyI18n(document);
+    paintHeader();
+    // Preserve the unconfigured-Supabase setup screen across locale
+    // switches — setView("auth") would otherwise replace its body with
+    // the real auth form and lose the "click ⚙ to configure" message.
+    if (!isConfigured()) { showUnconfigured(); return; }
+    if (state.view === "trip") renderTripPage();
+    else setView(state.view);
+  });
 
   if (!isConfigured()) {
     showUnconfigured();
@@ -218,7 +236,7 @@ async function routeFromUrl() {
         await openTrip(redeemedTripId, page);
       } catch (e) {
         share.stripTokenFromUrl();
-        toast("Could not open shared trip: " + e.message, true);
+        toast(t("share.menu.openSharedError", { error: e.message }), true);
         if (state.user) setView("trips"); else setView("auth");
       }
       return;
@@ -376,7 +394,7 @@ export async function openTrip(id, page) {
     setView("trip");
     renderTripPage();
   } catch (e) {
-    toast("Could not open trip: " + e.message, true);
+    toast(t("trip.openError", { error: e.message }), true);
     syncUrl({});
     setView("trips");
   }
@@ -405,7 +423,7 @@ export async function refreshTrip() {
     state.trip = await trips.getFull(state.trip.id);
     renderTripPage();
   } catch (e) {
-    toast("Reload failed: " + e.message, true);
+    toast(t("trip.reloadFailed", { error: e.message }), true);
   }
 }
 
@@ -485,6 +503,7 @@ function renderTripPage() {
     selectedItemId: state.selectedItemId,
     openShare: () => toggleShareMenu(),
     openPrint: () => state.trip && openPrintView(state.trip),
+    openPreferences: () => openPreferencesDialog(),
     signOut: async () => {
       try { await auth.signOut(); } catch (e) { toast(e.message, true); }
     },
@@ -515,7 +534,7 @@ async function handleTripTitleChange(newTitle) {
     await trips.updateMeta(state.trip.id, { title: newTitle });
     paintHeader();
   } catch (e) {
-    toast("Save failed: " + e.message, true);
+    toast(t("trip.saveFailed", { error: e.message }), true);
   } finally {
     noteSaveDone();
   }
@@ -613,6 +632,12 @@ function bindAppHeader() {
   document.getElementById("guestChipBtn").addEventListener("click", () => {
     openConvertDialog();
   });
+  // The user badge doubles as a Preferences trigger on the trip view.
+  // It still shows the email (paintHeader keeps that updated); a click
+  // opens the picker.
+  document.getElementById("userBadge").addEventListener("click", () => {
+    openPreferencesDialog();
+  });
   bindConvertDialog();
   bindNewTripDialog();
   bindPasswordDialog();
@@ -649,7 +674,7 @@ async function openShareMenu() {
   const menu = document.getElementById("shareMenu");
   const body = document.getElementById("shareMenuBody");
   body.innerHTML = "";
-  body.appendChild(el("div", { class: "share-menu-loading muted small", text: "Loading…" }));
+  body.appendChild(el("div", { class: "share-menu-loading muted small", text: t("share.menu.loading") }));
   document.getElementById("shareManageLink").href =
     buildUrl({ trip: state.trip.id, page: "members" });
 
@@ -662,7 +687,7 @@ async function openShareMenu() {
   } catch (e) {
     body.innerHTML = "";
     body.appendChild(el("div", { class: "share-menu-error error small",
-      text: "Could not load links: " + (e.message || e) }));
+      text: t("share.menu.loadError", { error: e.message || e }) }));
     return;
   }
 
@@ -683,7 +708,7 @@ async function openShareMenu() {
     } catch (e) {
       body.innerHTML = "";
       body.appendChild(el("div", { class: "share-menu-error error small",
-        text: "Could not create link: " + (e.message || e) }));
+        text: t("share.menu.createError", { error: e.message || e }) }));
       return;
     }
   }
@@ -718,16 +743,18 @@ async function openShareMenu() {
 
 function renderShareMenuRow(link) {
   const isDefault = !link.label;
-  const labelText = isDefault ? "Default link" : link.label;
+  const labelText = isDefault ? t("share.menu.defaultLink") : link.label;
   const roleKind = link.role === "viewer" ? "viewer" : "editor";
 
   const metaBits = [];
   if (link.expires_at) {
     const d = new Date(link.expires_at);
-    metaBits.push(`expires ${d.toLocaleDateString()}`);
+    metaBits.push(t("share.menu.expires", {
+      date: d.toLocaleDateString(getLocale()),
+    }));
   }
   const rel = link.created_at ? formatRelativeTime(link.created_at) : null;
-  if (rel) metaBits.push(`created ${rel}`);
+  if (rel) metaBits.push(t("share.menu.created", { when: rel }));
 
   const row = el("button", { class: "share-menu-row", type: "button" });
   const content = el("div", { class: "share-menu-row-content" });
@@ -838,22 +865,22 @@ function bindNewTripDialog() {
     const template    = dlg.querySelector('input[name="newTripTemplate"]:checked')?.value || "blank";
 
     if (!title) {
-      setDialogStatus(statusEl, "Title is required.", true);
+      setDialogStatus(statusEl, t("dialog.newTrip.errTitleRequired"), true);
       return;
     }
     if (startDate && endDate && startDate > endDate) {
-      setDialogStatus(statusEl, "End date must be on or after the start date.", true);
+      setDialogStatus(statusEl, t("dialog.newTrip.errDateOrder"), true);
       return;
     }
 
     submit.disabled = true;
-    setDialogStatus(statusEl, "Creating…");
+    setDialogStatus(statusEl, t("dialog.newTrip.creating"));
 
     try {
       let newId;
       if (template === "sample") {
         const res = await fetch("./sample.json");
-        if (!res.ok) throw new Error("sample.json not found");
+        if (!res.ok) throw new Error(t("dialog.newTrip.sampleMissing"));
         const payload = await res.json();
         // Merge the user's metadata over the sample's so the dates,
         // title, destination, and travelers reflect their trip — but
@@ -914,18 +941,18 @@ function bindPasswordDialog() {
     const pwd = dlg.querySelector("#newPassword").value;
     const confirm = dlg.querySelector("#newPasswordConfirm").value;
     if (pwd.length < 6) {
-      setDialogStatus(statusEl, "Password must be at least 6 characters.", true);
+      setDialogStatus(statusEl, t("dialog.password.errShort"), true);
       return;
     }
     if (pwd !== confirm) {
-      setDialogStatus(statusEl, "Passwords don't match.", true);
+      setDialogStatus(statusEl, t("dialog.password.errMismatch"), true);
       return;
     }
     submit.disabled = true;
-    setDialogStatus(statusEl, "Updating…");
+    setDialogStatus(statusEl, t("dialog.password.updating"));
     try {
       await auth.updatePassword(pwd);
-      setDialogStatus(statusEl, "Password updated.");
+      setDialogStatus(statusEl, t("dialog.password.updated"));
       setTimeout(() => dlg.close("updated"), 600);
     } catch (err) {
       setDialogStatus(statusEl, err?.message || String(err), true);
@@ -955,14 +982,14 @@ function bindConvertDialog() {
     const email = document.getElementById("convertEmail").value.trim();
     const password = document.getElementById("convertPassword").value;
     if (!email || password.length < 6) {
-      setDialogStatus(statusEl, "Enter an email and a password of at least 6 characters.", true);
+      setDialogStatus(statusEl, t("dialog.convert.errFields"), true);
       return;
     }
     submit.disabled = true;
-    setDialogStatus(statusEl, "Creating account…");
+    setDialogStatus(statusEl, t("dialog.convert.creating"));
     try {
       await auth.convertAnonymous(email, password);
-      setDialogStatus(statusEl, "Account created. Welcome!");
+      setDialogStatus(statusEl, t("dialog.convert.created"));
       // updateUser fires onAuthStateChange — handleAuthChange will
       // re-paint the header (chip hides) without us re-routing.
       setTimeout(() => dlg.close("converted"), 600);
@@ -986,39 +1013,36 @@ function bindConvertDialog() {
 // claim RPC which moves memberships + reassigns authored content
 // from the anon UID to the registered UID and deletes the anon row.
 async function tryClaimMergeFlow(email, password, statusEl) {
-  if (!confirm(
-    "That email already has an account. Sign in there and import all your guest edits into it?\n\n" +
-    "Click OK to sign in and claim. Click Cancel if you'd rather sign in separately and leave the guest session as-is."
-  )) {
-    setDialogStatus(statusEl,
-      "Kept as a guest. Use a different email if you want to keep this trip in a new account.",
-      true);
+  if (!confirm(t("dialog.convert.claim.confirm"))) {
+    setDialogStatus(statusEl, t("dialog.convert.claim.declined"), true);
     return;
   }
 
-  setDialogStatus(statusEl, "Preparing handoff…");
+  setDialogStatus(statusEl, t("dialog.convert.claim.preparing"));
   let mergeToken;
   try {
     mergeToken = await auth.startAnonMerge();
   } catch (err) {
-    setDialogStatus(statusEl, "Could not start handoff: " + (err.message || err), true);
+    setDialogStatus(statusEl,
+      t("dialog.convert.claim.startFailed", { error: err.message || err }), true);
     return;
   }
 
-  setDialogStatus(statusEl, "Signing in…");
+  setDialogStatus(statusEl, t("dialog.convert.claim.signing"));
   try {
     await auth.signOut();
     await auth.signIn(email, password);
   } catch (err) {
-    setDialogStatus(statusEl, "Sign-in failed: " + (err.message || err), true);
+    setDialogStatus(statusEl,
+      t("dialog.convert.claim.signinFailed", { error: err.message || err }), true);
     return;
   }
 
-  setDialogStatus(statusEl, "Importing your guest edits…");
+  setDialogStatus(statusEl, t("dialog.convert.claim.importing"));
   try {
     const claimed = await auth.claimAnonEdits(mergeToken);
     setDialogStatus(statusEl,
-      `Done — ${claimed} trip${claimed === 1 ? "" : "s"} moved into this account.`);
+      plural("dialog.convert.claim.done", claimed, { n: claimed }));
     setTimeout(() => {
       document.getElementById("convertDialog").close("claimed");
       // After claim, the dashboard should re-render to show the
@@ -1028,8 +1052,7 @@ async function tryClaimMergeFlow(email, password, statusEl) {
     }, 800);
   } catch (err) {
     setDialogStatus(statusEl,
-      "Signed in, but couldn't import guest edits: " + (err.message || err),
-      true);
+      t("dialog.convert.claim.partialFail", { error: err.message || err }), true);
   }
 }
 
@@ -1073,17 +1096,18 @@ function paintTabs() {
 // match the design but no page module exists yet.
 
 // Sidebar nav definitions per mode. SOON items are proposed features that
-// don't have a backing page module yet — rendered disabled.
+// don't have a backing page module yet — rendered disabled. The label
+// resolves via t() at render time, so a locale switch retranslates.
 const NAV_PLAN = [
-  { page: "itinerary", glyph: "calendar_month", label: "Itinerary" },
-  { page: "map",       glyph: "map",            label: "Map",    soon: true },
-  { page: "prepare",   glyph: "fact_check",     label: "Prepare" },
-  { page: "budget",    glyph: "payments",       label: "Budget" },
+  { page: "itinerary", glyph: "calendar_month", labelKey: "nav.itinerary" },
+  { page: "map",       glyph: "map",            labelKey: "nav.map", soon: true },
+  { page: "prepare",   glyph: "fact_check",     labelKey: "nav.prepare" },
+  { page: "budget",    glyph: "payments",       labelKey: "nav.budget" },
 ];
 const NAV_TRAVEL = [
-  { page: "today",     glyph: "today",          label: "Today" },
-  { page: "notes",     glyph: "edit_note",      label: "Notes" },
-  { page: "costs",     glyph: "receipt_long",   label: "Costs" },
+  { page: "today",     glyph: "today",          labelKey: "nav.today" },
+  { page: "notes",     glyph: "edit_note",      labelKey: "nav.notes" },
+  { page: "costs",     glyph: "receipt_long",   labelKey: "nav.costs" },
 ];
 
 function paintSidebar() {
@@ -1110,18 +1134,19 @@ function paintSidebar() {
 
   const navItems = currentMode === "travel" ? NAV_TRAVEL : NAV_PLAN;
   const navHtml = navItems.map((n) => {
+    const label = t(n.labelKey);
     const isActive = n.page === state.page;
     const isSoon = !!n.soon;
     const cls = [
       isActive ? "is-active" : "",
       isSoon ? "is-soon" : "",
     ].filter(Boolean).join(" ");
-    const trailing = isSoon ? '<small class="vy-soon-badge">SOON</small>'
+    const trailing = isSoon ? `<small class="vy-soon-badge">${escapeText(t("sidebar.soonBadge"))}</small>`
                             : `<small>${escapeText(String(counts[n.page] || ""))}</small>`;
     return `
-      <button class="${cls}" data-page="${n.page}" title="${escapeText(n.label)}${isSoon ? " — proposed feature" : ""}">
+      <button class="${cls}" data-page="${n.page}" title="${escapeText(label)}${isSoon ? escapeText(t("sidebar.soonTooltipSuffix")) : ""}">
         <span class="material-symbols-outlined" aria-hidden>${n.glyph}</span>
-        <span>${escapeText(n.label)}</span>
+        <span>${escapeText(label)}</span>
         ${trailing}
       </button>
     `;
@@ -1129,36 +1154,36 @@ function paintSidebar() {
 
   aside.innerHTML = `
     <div class="vy-brand-side">
-      <strong>HERMES DAYBOOK</strong>
-      <span>— ∞ — BON VOYAGE</span>
+      <strong>${escapeText(t("app.brand")).toUpperCase()}</strong>
+      <span>${escapeText(t("sidebar.brandStrap"))}</span>
     </div>
 
-    <button class="vy-trip-switcher" id="sideBackBtn" title="Back to all trips">
+    <button class="vy-trip-switcher" id="sideBackBtn" title="${escapeText(t("sidebar.backToTrips"))}">
       <span class="vy-trip-switcher-img">${escapeText(initials)}</span>
       <div class="vy-trip-switcher-text">
-        <b>${escapeText(trip.title || "Untitled trip")}</b>
-        <span>${escapeText(dateRange || "Dates not set")}</span>
+        <b>${escapeText(trip.title || t("sidebar.untitledTrip"))}</b>
+        <span>${escapeText(dateRange || t("sidebar.datesNotSet"))}</span>
       </div>
       <span class="material-symbols-outlined" aria-hidden>unfold_more</span>
     </button>
 
-    <div class="vy-side-section">${currentMode === "travel" ? "Travel · in trip" : "Plan · before trip"}</div>
+    <div class="vy-side-section">${escapeText(currentMode === "travel" ? t("sidebar.section.travel") : t("sidebar.section.plan"))}</div>
     <nav class="vy-side-nav" id="sideNavMode">${navHtml}</nav>
 
     <div class="vy-side-spacer"></div>
 
     <div class="vy-side-foot">
       <div class="vy-side-quick">
-        <button data-page="overview" class="${state.page === "overview" ? "is-active" : ""}" title="Trip settings">
+        <button data-page="overview" class="${state.page === "overview" ? "is-active" : ""}" title="${escapeText(t("sidebar.tripSettings"))}">
           <span class="material-symbols-outlined" aria-hidden>tune</span>
         </button>
-        <button data-page="members" class="${state.page === "members" ? "is-active" : ""}" title="Members &amp; roles">
+        <button data-page="members" class="${state.page === "members" ? "is-active" : ""}" title="${escapeText(t("sidebar.membersTooltip"))}">
           <span class="material-symbols-outlined" aria-hidden>group</span>
         </button>
-        <button id="sidePrintBtn" title="Print preview">
+        <button id="sidePrintBtn" title="${escapeText(t("sidebar.printTooltip"))}">
           <span class="material-symbols-outlined" aria-hidden>print</span>
         </button>
-        <button data-page="io"      class="${state.page === "io" ? "is-active" : ""}" title="Import / Export">
+        <button data-page="io"      class="${state.page === "io" ? "is-active" : ""}" title="${escapeText(t("sidebar.ioTooltip"))}">
           <span class="material-symbols-outlined" aria-hidden>swap_vert</span>
         </button>
       </div>
@@ -1166,13 +1191,13 @@ function paintSidebar() {
       <div class="vy-mode-switch" data-mode="${currentMode}">
         <button data-mode="plan"   class="${currentMode === "plan"   ? "is-active" : ""}">
           <span class="material-symbols-outlined" aria-hidden>edit_calendar</span>
-          <b>PLAN</b>
-          <small>Before trip</small>
+          <b>${escapeText(t("sidebar.modeSwitch.plan"))}</b>
+          <small>${escapeText(t("sidebar.modeSwitch.planSub"))}</small>
         </button>
         <button data-mode="travel" class="${currentMode === "travel" ? "is-active" : ""}">
           <span class="material-symbols-outlined" aria-hidden>explore</span>
-          <b>TRAVEL</b>
-          <small>In trip</small>
+          <b>${escapeText(t("sidebar.modeSwitch.travel"))}</b>
+          <small>${escapeText(t("sidebar.modeSwitch.travelSub"))}</small>
         </button>
       </div>
 
@@ -1182,10 +1207,10 @@ function paintSidebar() {
           <span>${escapeText(computeInitials(state.user?.email || "?"))}</span>
         </span>
         <div class="vy-side-user-text">
-          <b>${escapeText(state.user?.email || "Signed in")}</b>
-          <span>${escapeText((state.trip?.role || "viewer").toUpperCase())} ROLE</span>
+          <b>${escapeText(state.user?.email || t("sidebar.signedIn"))}</b>
+          <span>${escapeText((state.trip?.role || "viewer").toUpperCase())} ${escapeText(t("sidebar.roleSuffix"))}</span>
         </div>
-        <button id="sideSignOutBtn" class="vy-side-signout" title="Sign out">
+        <button id="sideSignOutBtn" class="vy-side-signout" title="${escapeText(t("sidebar.signOutTooltip"))}">
           <span class="material-symbols-outlined" aria-hidden>logout</span>
         </button>
       </div>
@@ -1222,6 +1247,10 @@ function paintSidebar() {
   });
 }
 
+// Topbar / hero / daystrip strings are translated below; outer painters
+// already rebuild on every navigation, so locale change picks them up
+// when onLocaleChange triggers renderTripPage().
+
 // Voyage topbar — sits at the top of the main column on the trip view.
 // Live-collab telemetry on the left, member avatar stack + Share button
 // on the right. The avatar stack reads from state.trip.members (which
@@ -1256,18 +1285,18 @@ function paintTopbar() {
     <div class="vy-topbar-live">
       <span class="vy-meta">
         <i class="vy-livedot" aria-hidden></i>
-        <b id="topbarEditors">${editors}</b> EDITOR${editors === 1 ? "" : "S"} · LAST CHANGE
+        <b id="topbarEditors">${editors}</b> ${escapeText(plural("topbar.editor", editors))} · ${escapeText(t("topbar.lastChange"))}
         <b id="topbarLastChange">${formatLastChange(state.lastChangeAt)}</b>
       </span>
     </div>
-    <button class="vy-share-stack" id="topbarMembersBtn" title="Members &amp; roles">
+    <button class="vy-share-stack" id="topbarMembersBtn" title="${escapeText(t("topbar.membersTooltip"))}">
       ${visibleMembers.map((m, i) => avatarHtml(m, i)).join("")}
-      ${overflowCount ? `<span class="vy-avatar vy-avatar--more" title="${overflowCount} more"><span>+${overflowCount}</span></span>` : ""}
+      ${overflowCount ? `<span class="vy-avatar vy-avatar--more" title="${escapeText(t("topbar.overflowMore", { n: overflowCount }))}"><span>+${overflowCount}</span></span>` : ""}
       ${!members.length ? `<span class="vy-avatar" style="background:linear-gradient(135deg,#dff1ec,#a8d6ca)"><span>···</span></span>` : ""}
     </button>
-    <button class="vy-btn-primary" id="topbarShareBtn" title="Share trip">
+    <button class="vy-btn-primary" id="topbarShareBtn" title="${escapeText(t("topbar.shareTripTooltip"))}">
       <span class="material-symbols-outlined" aria-hidden>ios_share</span>
-      Share trip
+      ${escapeText(t("topbar.shareTrip"))}
     </button>
   `;
 
@@ -1324,8 +1353,8 @@ function paintHero() {
   host.innerHTML = `
     <div class="vy-hero-art" aria-hidden></div>
     <div class="vy-hero-left">
-      <span class="vy-hero-tag"><i></i> ITINERARY · STATUS <b style="color:var(--vbl-viridian)"> ${trip.id ? "CONFIRMED" : "DRAFT"}</b></span>
-      <h1 class="vy-hero-title">${escapeText(trip.title || "Untitled trip")}</h1>
+      <span class="vy-hero-tag"><i></i> ${escapeText(t("hero.tag.itinerary"))} <b style="color:var(--vbl-viridian)"> ${escapeText(trip.id ? t("hero.status.confirmed") : t("hero.status.draft"))}</b></span>
+      <h1 class="vy-hero-title">${escapeText(trip.title || t("sidebar.untitledTrip"))}</h1>
       <div class="vy-hero-cities">
         ${cities.length
           ? cities.map((c, i) => `
@@ -1335,13 +1364,13 @@ function paintHero() {
               </span>
               ${i < cities.length - 1 ? '<span class="vy-hero-sep">→</span>' : ""}
             `).join("")
-          : '<span class="vy-meta">NO CITIES YET · ADD ONE TO A DAY</span>'}
+          : `<span class="vy-meta">${escapeText(t("hero.noCities"))}</span>`}
       </div>
     </div>
     <div class="vy-hero-right">
-      <div class="vy-hero-dates">${escapeText(range || "Dates not set")}</div>
-      <div class="vy-hero-meta">${dayCount} DAY${dayCount === 1 ? "" : "S"} · ${nightCount} NIGHT${nightCount === 1 ? "" : "S"} · ${travelerCount} TRAVELER${travelerCount === 1 ? "" : "S"}</div>
-      <div class="vy-hero-meta">TRIP · <b style="color:var(--vbl-viridian)">${escapeText((trip.id || "—").toString().slice(0, 8))}</b></div>
+      <div class="vy-hero-dates">${escapeText(range || t("sidebar.datesNotSet"))}</div>
+      <div class="vy-hero-meta">${dayCount} ${escapeText(plural("hero.day", dayCount))} · ${nightCount} ${escapeText(plural("hero.night", nightCount))} · ${travelerCount} ${escapeText(plural("hero.traveler", travelerCount))}</div>
+      <div class="vy-hero-meta">${escapeText(t("hero.tripLabel"))} <b style="color:var(--vbl-viridian)">${escapeText((trip.id || "—").toString().slice(0, 8))}</b></div>
     </div>
   `;
 }
@@ -1361,19 +1390,19 @@ function paintDayStrip() {
 
   host.hidden = false;
   host.innerHTML = days.map((d, i) => {
-    const wd = d.date ? new Date(d.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short" }).toUpperCase() : "DAY";
+    const wd = d.date ? formatWeekday(new Date(d.date + "T00:00:00"), "short") : t("daypill.dayLabel");
     const num = (i + 1).toString().padStart(2, "0");
     const city = (d.city || "").slice(0, 3).toUpperCase();
     const sel = i === selectedIdx ? "is-selected" : "";
     return `
       <button class="vy-daypill ${sel}" data-day-idx="${i}"
-              title="${escapeText(d.title || "Day " + (i + 1))}${canEdit ? "  ·  drag the grip to reorder, right-click for actions" : ""}">
+              title="${escapeText(d.title || `${t("sidebar.dayPrefix")} ${i + 1}`)}${canEdit ? escapeText(t("sidebar.dragReorderHint")) : ""}">
         <span class="vy-daypill-body">
           <span class="vy-daypill-wd">${wd}</span>
           <span class="vy-daypill-num">${num}</span>
           <span class="vy-daypill-city">${escapeText(city || "—")}</span>
         </span>
-        ${canEdit ? `<span class="vy-daypill-grip" title="Drag to reorder" aria-hidden>
+        ${canEdit ? `<span class="vy-daypill-grip" title="${escapeText(t("sidebar.dragToReorder"))}" aria-hidden>
           <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor">
             <circle cx="2" cy="2" r="1"/><circle cx="6" cy="2" r="1"/>
             <circle cx="2" cy="7" r="1"/><circle cx="6" cy="7" r="1"/>
@@ -1405,14 +1434,14 @@ function paintDayStrip() {
         e.preventDefault();
         const idx = Number(btn.dataset.dayIdx);
         openContextMenu(e.clientX, e.clientY, [
-          { label: "Move left",       glyph: "chevron_left",
+          { label: t("ctx.moveLeft"),  glyph: "chevron_left",
             disabled: idx === 0,
             onClick: () => commitDayReorder(idx, idx - 1) },
-          { label: "Move right",      glyph: "chevron_right",
+          { label: t("ctx.moveRight"), glyph: "chevron_right",
             disabled: idx === days.length - 1,
             onClick: () => commitDayReorder(idx, idx + 1) },
           { type: "sep" },
-          { label: "Delete this day", glyph: "delete", danger: true,
+          { label: t("ctx.deleteDay"), glyph: "delete", danger: true,
             onClick: () => deleteDayConfirm(days[idx]) },
         ]);
       });
@@ -1562,7 +1591,7 @@ async function commitDayReorder(fromIdx, toIdx) {
     const restoredSel = days.findIndex((d) => d.id === selDay?.id);
     if (restoredSel >= 0) state.selectedDayIdx = restoredSel;
     paintTabs();
-    toast("Reorder failed: " + e.message, true);
+    toast(t("trip.reorderFailed", { error: e.message }), true);
   } finally {
     noteSaveDone();
   }
@@ -1570,7 +1599,7 @@ async function commitDayReorder(fromIdx, toIdx) {
 
 async function deleteDayConfirm(day) {
   if (!day) return;
-  if (!confirm("Delete this day and everything in it?")) return;
+  if (!confirm(t("trip.confirmDeleteDay"))) return;
   noteSaveStart();
   try {
     await daysApi.remove(day.id);
@@ -1580,7 +1609,7 @@ async function deleteDayConfirm(day) {
     if (state.selectedDayIdx > max) state.selectedDayIdx = max;
     paintTabs();
   } catch (e) {
-    toast("Delete failed: " + e.message, true);
+    toast(t("trip.deleteFailed", { error: e.message }), true);
   } finally {
     noteSaveDone();
   }
@@ -1676,13 +1705,8 @@ function cityCode(name) {
 function formatTripDateRange(trip) {
   const days = (trip.days || []).filter((d) => d.date).sort((a, b) => a.date.localeCompare(b.date));
   if (!days.length) return "";
-  const fmt = (s) => {
-    const d = new Date(s + "T00:00:00");
-    if (isNaN(d.getTime())) return s;
-    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  };
-  const start = fmt(days[0].date);
-  const end = fmt(days[days.length - 1].date);
+  const start = formatMonthDay(days[0].date);
+  const end = formatMonthDay(days[days.length - 1].date);
   const yr = new Date(days[0].date + "T00:00:00").getFullYear();
   return start === end ? `${start}, ${yr}` : `${start} → ${end}, ${yr}`;
 }
@@ -1725,10 +1749,10 @@ function paintHeader() {
   if (state.view === "trip") {
     if (state.saving > 0) {
       saveEl.dataset.kind = "saving";
-      saveEl.textContent = "Saving…";
+      saveEl.textContent = t("header.savedSaving");
     } else {
       saveEl.dataset.kind = "clean";
-      saveEl.textContent = "Saved";
+      saveEl.textContent = t("header.saved");
     }
   }
 
@@ -1744,11 +1768,11 @@ function paintHeader() {
 // Coarse buckets — we don't need second-precision since the value ticks
 // every ~10s on a setInterval, and trip edits are usually minutes apart.
 function formatLastChange(ts) {
-  if (!ts) return "—";
+  if (!ts) return t("topbar.dash");
   const delta = Math.max(0, Date.now() - ts);
   const s = Math.floor(delta / 1000);
-  if (s < 5)      return "just now";
-  if (s < 60)     return `${s}s`;
+  if (s < 5)     return t("topbar.justNow");
+  if (s < 60)    return `${s}s`;
   const m = Math.floor(s / 60);
   if (m < 60)    return `${m}m`;
   const h = Math.floor(m / 60);
@@ -1809,7 +1833,7 @@ function bindSettings() {
     url.value = stored.url || "";
     key.value = stored.key || "";
     document.getElementById("sbConfigSource").textContent =
-      "Currently using config from: " + configSource();
+      t("dialog.settings.currentSource", { source: configSource() });
     dlg.showModal();
   });
 
@@ -1831,8 +1855,39 @@ function showUnconfigured() {
   document.getElementById("view-auth").hidden = false;
   document.getElementById("view-auth").innerHTML = `
     <div class="auth-card">
-      <h1>Hermes Daybook</h1>
-      <p>This app needs a Supabase backend to store trips. Click ⚙ in the top right to configure your project URL + publishable key, or deploy with the included GitHub Actions workflow that bakes them in from repo Secrets.</p>
+      <h1>${escapeText(t("app.brand"))}</h1>
+      <p>${escapeText(t("unconfigured.body"))}</p>
     </div>
   `;
+}
+
+// ===== Preferences dialog =====
+//
+// Language picker. The `<select>` reflects the active locale on open;
+// changing it dispatches setLocale() immediately (no save button), which
+// fires `voyage:locale-change` — the global listener in the boot handler
+// re-applies static i18n and re-renders the current view.
+
+function openPreferencesDialog() {
+  const dlg = document.getElementById("preferencesDialog");
+  const select = document.getElementById("prefLanguage");
+  // Ensure the <option> list matches SUPPORTED. Built statically in
+  // index.html, but rebuild here defensively so adding a locale in
+  // locale.js's SUPPORTED is enough to expose it.
+  if (select.options.length !== SUPPORTED_LOCALES.length) {
+    select.innerHTML = SUPPORTED_LOCALES
+      .map((l) => `<option value="${l.code}">${escapeText(l.label)}</option>`)
+      .join("");
+  }
+  select.value = getLocale();
+  dlg.showModal();
+}
+
+function bindPreferences() {
+  const select = document.getElementById("prefLanguage");
+  if (!select) return;
+  select.addEventListener("change", () => {
+    setLocale(select.value);
+    toast(t("dialog.prefs.langChanged"));
+  });
 }
