@@ -2761,11 +2761,16 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
 .vy-budget-amount-input {
   border: 0; outline: 0;
   background: transparent;
-  width: 88px;
+  /* 64px fits 5 mono digits ("999.00") at 13px tabular-nums. The old
+     88px reserved space for an extra digit the user almost never types
+     and crowded the title column on mid-width viewports. */
+  width: 64px;
+  min-width: 0;
   font: inherit;
   font-size: 13px;
   color: var(--vbl-ink);
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .vy-budget-tag {
   appearance: none;
@@ -2896,13 +2901,22 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
 .vy-split-ok   { color: var(--vbl-viridian-deep); font-weight: 700; }
 .vy-split-warn { color: #8a4a14; font-weight: 700; }
 
-@media (max-width: 720px) {
-  .vy-budget-row {
+/* Mid-width viewports (typical laptop trip-view column ≈ 800-1000px):
+ * the inputs cluster on a single row used to push the event title
+ * column down to ~200px wide, hiding most of the name. Stack the
+ * inputs underneath the title so the title can breathe. Same rule
+ * applies to the parallel Costs row. */
+@media (max-width: 960px) {
+  .vy-budget-row,
+  .vy-costs-row {
     grid-template-columns: 1fr;
     gap: 8px;
   }
-  .vy-budget-row-inputs { flex-wrap: wrap; }
-  .vy-budget-amount-input { width: 64px; }
+  .vy-budget-row-inputs,
+  .vy-costs-row-inputs {
+    flex-wrap: wrap;
+    justify-self: start;
+  }
 }
 
 /* ===== Budget layout — main content + persistent fuel rail =====
