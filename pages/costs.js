@@ -175,16 +175,17 @@ export function renderCosts(host, ctx) {
       ),
       el("div", { class: "vy-costs-row-title-wrap" },
         el("span", { class: "vy-costs-row-title", text: it.title || t("today.untitled") }),
-        // Proposed + tag on a sub-line — read-only context for entry.
-        !isUnplannedRow ? el("span", { class: "vy-costs-row-sub muted small" },
-          el("span", { text: t("costs.proposed") }),
-          it.proposed_cost_cents != null
-            ? el("span", { text: formatMoney(it.proposed_cost_cents, currency) })
-            : el("span", { text: t("costs.dash") }),
-          it.cost_tag
-            ? el("span", { class: "vy-costs-sub-tag", text: " · " + (TAG_LABELS[it.cost_tag] || it.cost_tag) })
-            : null,
-        ) : el("span", { class: "vy-costs-row-sub muted small", text: t("costs.unplannedRow") }),
+        // For unplanned rows we still need a sub-line label so the row
+        // reads as "unplanned" at a glance. Planned rows used to show
+        // "Proposed: $X" here, but the "↩ Use $X" button on the right
+        // already surfaces that number — duplicating it crowded mobile
+        // rows. Tag (if set) still appears under the title.
+        !isUnplannedRow
+          ? (it.cost_tag
+              ? el("span", { class: "vy-costs-row-sub vy-costs-sub-tag muted small",
+                  text: TAG_LABELS[it.cost_tag] || it.cost_tag })
+              : null)
+          : el("span", { class: "vy-costs-row-sub muted small", text: t("costs.unplannedRow") }),
       ),
     ));
 

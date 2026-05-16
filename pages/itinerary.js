@@ -660,9 +660,9 @@ export function renderItinerary(host, ctx) {
             } },
           { type: "sep" },
           { label: "Add event before", glyph: "arrow_upward",
-            onClick: () => addNewItem(day, idx) },
+            onClick: () => addNewItemNear(day, it, "before") },
           { label: "Add event after",  glyph: "arrow_downward",
-            onClick: () => addNewItem(day, idx + 1) },
+            onClick: () => addNewItemNear(day, it, "after") },
           { type: "sep" },
           { label: "Move up",   glyph: "north",
             disabled: idx === 0,
@@ -850,10 +850,17 @@ export function renderItinerary(host, ctx) {
       const cell = el("div", { class: "vy-tl-card is-editing" });
       const v = TYPE_VISUALS[it.type] || TYPE_VISUALS.activity;
 
-      const saveItem = debouncedSave(withSaveIndicator(ctx, async (patch) => {
+      // Local mutation happens synchronously on every keystroke so the
+      // card view shows fresh data the moment the editor closes (even
+      // if the 600ms debounce hasn't fired yet). Only the network call
+      // is debounced.
+      const flushSave = debouncedSave(withSaveIndicator(ctx, async (patch) => {
         await items.update(it.id, patch);
-        Object.assign(it, patch);
       }), 600);
+      const saveItem = (patch) => {
+        Object.assign(it, patch);
+        flushSave(patch);
+      };
 
       // ── Time inputs + overlap guard ────────────────────────────────
       const startInput = el("input", { type: "time", class: "time-input",
@@ -879,6 +886,11 @@ export function renderItinerary(host, ctx) {
 
       function tryCommitTime(field, raw) {
         const value = raw || "";
+        // Dedupe: ignore commits that don't change the field. Avoids
+        // duplicate toasts and saves when input/change/blur all fire
+        // for the same value during keyboard entry.
+        if (field === "start" && value === lastGoodStart) return;
+        if (field === "end"   && value === lastGoodEnd)   return;
         const newStart = field === "start" ? value : lastGoodStart;
         const newEnd   = field === "end"   ? value : lastGoodEnd;
         const conflict = findOverlap(day, it, newStart, newEnd);
@@ -900,8 +912,24 @@ export function renderItinerary(host, ctx) {
         nextDayBadge.hidden = !endsNextDay(newStart, newEnd);
         saveItem({ [field === "start" ? "start_time" : "end_time"]: value || null });
       }
-      startInput.addEventListener("change", () => tryCommitTime("start", startInput.value));
-      endInput.addEventListener("change",   () => tryCommitTime("end",   endInput.value));
+      // `change` only fires on commit (picker pick, or blur with a
+      // valid time). For keyboard entry, listen for `input` so the
+      // value is captured as the user types — and re-run the overlap
+      // check on `blur` as a safety net for browsers that swallow the
+      // change event on manual entry. The dedupe via lastGood* below
+      // keeps the overlap toast from firing twice for the same value.
+      function bindTime(input, field) {
+        const commit = () => tryCommitTime(field, input.value);
+        input.addEventListener("change", commit);
+        input.addEventListener("blur", commit);
+        input.addEventListener("input", () => {
+          // Only commit fully-typed HH:MM so typing "1" then "0" then
+          // ":30" doesn't fire the conflict check on intermediate values.
+          if (/^\d{2}:\d{2}$/.test(input.value) || input.value === "") commit();
+        });
+      }
+      bindTime(startInput, "start");
+      bindTime(endInput, "end");
 
       // ── Title ──────────────────────────────────────────────────────
       const titleInput = el("input", { type: "text", class: "vy-edit-title-input",
@@ -1003,7 +1031,11 @@ export function renderItinerary(host, ctx) {
             text: when ? `Added by ${author} · ${when}` : `Added by ${author}` })
         : null;
 
-      cell.append(
+      // Element.append() stringifies null/undefined to the literal text
+      // "null" / "undefined" — filter before appending so a missing
+      // foot (read-only) or attribution (no resolvable author) doesn't
+      // leak as visible text under the editor.
+      const children = [
         header,
         el("div", { class: "vy-edit-title-wrap" }, titleInput),
         scheduleSection,
@@ -1012,7 +1044,8 @@ export function renderItinerary(host, ctx) {
         notesSection,
         foot,
         attribution,
-      );
+      ].filter((c) => c != null);
+      cell.append(...children);
       return cell;
     }
 
@@ -1073,6 +1106,10 @@ export function renderItinerary(host, ctx) {
         sort_order: (day.items || []).length,
       });
       if (insertAt != null && newItem && newItem.id) {
+        // Optimistically mirror the new item into local state so the
+        // re-render after refresh doesn't briefly show the item at the
+        // bottom before settling. Also ensures the reorder ids list
+        // includes the new item.
         const ids = [...(day.items || []).map((x) => x.id)];
         ids.splice(insertAt, 0, newItem.id);
         await items.reorder(ids);
@@ -1083,6 +1120,17 @@ export function renderItinerary(host, ctx) {
     } finally {
       ctx.onSaveDone?.();
     }
+  }
+
+  // Anchor-relative insert. Uses the anchor item's id to locate its
+  // real position in day.items (which may include is_unplanned rows
+  // not shown in the timeline view, so the visible-row index can be
+  // off), then dispatches to addNewItem with a correct insertAt.
+  async function addNewItemNear(day, anchor, where) {
+    const idsAll = (day.items || []).map((x) => x.id);
+    const at = idsAll.indexOf(anchor.id);
+    if (at < 0) return addNewItem(day);
+    return addNewItem(day, where === "before" ? at : at + 1);
   }
 
   async function deleteItem(it) {

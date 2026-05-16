@@ -759,6 +759,7 @@ export default {
   "shareLanding.namePlaceholder": "Helps the team know who you are",
   "shareLanding.note": "Guests can edit but trips won't save to your list. You can register anytime to keep this trip.",
   "shareLanding.joining": "Joining…",
+  "shareLanding.anonDisabled": "Guest access isn't enabled on this project. Use Sign in or Create account above.",
   "shareLanding.title": "You've been invited to a trip",
   "shareLanding.subtitle": "Sign in, sign up, or continue as a guest to start collaborating.",
   "shareLanding.role.editor": "You'll be able to edit this trip.",

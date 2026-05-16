@@ -753,6 +753,7 @@ export default {
   "shareLanding.namePlaceholder": "方便团队识别你的身份",
   "shareLanding.note": "访客可以编辑,但行程不会保存到你的列表。随时可以注册账号留下此行程。",
   "shareLanding.joining": "加入中…",
+  "shareLanding.anonDisabled": "此项目未启用访客访问。请使用上方的「登录」或「创建账号」。",
   "shareLanding.title": "你受邀参与一次行程",
   "shareLanding.subtitle": "登录、注册,或以访客身份继续开始协作。",
   "shareLanding.role.editor": "你将可以编辑此行程。",

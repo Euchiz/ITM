@@ -858,7 +858,11 @@ function bindNewTripDialog() {
   const statusEl = dlg.querySelector("#newTripDialogStatus");
 
   form.addEventListener("submit", async (e) => {
-    if (dlg.returnValue === "cancel") return;
+    // method="dialog" forms set returnValue during close, not during
+    // the submit event — so we read e.submitter directly. Returning
+    // without preventDefault lets the cancel button's default close
+    // the dialog cleanly.
+    if (e.submitter && e.submitter.value === "cancel") return;
     e.preventDefault();
 
     const title       = dlg.querySelector("#newTripTitle").value.trim();
@@ -941,7 +945,11 @@ function bindPasswordDialog() {
   const statusEl = dlg.querySelector("#passwordDialogStatus");
 
   form.addEventListener("submit", async (e) => {
-    if (dlg.returnValue === "cancel") return;
+    // method="dialog" forms set returnValue during close, not during
+    // the submit event — so we read e.submitter directly. Returning
+    // without preventDefault lets the cancel button's default close
+    // the dialog cleanly.
+    if (e.submitter && e.submitter.value === "cancel") return;
     e.preventDefault();
     const pwd = dlg.querySelector("#newPassword").value;
     const confirm = dlg.querySelector("#newPasswordConfirm").value;
@@ -982,7 +990,11 @@ function bindConvertDialog() {
   const statusEl = document.getElementById("convertDialogStatus");
   dlg.addEventListener("close", () => { /* nothing extra */ });
   dlg.querySelector("form").addEventListener("submit", async (e) => {
-    if (dlg.returnValue === "cancel") return;
+    // method="dialog" forms set returnValue during close, not during
+    // the submit event — so we read e.submitter directly. Returning
+    // without preventDefault lets the cancel button's default close
+    // the dialog cleanly.
+    if (e.submitter && e.submitter.value === "cancel") return;
     e.preventDefault();
     const email = document.getElementById("convertEmail").value.trim();
     const password = document.getElementById("convertPassword").value;

@@ -150,7 +150,13 @@ function renderCard(preview, token, { onAuthRequest, onRedeemed, onError }) {
       share.stripTokenFromUrl();
       onRedeemed?.(tripId);
     } catch (e) {
-      setStatus(e.message || String(e), true);
+      // Anonymous sign-ins must be enabled at the Supabase project
+      // level (Authentication → Settings → "Allow anonymous sign-ins").
+      // Surface a clearer message than Supabase's raw error so the
+      // visitor knows their only path forward is sign-in / sign-up.
+      const msg = e.message || String(e);
+      const isAnonDisabled = /anonymous/i.test(msg) && /disabl|not allow|forbid/i.test(msg);
+      setStatus(isAnonDisabled ? t("shareLanding.anonDisabled") : msg, true);
       guestBtn.disabled = false;
       signInBtn.disabled = false;
       signUpBtn.disabled = false;

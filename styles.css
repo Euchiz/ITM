@@ -2338,8 +2338,40 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
   .stat-grid { grid-template-columns: 1fr 1fr; }
   .schedule-row { grid-template-columns: 60px 1fr auto; }
   .schedule-row .badge { display: none; }
+  /* Prepare-page row: stack so the text input gets a full row and the
+     date / category / delete sit underneath. Browsers can't render
+     <input type="date"> as mm/dd, so we trade the year column for room. */
   .check-row { gap: 6px; }
-  .due-date, .cat-select { width: 110px; }
+  .check-text { flex-basis: 100%; min-width: 0; }
+  .due-date { width: 100px; min-width: 0; flex: 0 0 100px; }
+  .cat-select { width: auto; min-width: 0; flex: 1 1 auto; }
+}
+
+/* Costs/Budget row inputs cluster — on mobile, let the amount input
+   take a full row and let the tag/split toggle wrap underneath so
+   nothing gets squashed off-screen. */
+@media (max-width: 560px) {
+  .vy-budget-row, .vy-costs-row {
+    flex-wrap: wrap;
+  }
+  .vy-budget-row-main, .vy-costs-row-main {
+    flex-basis: 100%;
+    min-width: 0;
+  }
+  .vy-budget-row-inputs, .vy-costs-row-inputs {
+    flex-basis: 100%;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .vy-budget-amount { flex: 1 1 140px; min-width: 0; }
+  .vy-budget-amount-input { width: 100%; min-width: 0; }
+  .vy-budget-tag { flex: 0 1 auto; }
+  .vy-budget-split-toggle { flex: 0 1 auto; }
+  .vy-costs-use-proposed {
+    /* Move the "Use $X" button to its own line on narrow widths. */
+    flex-basis: 100%;
+    text-align: left;
+  }
 }
 
 /* ============================================================
