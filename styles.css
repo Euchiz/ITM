@@ -2619,9 +2619,10 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
  * toggle re-uses .vy-view-toggle from itinerary. Split disclosure
  * expands inline beneath its row. */
 
-.vy-budget-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.vy-budget-head-l { min-width: 0; flex: 1; }
-.vy-budget-head-r { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.vy-budget-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.vy-budget-head-l { min-width: 0; flex: 1 1 280px; }
+.vy-budget-head-r { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; min-width: 0; }
+.vy-budget-filter-select { max-width: 100%; }
 
 .vy-budget-filter {
   display: inline-flex; align-items: center; gap: 8px;
