@@ -496,6 +496,11 @@ function renderTripPage() {
     openContextMenu,
     toast,
     // Mobile-only context. Pages can ignore these on desktop.
+    // `platform` is what budget.js / costs.js use to gate edit-mode UI
+    // (the full toggle cluster) behind a mobile check. Without this,
+    // ctx.platform was undefined on mobile and the edit head rendered
+    // with all the toggles, which then crashed the head layout.
+    platform: state.platform,
     page: state.page,
     mobileMode: state.mobileMode,
     setMobileMode: writeMobileMode,
