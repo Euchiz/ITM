@@ -206,9 +206,34 @@ export function renderPrepare(host, ctx) {
       disabled: readOnly });
     txt.addEventListener("input", () => save({ text: txt.value }));
 
+    // Compact due-date widget: a "mm/dd" label sitting over an
+    // invisible <input type="date"> so tapping the label opens the
+    // native picker but the visible footprint is just 4 chars wide.
+    // The browser's default date-input rendering ("MM/DD/YYYY") was
+    // eating ~110px on every prepare row, crowding the text column on
+    // narrow viewports. The full date (with year) is exposed via the
+    // wrapper's title attribute for hover/screen-reader contexts.
+    const dueWrap = el("label", { class: "due-date-wrap",
+      title: c.due_date || t("prepare.row.dueDateTip") });
+    const dueLabel = el("span", { class: "due-date-display" });
     const dueInput = el("input", { type: "date", value: c.due_date || "",
-      title: t("prepare.row.dueDateTip"), class: "due-date", disabled: readOnly });
-    dueInput.addEventListener("input", () => save({ due_date: dueInput.value || null }));
+      class: "due-date due-date-native", disabled: readOnly });
+    function paintDueLabel() {
+      if (!dueInput.value) { dueLabel.textContent = "—"; dueLabel.classList.add("is-empty"); }
+      else {
+        const m = dueInput.value.slice(5, 7);
+        const d = dueInput.value.slice(8, 10);
+        dueLabel.textContent = `${m}/${d}`;
+        dueLabel.classList.remove("is-empty");
+        dueWrap.title = dueInput.value;
+      }
+    }
+    paintDueLabel();
+    dueInput.addEventListener("input", () => {
+      paintDueLabel();
+      save({ due_date: dueInput.value || null });
+    });
+    dueWrap.append(dueLabel, dueInput);
 
     const catSelect = el("select", { class: "cat-select", disabled: readOnly });
     CHECKLIST_CATEGORIES.forEach((opt) => {
@@ -228,7 +253,7 @@ export function renderPrepare(host, ctx) {
       }
     });
 
-    row.append(cb, txt, dueInput, catSelect);
+    row.append(cb, txt, dueWrap, catSelect);
 
     if (!readOnly) {
       row.appendChild(
