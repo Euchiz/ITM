@@ -730,6 +730,16 @@ export function renderItinerary(host, ctx) {
     function timeCell(it) {
       const t = formatTimeRange(it.start_time, it.end_time) || formatTime(it.start_time) || "—";
       const cell = el("div", { class: "vy-tl-time", text: t });
+      // +1d on the START — the whole event is scheduled on the next
+      // calendar day (late-night activity attached to "today" by user
+      // choice). Shows next to the start time so a glance at the
+      // collapsed card reads "13:00 +1d" not just "13:00".
+      if (it.start_next_day) {
+        cell.classList.add("is-next-day");
+        cell.appendChild(el("span", { class: "vy-tl-time-next vy-tl-time-startnext",
+          text: i18n("itinerary.editor.startsNextDayBadge"),
+          title: i18n("itinerary.editor.startsNextDayTip") }));
+      }
       // Overnight (end < start) — quietly mark the cell so the user
       // sees the event spills into the next morning. Keeps the day
       // independent: the event still belongs to this day's column.
@@ -998,6 +1008,21 @@ export function renderItinerary(host, ctx) {
         labeledInline("End",   endInput),
         nextDayBadge,
         durChip,
+        // +1d toggle. When ON, this event is scheduled on the next
+        // calendar day (e.g. a 02:00 late-night activity that the user
+        // wants attached to today's plan). Overlap math factors in the
+        // 1440-minute offset so a +1d 02:00 event doesn't collide with
+        // a same-day 02:00 event.
+        !readOnly ? toggleChip({
+          on: !!it.start_next_day,
+          glyph: "wb_twilight",
+          label: it.start_next_day
+            ? i18n("itinerary.editor.startsNextDayOn")
+            : i18n("itinerary.editor.startsNextDayOff"),
+          tone: "amber",
+          title: i18n("itinerary.editor.startsNextDayTip"),
+          onClick: () => saveItemNow({ start_next_day: !it.start_next_day }),
+        }) : null,
         !readOnly ? toggleChip({
           on: !!it.is_fixed,
           glyph: it.is_fixed ? "lock" : "lock_open",
@@ -1308,9 +1333,10 @@ function section(glyph, label, ...children) {
 // Pill-shaped toggle used inside the editor (fixed / highlight).
 // Reads as a label not just an icon so the editor surface is
 // self-explanatory.
-function toggleChip({ on, glyph, label, tone, onClick }) {
+function toggleChip({ on, glyph, label, tone, onClick, title }) {
   return el("button", {
     class: `vy-edit-toggle ${on ? "is-on" : ""} vy-edit-toggle--${tone || "viridian"}`,
+    title: title || "",
     onClick: (e) => { e.stopPropagation(); onClick(); },
   },
     el("span", { class: "material-symbols-outlined", text: glyph }),
@@ -1384,12 +1410,20 @@ function intervalsCollide(a, b) {
 
 // Find another timed item on this day that overlaps the proposed time
 // range for `selfItem`. Returns the conflicting item, or null if free.
+//
+// Items with `start_next_day=true` form a separate day-band: they only
+// collide with other +1d items, never with same-day items. This is how
+// the "late-night activity attached to today's plan" UX works — an
+// 02:00 +1d event doesn't conflict with a 02:00 same-day event because
+// the user has explicitly said they're on different calendar days.
 function findOverlap(day, selfItem, newStartStr, newEndStr) {
   if (parseHM(newStartStr) == null) return null;
+  const selfNextDay = !!selfItem.start_next_day;
   const a = intervalsOf(newStartStr, newEndStr);
   for (const other of (day.items || [])) {
     if (other.id === selfItem.id) continue;
     if (parseHM(other.start_time) == null) continue;
+    if (!!other.start_next_day !== selfNextDay) continue;
     const b = intervalsOf(other.start_time, other.end_time);
     if (intervalsCollide(a, b)) return other;
   }

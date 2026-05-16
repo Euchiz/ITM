@@ -92,6 +92,7 @@ export function validate(payload) {
         }
         if (it.is_fixed != null && !isBool(it.is_fixed)) push(`${w}.is_fixed must be true or false.`);
         if (it.is_highlight != null && !isBool(it.is_highlight)) push(`${w}.is_highlight must be true or false.`);
+        if (it.start_next_day != null && !isBool(it.start_next_day)) push(`${w}.start_next_day must be true or false.`);
 
         // Cost fields — all optional, all validated independently.
         if (it.proposed_cost_cents != null && !isInt(it.proposed_cost_cents)) {
@@ -199,6 +200,7 @@ function normalize(p) {
         notes: it.notes || "",
         is_fixed: !!it.is_fixed,
         is_highlight: !!it.is_highlight,
+        start_next_day: !!it.start_next_day,
         status: ITEM_STATUSES.includes(it.status) ? it.status : "planned",
         // Cost fields. Each is independently nullable so a planning-only
         // export (proposed but no actual) round-trips cleanly.

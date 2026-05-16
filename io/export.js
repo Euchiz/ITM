@@ -45,6 +45,7 @@ export function tripToExportJson(t) {
           notes: it.notes || "",
           is_fixed: !!it.is_fixed,
           is_highlight: !!it.is_highlight,
+          start_next_day: !!it.start_next_day,
           status: it.status,
         })),
       todos: (todosByDay.get(d.id) || [])
