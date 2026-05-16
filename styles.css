@@ -2901,24 +2901,6 @@ textarea { resize: vertical; line-height: 1.55; min-height: 36px; }
 .vy-split-ok   { color: var(--vbl-viridian-deep); font-weight: 700; }
 .vy-split-warn { color: #8a4a14; font-weight: 700; }
 
-/* Mid-width viewports (typical laptop trip-view column ≈ 800-1000px):
- * the inputs cluster on a single row used to push the event title
- * column down to ~200px wide, hiding most of the name. Stack the
- * inputs underneath the title so the title can breathe. Same rule
- * applies to the parallel Costs row. */
-@media (max-width: 960px) {
-  .vy-budget-row,
-  .vy-costs-row {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-  .vy-budget-row-inputs,
-  .vy-costs-row-inputs {
-    flex-wrap: wrap;
-    justify-self: start;
-  }
-}
-
 /* ===== Budget layout — main content + persistent fuel rail =====
  *
  * The rail is fixed-width on desktop and hides under 720px. The
@@ -3208,6 +3190,37 @@ body[data-platform="mobile"] .vy-budget-head-l p {
 }
 .vy-costs-use-proposed:hover {
   background: rgba(47,125,114,0.22);
+}
+
+/* Mid-width viewports (laptop trip-view column 800-1000px) and mobile:
+ * the inputs cluster on a single row pushed the event title column
+ * down to ~85px wide on a 375px phone, ellipsising most of the name.
+ * Stack the inputs underneath the title so the title can breathe.
+ *
+ * Important: this rule MUST come after the base `.vy-budget-row` /
+ * `.vy-costs-row` declarations so it wins in the cascade. Earlier
+ * placement was being overridden by the later base rule. */
+@media (max-width: 960px) {
+  .vy-budget-row,
+  .vy-costs-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .vy-budget-row-inputs,
+  .vy-costs-row-inputs {
+    flex-wrap: wrap;
+    justify-self: start;
+  }
+  /* Long titles ("Tonkatsu lunch at Maisen Aoyama Honten") still
+     ellipsised at 225px on a 375px phone after stacking — let them
+     wrap to two lines instead of truncating. */
+  .vy-budget-row-title,
+  .vy-costs-row-title {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    line-height: 1.3;
+  }
 }
 
 /* ===== Settlement section ===== */
